@@ -1,5 +1,36 @@
-let chart;
+let stockList=[];
 
+async function loadStockList(){
+ const res=await fetch('https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo');
+ const json=await res.json();
+ stockList=json.data;
+}
+
+loadStockList();
+
+const input=document.getElementById('stockInput');
+const suggestions=document.getElementById('suggestions');
+
+input.addEventListener('input',()=>{
+ const val=input.value.toLowerCase();
+ if(!val){suggestions.innerHTML='';return;}
+
+ const match=stockList.filter(s=>
+   s.stock_id.includes(val) || s.stock_name.includes(val)
+ ).slice(0,5);
+
+ suggestions.innerHTML=match.map(m=>
+   `<div onclick="selectStock('${m.stock_id}')">${m.stock_id} ${m.stock_name}</div>`
+ ).join('');
+});
+
+function selectStock(id){
+ input.value=id;
+ suggestions.innerHTML='';
+}
+
+// 原本分析功能
+let chart;
 async function fetchStock(stock){
  const res=await fetch(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${stock}&start_date=2024-01-01`);
  const json=await res.json();
@@ -10,16 +41,8 @@ function SMA(data,p){return data.map((_,i)=>i<p?null:data.slice(i-p,i).reduce((a
 function EMA(data,p){let k=2/(p+1);let ema=[data[0]];for(let i=1;i<data.length;i++){ema.push(data[i]*k+ema[i-1]*(1-k));}return ema}
 function MACD(data){const ema12=EMA(data,12);const ema26=EMA(data,26);return ema12.map((v,i)=>v-ema26[i])}
 
-function Bollinger(data,p=20){return data.map((_,i)=>{
- if(i<p) return null;
- let slice=data.slice(i-p,i);
- let avg=slice.reduce((a,b)=>a+b,0)/p;
- let std=Math.sqrt(slice.map(x=>Math.pow(x-avg,2)).reduce((a,b)=>a+b)/p);
- return {up:avg+2*std,down:avg-2*std,mid:avg};
- })}
-
 document.getElementById('searchBtn').addEventListener('click',async()=>{
- const stock=document.getElementById('stockInput').value;
+ const stock=input.value;
  const data=await fetchStock(stock);
  const prices=data.map(d=>d.close);
 
