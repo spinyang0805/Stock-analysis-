@@ -9,17 +9,28 @@
 </head>
 <body>
 <header class="hero">
-<h1>台股 AI 技術分析系統</h1>
+<h1>台股技術分析系統</h1>
+<p>可輸入股票代號或公司名稱，例如：2330、台積電、鴻海、聯發。</p>
 <div class="search-box">
-<input id="stockInput" value="2330" />
+<input id="stockInput" value="2330" placeholder="輸入股票代號或公司名稱" autocomplete="off" />
 <button id="searchBtn">查詢</button>
 </div>
+<div id="suggestions" class="suggestions"></div>
+<p class="hint">目前版本使用日線資料，非逐筆即時報價。</p>
 </header>
 <main class="container">
+<section class="panel">
 <canvas id="chart"></canvas>
-<div id="analysisText"></div>
-<ul id="technicalList"></ul>
-<ul id="riskList"></ul>
+</section>
+<section class="panel">
+<h2>分析摘要</h2>
+<div id="analysisText">請輸入股票代號或公司名稱後查詢。</div>
+</section>
+<section class="grid three">
+<div class="panel"><h3>技術指標</h3><ul id="technicalList"></ul></div>
+<div class="panel"><h3>風險提醒</h3><ul id="riskList"></ul></div>
+<div class="panel"><h3>即時資料說明</h3><ul><li>目前為日線技術分析</li><li>若要盤中即時，需要後端API</li><li>可再串券商API或即時行情源</li></ul></div>
+</section>
 </main>
 <script src="script.js"></script>
 </body>
