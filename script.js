@@ -1,68 +1,56 @@
-const apiUrl="https://api.finmindtrade.com/api/v4/data";
+let chart;
 
-async function fetchStock(stockId){
-  const res=await fetch(`${apiUrl}?dataset=TaiwanStockPrice&data_id=${stockId}&start_date=2024-01-01`);
-  const json=await res.json();
-  return json.data;
+async function fetchStock(stock){
+ const res=await fetch(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${stock}&start_date=2024-01-01`);
+ const json=await res.json();
+ return json.data;
 }
 
-function SMA(data,period){
-  return data.map((_,i)=>{
-    if(i<period) return null;
-    const slice=data.slice(i-period,i);
-    return slice.reduce((a,b)=>a+b,0)/period;
-  });
-}
+function SMA(data,p){return data.map((_,i)=>i<p?null:data.slice(i-p,i).reduce((a,b)=>a+b,0)/p)}
+function EMA(data,p){let k=2/(p+1);let ema=[data[0]];for(let i=1;i<data.length;i++){ema.push(data[i]*k+ema[i-1]*(1-k));}return ema}
+function MACD(data){const ema12=EMA(data,12);const ema26=EMA(data,26);return ema12.map((v,i)=>v-ema26[i])}
 
-function RSI(prices,period=14){
-  let gains=0,losses=0;
-  for(let i=1;i<=period;i++){
-    let diff=prices[i]-prices[i-1];
-    if(diff>0) gains+=diff;
-    else losses-=diff;
-  }
-  let rs=gains/losses;
-  return 100-(100/(1+rs));
-}
-
-function analyze(price,ma5,ma20,rsi){
-  let score=0;
-  if(price>ma5) score++;
-  if(price>ma20) score++;
-  if(rsi<30) score++;
-  if(rsi>70) score--;
-
-  let trend="盤整";
-  if(score>=2) trend="偏多";
-  if(score<=-1) trend="偏空";
-
-  return {score,trend};
-}
+function Bollinger(data,p=20){return data.map((_,i)=>{
+ if(i<p) return null;
+ let slice=data.slice(i-p,i);
+ let avg=slice.reduce((a,b)=>a+b,0)/p;
+ let std=Math.sqrt(slice.map(x=>Math.pow(x-avg,2)).reduce((a,b)=>a+b)/p);
+ return {up:avg+2*std,down:avg-2*std,mid:avg};
+ })}
 
 document.getElementById('searchBtn').addEventListener('click',async()=>{
-  const stock=document.getElementById('stockInput').value;
+ const stock=document.getElementById('stockInput').value;
+ const data=await fetchStock(stock);
+ const prices=data.map(d=>d.close);
 
-  const data=await fetchStock(stock);
-  const prices=data.map(d=>d.close);
+ const ma5=SMA(prices,5);
+ const ma20=SMA(prices,20);
+ const macd=MACD(prices);
 
-  const ma5=SMA(prices,5).pop();
-  const ma20=SMA(prices,20).pop();
-  const rsi=RSI(prices.slice(-20));
-  const price=prices[prices.length-1];
+ if(chart) chart.destroy();
+ chart=new Chart(document.getElementById('chart'),{
+ type:'line',
+ data:{labels:data.map(d=>d.date),datasets:[
+ {label:'Price',data:prices,borderColor:'white'},
+ {label:'MA5',data:ma5,borderColor:'green'},
+ {label:'MA20',data:ma20,borderColor:'yellow'}
+ ]}
+ });
 
-  const result=analyze(price,ma5,ma20,rsi);
+ const last=prices[prices.length-1];
+ const lastMA20=ma20[ma20.length-1];
+ const lastMACD=macd[macd.length-1];
 
-  document.getElementById('stockTitle').innerText=stock+" 技術分析";
+ let trend="盤整";
+ if(last>lastMA20 && lastMACD>0) trend="偏多";
+ if(last<lastMA20 && lastMACD<0) trend="偏空";
 
-  document.getElementById('analysisText').innerText=
-    `股價 ${price}\nMA5 ${ma5?.toFixed(2)} / MA20 ${ma20?.toFixed(2)}\nRSI ${rsi.toFixed(2)}\n趨勢：${result.trend}`;
-
-  document.getElementById('technicalList').innerHTML=`
-    <li>MA5：${ma5.toFixed(2)}</li>
-    <li>MA20：${ma20.toFixed(2)}</li>
-    <li>RSI：${rsi.toFixed(2)}</li>`;
-
-  document.getElementById('riskList').innerHTML=`
-    <li>RSI過高=可能過熱</li>
-    <li>跌破MA20=轉弱訊號</li>`;
+ document.getElementById('analysisText').innerText=`價格:${last} 趨勢:${trend}`;
+ document.getElementById('technicalList').innerHTML=`
+ <li>MA5:${ma5[ma5.length-1]}</li>
+ <li>MA20:${lastMA20}</li>
+ <li>MACD:${lastMACD}</li>`;
+ document.getElementById('riskList').innerHTML=`
+ <li>跌破MA20需注意</li>
+ <li>MACD翻負轉弱</li>`;
 });
