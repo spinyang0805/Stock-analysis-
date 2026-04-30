@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台股即時查詢分析</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="hero">
+    <nav>
+      <div class="brand">TW Stock AI</div>
+      <a href="https://www.twse.com.tw/zh/trading/historical/stock-day.html" target="_blank" rel="noreferrer">TWSE</a>
+    </nav>
+    <section class="hero-content">
+      <p class="eyebrow">Taiwan Stock Realtime Dashboard</p>
+      <h1>台股查詢與即時分析網頁</h1>
+      <p>輸入股票代號，快速查看價格摘要、趨勢判斷、技術指標與風險提醒。此版本先提供前端分析框架與示範資料，方便後續串接正式行情 API。</p>
+      <div class="search-box">
+        <input id="stockInput" type="text" placeholder="輸入股票代號，例如 2330、2317、2454" value="2330" />
+        <button id="searchBtn">查詢分析</button>
+      </div>
+      <p class="hint">資料源狀態：<span id="dataStatus">示範資料 / 可串接 API</span></p>
+    </section>
+  </header>
+
+  <main class="container">
+    <section class="cards" id="summaryCards"></section>
+
+    <section class="grid">
+      <article class="panel chart-panel">
+        <div class="panel-title">
+          <div>
+            <p class="eyebrow">Price Trend</p>
+            <h2 id="stockTitle">2330 台積電</h2>
+          </div>
+          <span id="trendBadge" class="badge">分析中</span>
+        </div>
+        <canvas id="priceChart" width="900" height="360"></canvas>
+      </article>
+
+      <article class="panel">
+        <p class="eyebrow">AI-style Analysis</p>
+        <h2>即時分析摘要</h2>
+        <div id="analysisText" class="analysis"></div>
+      </article>
+    </section>
+
+    <section class="grid three">
+      <article class="panel">
+        <p class="eyebrow">Technical</p>
+        <h3>技術指標</h3>
+        <ul id="technicalList"></ul>
+      </article>
+      <article class="panel">
+        <p class="eyebrow">Risk</p>
+        <h3>風險提醒</h3>
+        <ul id="riskList"></ul>
+      </article>
+      <article class="panel">
+        <p class="eyebrow">Next Step</p>
+        <h3>後續可擴充</h3>
+        <ul>
+          <li>接 Flask/FastAPI 後端取得即時報價</li>
+          <li>加入法人買賣超、融資融券與新聞摘要</li>
+          <li>串接 OpenAI 或本地 LLM 產生分析報告</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="panel disclaimer">
+      <h3>免責聲明</h3>
+      <p>本網站內容僅供研究、展示與學習用途，不構成投資建議。實際交易前請自行確認即時行情、財報、籌碼與風險。</p>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
