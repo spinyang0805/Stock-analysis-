@@ -1,36 +1,72 @@
 <!doctype html>
 <html lang="zh-Hant">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>台股分析系統</title>
-<link rel="stylesheet" href="style.css" />
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台股即時看盤分析系統</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 <header class="hero">
-<h1>台股技術分析系統</h1>
-<p>可輸入股票代號或公司名稱，例如：2330、台積電、鴻海、聯發。</p>
-<div class="search-box">
-<input id="stockInput" value="2330" placeholder="輸入股票代號或公司名稱" autocomplete="off" />
-<button id="searchBtn">查詢</button>
-</div>
-<div id="suggestions" class="suggestions"></div>
-<p class="hint">目前版本使用日線資料，非逐筆即時報價。</p>
+  <nav>
+    <div class="brand">TW Stock Watch</div>
+    <span id="connectionStatus" class="badge warn">等待連線</span>
+  </nav>
+  <section class="hero-content">
+    <p class="eyebrow">Realtime Taiwan Stock Dashboard</p>
+    <h1>台股即時看盤與技術分析</h1>
+    <p>支援股票代號/公司名稱模糊搜尋、盤中報價輪詢、MA、RSI、MACD、布林通道與自選股。若未設定後端，會自動使用可用資料源與日線分析。</p>
+    <div class="search-box">
+      <input id="stockInput" value="2330" placeholder="輸入股票代號或公司名稱，例如：台積電、鴻海、聯發、2330" autocomplete="off" />
+      <button id="searchBtn">查詢分析</button>
+      <button id="watchBtn" class="secondary">加入自選</button>
+    </div>
+    <div id="suggestions" class="suggestions"></div>
+    <div class="toolbar">
+      <label><input id="autoRefresh" type="checkbox" checked /> 自動更新</label>
+      <select id="refreshInterval">
+        <option value="5000">5秒</option>
+        <option value="10000" selected>10秒</option>
+        <option value="30000">30秒</option>
+      </select>
+      <span id="lastUpdate" class="hint">尚未更新</span>
+    </div>
+  </section>
 </header>
+
 <main class="container">
-<section class="panel">
-<canvas id="chart"></canvas>
-</section>
-<section class="panel">
-<h2>分析摘要</h2>
-<div id="analysisText">請輸入股票代號或公司名稱後查詢。</div>
-</section>
-<section class="grid three">
-<div class="panel"><h3>技術指標</h3><ul id="technicalList"></ul></div>
-<div class="panel"><h3>風險提醒</h3><ul id="riskList"></ul></div>
-<div class="panel"><h3>即時資料說明</h3><ul><li>目前為日線技術分析</li><li>若要盤中即時，需要後端API</li><li>可再串券商API或即時行情源</li></ul></div>
-</section>
+  <section class="cards" id="quoteCards"></section>
+
+  <section class="grid">
+    <article class="panel">
+      <div class="panel-title">
+        <div>
+          <p class="eyebrow">Intraday / Daily Chart</p>
+          <h2 id="stockTitle">2330 台積電</h2>
+        </div>
+        <span id="trendBadge" class="badge warn">分析中</span>
+      </div>
+      <canvas id="chart" height="130"></canvas>
+    </article>
+
+    <article class="panel">
+      <p class="eyebrow">Rule Engine Analysis</p>
+      <h2>分析摘要</h2>
+      <div id="analysisText" class="analysis">請輸入股票代號或公司名稱後查詢。</div>
+    </article>
+  </section>
+
+  <section class="grid three">
+    <div class="panel"><h3>技術指標</h3><ul id="technicalList"></ul></div>
+    <div class="panel"><h3>風險提醒</h3><ul id="riskList"></ul></div>
+    <div class="panel"><h3>自選股</h3><div id="watchList" class="watch-list"></div></div>
+  </section>
+
+  <section class="panel disclaimer">
+    <h3>資料說明</h3>
+    <p>本頁可直接使用 GitHub Pages 展示。若要穩定盤中即時報價，請啟動 repo 內的 FastAPI 後端，並在 <code>script.js</code> 設定 <code>BACKEND_URL</code>。正式商用或再散布即時行情時，請確認資料源授權。</p>
+  </section>
 </main>
 <script src="script.js"></script>
 </body>
