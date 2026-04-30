@@ -1,0 +1,9 @@
+body{margin:0;font-family:sans-serif;background:#0f172a;color:#e2e8f0}
+.hero{padding:40px;background:linear-gradient(135deg,#1e293b,#020617)}
+.brand{font-weight:bold}
+.search-box{margin-top:20px}
+input{padding:10px;border-radius:6px;border:none}
+button{padding:10px 16px;margin-left:10px;border:none;border-radius:6px;background:#38bdf8;color:black}
+.container{padding:20px}
+.panel{background:#1e293b;padding:20px;border-radius:10px;margin-bottom:20px}
+.analysis{line-height:1.6}
