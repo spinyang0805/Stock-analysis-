@@ -17,17 +17,54 @@ function buildDemoKline() {
   });
 }
 
-function demoAnalysis(symbol, message = "API 暫時無法連線，系統目前使用示範 K 線。") {
+function normalizeKline(kline) {
+  if (Array.isArray(kline) && kline.length > 0) return kline;
+  return buildDemoKline();
+}
+
+function buildAnalysisFromKline(symbol, kline, note = "後端分析資料不完整，已由前端依照 K 線強制產生決策分析。") {
+  const data = normalizeKline(kline);
+  const first = data[0]?.close ?? 0;
+  const last = data[data.length - 1]?.close ?? first;
+  const recent = data.slice(-20);
+  const ma5 = data.slice(-5).reduce((s, x) => s + x.close, 0) / Math.max(1, data.slice(-5).length);
+  const ma20 = recent.reduce((s, x) => s + x.close, 0) / Math.max(1, recent.length);
+  const changePct = first ? ((last - first) / first) * 100 : 0;
+  const score = Math.round((last > ma5 ? 12 : -8) + (ma5 > ma20 ? 18 : -12) + Math.max(-20, Math.min(20, changePct)));
+  const trend = score >= 25 ? "強勢偏多" : score >= 10 ? "偏多" : score <= -20 ? "偏空" : "盤整觀望";
+  const signals = [
+    { level: ma5 > ma20 ? "bullish" : "bearish", title: ma5 > ma20 ? "短均線站上月線" : "短均線跌破月線", message: `MA5 ${ma5 > ma20 ? "高於" : "低於"} MA20，短線動能${ma5 > ma20 ? "偏強" : "偏弱"}。`, score: ma5 > ma20 ? 18 : -12, category: "trend" },
+    { level: last > ma5 ? "bullish" : "warning", title: last > ma5 ? "收盤站上短均線" : "收盤低於短均線", message: `最新收盤 ${last.toFixed(2)}，MA5 約 ${ma5.toFixed(2)}。`, score: last > ma5 ? 12 : -8, category: "price" },
+    { level: changePct >= 0 ? "bullish" : "bearish", title: "區間漲跌幅", message: `目前區間漲跌幅約 ${changePct.toFixed(2)}%。`, score: Math.round(Math.max(-20, Math.min(20, changePct))), category: "momentum" },
+  ];
   return {
     stock: symbol,
-    trend: "示範模式",
-    score: 0,
-    rating: "Demo",
-    summary: message,
-    indicators: {},
-    missing_data: [message],
-    signals: [{ level: "warning", title: "系統提示", message, score: 0, category: "system" }],
+    trend,
+    score,
+    rating: score >= 25 ? "Bullish" : score <= -20 ? "Bearish" : "Neutral",
+    summary: `${symbol} 目前由前端決策引擎判定為「${trend}」，綜合分數 ${score}。${note}`,
+    indicators: { close: last, ma5, ma20, change_pct: changePct },
+    missing_data: [note],
+    signals,
+    source: "frontend-force-analysis",
   };
+}
+
+function normalizeAnalysis(symbol, raw, kline) {
+  if (!raw || typeof raw !== "object") return buildAnalysisFromKline(symbol, kline, "後端未回傳有效分析物件，已由前端強制產生。 ");
+  const hasSignals = Array.isArray(raw.signals) && raw.signals.length > 0;
+  const hasScore = typeof raw.score === "number" && Number.isFinite(raw.score);
+  if (hasSignals && hasScore && raw.trend && raw.summary) return raw;
+  const forced = buildAnalysisFromKline(symbol, kline, "後端分析資料不完整，已由前端補足決策分數與訊號。 ");
+  return {
+    ...forced,
+    source: raw.source || forced.source,
+    missing_data: [...(raw.missing_data || []), ...(forced.missing_data || [])],
+  };
+}
+
+function demoAnalysis(symbol, message = "API 暫時無法連線，系統目前使用示範 K 線。") {
+  return buildAnalysisFromKline(symbol, buildDemoKline(), message);
 }
 
 function scoreColor(score) {
@@ -56,7 +93,6 @@ export default function App() {
   useEffect(() => {
     try {
       if (!chartContainerRef.current) return;
-
       const chart = createChart(chartContainerRef.current, {
         width: chartContainerRef.current.clientWidth || 900,
         height: 430,
@@ -65,22 +101,13 @@ export default function App() {
         rightPriceScale: { borderColor: "#334155" },
         timeScale: { borderColor: "#334155", timeVisible: true },
       });
-
       const options = { upColor: "#22c55e", downColor: "#ef4444", borderUpColor: "#22c55e", borderDownColor: "#ef4444", wickUpColor: "#22c55e", wickDownColor: "#ef4444" };
-      const candle = typeof chart.addSeries === "function" && CandlestickSeries
-        ? chart.addSeries(CandlestickSeries, options)
-        : chart.addCandlestickSeries(options);
-
+      const candle = typeof chart.addSeries === "function" && CandlestickSeries ? chart.addSeries(CandlestickSeries, options) : chart.addCandlestickSeries(options);
       chartRef.current = chart;
       candleRef.current = candle;
-
       const resize = () => chart.applyOptions({ width: chartContainerRef.current?.clientWidth || 900 });
       window.addEventListener("resize", resize);
-
-      return () => {
-        window.removeEventListener("resize", resize);
-        chart.remove();
-      };
+      return () => { window.removeEventListener("resize", resize); chart.remove(); };
     } catch (error) {
       setStatus(`圖表初始化失敗：${error.message}`);
       setAnalysis(demoAnalysis(symbol, `圖表初始化失敗：${error.message}`));
@@ -91,34 +118,46 @@ export default function App() {
     let cancelled = false;
     async function load() {
       setStatus("讀取資料中...");
+      let kline = [];
+      let rawAnalysis = null;
+      const warnings = [];
       try {
-        let kline;
-        let nextAnalysis;
         if (apiReady) {
-          const [klineRes, analysisRes] = await Promise.all([
+          const [klineRes, analysisRes] = await Promise.allSettled([
             fetch(`${API_BASE_URL}/api/kline/${symbol}`),
             fetch(`${API_BASE_URL}/api/analysis/${symbol}`),
           ]);
-          if (!klineRes.ok || !analysisRes.ok) throw new Error("API 回應異常");
-          kline = await klineRes.json();
-          nextAnalysis = await analysisRes.json();
+
+          if (klineRes.status === "fulfilled" && klineRes.value.ok) {
+            kline = await klineRes.value.json();
+          } else {
+            warnings.push("K線 API 回應異常，已使用前端備援 K 線。");
+          }
+
+          if (analysisRes.status === "fulfilled" && analysisRes.value.ok) {
+            rawAnalysis = await analysisRes.value.json();
+          } else {
+            warnings.push("分析 API 回應異常，已由前端強制產生分析。");
+          }
         } else {
-          kline = buildDemoKline();
-          nextAnalysis = demoAnalysis(symbol, "尚未設定後端 API，系統目前使用示範 K 線。");
+          warnings.push("尚未設定後端 API，使用前端備援資料。");
         }
 
+        kline = normalizeKline(kline);
+        const nextAnalysis = normalizeAnalysis(symbol, rawAnalysis, kline);
+        if (warnings.length) nextAnalysis.missing_data = [...(nextAnalysis.missing_data || []), ...warnings];
+
         if (cancelled) return;
-        if (candleRef.current && Array.isArray(kline) && kline.length > 0) {
-          candleRef.current.setData(kline);
-          chartRef.current?.timeScale().fitContent();
-        }
+        candleRef.current?.setData(kline);
+        chartRef.current?.timeScale().fitContent();
         setAnalysis(nextAnalysis);
-        setStatus(apiReady ? `已連接後端 API：${API_BASE_URL}` : "示範模式：尚未設定後端 API");
+        setStatus(apiReady ? `已連接 API，資料已完成正規化：${API_BASE_URL}` : "示範模式：尚未設定後端 API");
       } catch (error) {
         if (cancelled) return;
-        candleRef.current?.setData(buildDemoKline());
-        setAnalysis(demoAnalysis(symbol, `API 連線失敗，已切換示範模式：${error.message}`));
-        setStatus(`API 連線失敗，已切換示範模式：${error.message}`);
+        kline = buildDemoKline();
+        candleRef.current?.setData(kline);
+        setAnalysis(buildAnalysisFromKline(symbol, kline, `API 連線失敗，已由前端強制產生分析：${error.message}`));
+        setStatus(`API 連線失敗，已由前端強制產生分析：${error.message}`);
       }
     }
     load();
