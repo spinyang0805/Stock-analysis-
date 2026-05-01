@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CandlestickSeries, createChart } from "lightweight-charts";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://stock-analysis-api-ihun.onrender.com";
 
 function buildDemoKline() {
   const now = Math.floor(Date.now() / 1000);
@@ -28,14 +28,14 @@ function demoAnalysis(symbol) {
     trend: "示範模式",
     score: 0,
     rating: "Demo",
-    summary: "尚未設定後端 API，系統目前使用示範 K 線。請在 Render 前端環境變數設定 VITE_API_BASE_URL。",
+    summary: "API 暫時無法連線，系統目前使用示範 K 線。請確認 FastAPI backend 是否已完成部署。",
     indicators: {},
-    missing_data: ["前端尚未連接 FastAPI backend"],
+    missing_data: ["FastAPI backend 暫時無法連線"],
     signals: [
       {
         level: "warning",
-        title: "尚未連接後端",
-        message: "請在 Render Static Site 的 Environment Variables 加入 VITE_API_BASE_URL，例如 https://你的-api.onrender.com。",
+        title: "API 連線失敗",
+        message: "請確認後端服務已部署完成，並測試 /api/analysis/2330 是否可以開啟。",
         score: 0,
         category: "system",
       },
@@ -126,7 +126,7 @@ export default function App() {
           chartRef.current?.timeScale().fitContent();
         }
         setAnalysis(nextAnalysis);
-        setStatus(apiReady ? "已連接後端 API" : "示範模式：尚未設定後端 API");
+        setStatus(apiReady ? `已連接後端 API：${API_BASE_URL}` : "示範模式：尚未設定後端 API");
       } catch (error) {
         if (cancelled) return;
         const kline = buildDemoKline();
