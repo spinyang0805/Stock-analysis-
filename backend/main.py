@@ -3,6 +3,7 @@ from typing import Optional
 
 import requests
 import yfinance as yf
+import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -11,61 +12,47 @@ app = FastAPI(title="TW Stock Watch API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+def yahoo_symbol(stock: str):
+    return f"{stock}.TW"
 
-def yahoo_symbol(stock: str, market: str = "TW") -> str:
-    stock = stock.upper().replace(".TW", "").replace(".TWO", "")
-    suffix = ".TWO" if market.upper() == "TWO" else ".TW"
-    return f"{stock}{suffix}"
+@app.get("/api/kline/{stock}")
+def kline(stock: str):
+    symbol = yahoo_symbol(stock)
+    df = yf.download(symbol, period="6mo", interval="1d")
+    df = df.reset_index()
+    data = []
+    for _, row in df.iterrows():
+        data.append({
+            "time": int(row["Date"].timestamp()),
+            "open": float(row["Open"]),
+            "high": float(row["High"]),
+            "low": float(row["Low"]),
+            "close": float(row["Close"])
+        })
+    return data
 
+@app.get("/api/analysis/{stock}")
+def analysis(stock: str):
+    symbol = yahoo_symbol(stock)
+    df = yf.download(symbol, period="3mo")
 
-@app.get("/")
-def root():
-    return {"status": "ok", "service": "TW Stock Watch API"}
+    df["MA5"] = df["Close"].rolling(5).mean()
+    df["MA20"] = df["Close"].rolling(20).mean()
 
+    latest = df.iloc[-1]
 
-@app.get("/api/realtime/{stock}")
-def realtime(stock: str, market: str = "TW"):
-    """Realtime/near-realtime quote from Yahoo Finance via yfinance."""
-    symbol = yahoo_symbol(stock, market)
-    try:
-        ticker = yf.Ticker(symbol)
-        fast = ticker.fast_info
-        return {
-            "source": "Yahoo Finance / yfinance",
-            "symbol": symbol,
-            "stock_id": stock,
-            "price": fast.get("last_price"),
-            "open": fast.get("open"),
-            "high": fast.get("day_high"),
-            "low": fast.get("day_low"),
-            "previous_close": fast.get("previous_close"),
-            "volume": fast.get("last_volume"),
-            "currency": fast.get("currency"),
-        }
-    except Exception as exc:
-        return {"source": "Yahoo Finance / yfinance", "symbol": symbol, "error": str(exc)}
+    if latest["MA5"] > latest["MA20"]:
+        trend = "多頭"
+        action = "回檔找買點"
+    else:
+        trend = "空頭"
+        action = "避免追高"
 
-
-@app.get("/api/history/{stock}")
-def history(stock: str, start_date: Optional[str] = None):
-    """Daily historical data from FinMind for technical analysis."""
-    if not start_date:
-        start_date = (date.today() - timedelta(days=420)).isoformat()
-
-    url = "https://api.finmindtrade.com/api/v4/data"
-    params = {
-        "dataset": "TaiwanStockPrice",
-        "data_id": stock,
-        "start_date": start_date,
+    return {
+        "trend": trend,
+        "action": action
     }
-    try:
-        res = requests.get(url, params=params, timeout=15)
-        res.raise_for_status()
-        return res.json()
-    except Exception as exc:
-        return {"status": 500, "msg": str(exc), "data": []}
