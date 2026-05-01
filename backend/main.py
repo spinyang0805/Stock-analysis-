@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from typing import Tuple
 import math
 import random
 
@@ -56,7 +57,7 @@ def fallback_history(stock: str, days: int = 260) -> pd.DataFrame:
     return pd.DataFrame(rows).set_index("Date")
 
 
-def get_history(stock: str) -> tuple[pd.DataFrame, str]:
+def get_history(stock: str) -> Tuple[pd.DataFrame, str]:
     symbol = yahoo_symbol(stock)
     try:
         df = yf.download(symbol, period="1y", interval="1d", progress=False, auto_adjust=False)
