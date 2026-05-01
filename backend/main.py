@@ -13,6 +13,9 @@ from fastapi.responses import JSONResponse
 
 from analysis_engine import build_rule_based_analysis, enrich_indicators
 
+REQUEST_TIMEOUT = 4
+TWSE_MONTH_LIMIT = 4
+
 app = FastAPI(title="TW Stock Decision API")
 
 app.add_middleware(
@@ -23,16 +26,8 @@ app.add_middleware(
 )
 
 STOCK_NAME_MAP = {
-    "台積電": "2330",
-    "鴻海": "2317",
-    "聯發科": "2454",
-    "聯發": "2454",
-    "大聯大": "3702",
-    "廣達": "2382",
-    "緯創": "3231",
-    "仁寶": "2324",
-    "台達電": "2308",
-    "華碩": "2357",
+    "台積電": "2330", "鴻海": "2317", "聯發科": "2454", "聯發": "2454", "大聯大": "3702",
+    "廣達": "2382", "緯創": "3231", "仁寶": "2324", "台達電": "2308", "華碩": "2357",
 }
 
 STOCK_INFO_MAP = {
@@ -58,16 +53,15 @@ def candidate_symbols(stock: str):
     return [f"{code}.TW", f"{code}.TWO"]
 
 
-def roc_to_datetime(roc_date: str) -> datetime:
-    parts = roc_date.split("/")
-    year = int(parts[0]) + 1911
-    return datetime(year, int(parts[1]), int(parts[2]))
-
-
 def parse_twse_number(value):
     if value in (None, "", "--", "X0.00"):
         return None
     return float(str(value).replace(",", ""))
+
+
+def roc_to_datetime(roc_date: str) -> datetime:
+    y, m, d = roc_date.split("/")
+    return datetime(int(y) + 1911, int(m), int(d))
 
 
 def twse_month_history(stock: str, year: int, month: int) -> pd.DataFrame:
@@ -75,7 +69,7 @@ def twse_month_history(stock: str, year: int, month: int) -> pd.DataFrame:
     url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
     params = {"response": "json", "date": f"{year}{month:02d}01", "stockNo": code}
     headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json,text/plain,*/*"}
-    res = requests.get(url, params=params, headers=headers, timeout=15)
+    res = requests.get(url, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
     res.raise_for_status()
     payload = res.json()
     if payload.get("stat") != "OK" or not payload.get("data"):
@@ -96,7 +90,7 @@ def twse_month_history(stock: str, year: int, month: int) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def twse_history(stock: str, months: int = 14) -> pd.DataFrame:
+def twse_history(stock: str, months: int = TWSE_MONTH_LIMIT) -> pd.DataFrame:
     today = datetime.now()
     frames = []
     for offset in range(months):
@@ -119,26 +113,19 @@ def twse_history(stock: str, months: int = 14) -> pd.DataFrame:
 
 def twse_realtime_quote(stock: str):
     code = normalize_stock(stock)
-    ex_ch_candidates = [f"tse_{code}.tw", f"otc_{code}.tw"]
     headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://mis.twse.com.tw/stock/fibest.jsp?stock=" + code}
-    for ex_ch in ex_ch_candidates:
+    for ex_ch in [f"tse_{code}.tw", f"otc_{code}.tw"]:
         try:
             url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
             params = {"ex_ch": ex_ch, "json": "1", "delay": "0", "_": int(time.time() * 1000)}
-            res = requests.get(url, params=params, headers=headers, timeout=10)
+            res = requests.get(url, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
             res.raise_for_status()
-            payload = res.json()
-            rows = payload.get("msgArray") or []
+            rows = (res.json().get("msgArray") or [])
             if not rows:
                 continue
             q = rows[0]
-            def n(v): return parse_twse_number(v)
-            z = n(q.get("z"))
-            y = n(q.get("y"))
-            o = n(q.get("o"))
-            h = n(q.get("h"))
-            l = n(q.get("l"))
-            v = n(q.get("v"))
+            n = parse_twse_number
+            z, y = n(q.get("z")), n(q.get("y"))
             return {
                 "code": code,
                 "name": q.get("n") or STOCK_INFO_MAP.get(code, {}).get("name") or code,
@@ -146,10 +133,10 @@ def twse_realtime_quote(stock: str):
                 "industry": STOCK_INFO_MAP.get(code, {}).get("industry", ""),
                 "price": z,
                 "previous_close": y,
-                "open": o,
-                "high": h,
-                "low": l,
-                "volume_lot": v,
+                "open": n(q.get("o")),
+                "high": n(q.get("h")),
+                "low": n(q.get("l")),
+                "volume_lot": n(q.get("v")),
                 "change": None if z is None or y is None else round(z - y, 2),
                 "change_pct": None if z is None or y in (None, 0) else round((z - y) / y * 100, 2),
                 "time": q.get("t"),
@@ -166,7 +153,7 @@ def yahoo_chart_history(symbol: str) -> pd.DataFrame:
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
     params = {"period1": start, "period2": now, "interval": "1d", "events": "history", "includeAdjustedClose": "true"}
     headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json,text/plain,*/*"}
-    res = requests.get(url, params=params, headers=headers, timeout=15)
+    res = requests.get(url, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
     res.raise_for_status()
     payload = res.json()
     result = payload.get("chart", {}).get("result", [])
@@ -190,51 +177,46 @@ def yahoo_chart_history(symbol: str) -> pd.DataFrame:
     return pd.DataFrame(rows).set_index("Date")
 
 
-def fallback_history(stock: str, days: int = 260) -> pd.DataFrame:
-    random.seed(stock)
+def fallback_history(stock: str, days: int = 180) -> pd.DataFrame:
+    random.seed(normalize_stock(stock))
     code = normalize_stock(stock)
     base_map = {"2330": 600, "3702": 100, "2317": 150, "2454": 900}
     base = base_map.get(code, 100 + (sum(ord(c) for c in code) % 200))
-    rows = []
-    price = float(base)
-    start = datetime.now() - timedelta(days=days * 1.45)
-    current = start
+    rows, price = [], float(base)
+    current = datetime.now() - timedelta(days=days * 1.45)
     while len(rows) < days:
         current += timedelta(days=1)
         if current.weekday() >= 5:
             continue
-        drift = math.sin(len(rows) / 18) * 0.8
-        change = random.uniform(-2.2, 2.2) + drift
+        change = random.uniform(-2.2, 2.2) + math.sin(len(rows) / 18) * 0.8
         open_price = max(1, price + random.uniform(-1.5, 1.5))
         close = max(1, open_price + change)
-        high = max(open_price, close) + random.uniform(0.4, 2.2)
-        low = min(open_price, close) - random.uniform(0.4, 2.2)
-        volume = random.randint(2000, 90000)
-        rows.append({"Date": current, "Open": open_price, "High": high, "Low": low, "Close": close, "Volume": volume})
+        high, low = max(open_price, close) + random.uniform(.4, 2.2), min(open_price, close) - random.uniform(.4, 2.2)
+        rows.append({"Date": current, "Open": open_price, "High": high, "Low": low, "Close": close, "Volume": random.randint(2000, 90000)})
         price = close
     return pd.DataFrame(rows).set_index("Date")
 
 
 def get_history(stock: str) -> Tuple[pd.DataFrame, str, str]:
-    last_error = None
     code = normalize_stock(stock)
-    try:
-        df = twse_history(code)
-        if df is not None and not df.empty:
-            return df, "TWSE official STOCK_DAY", f"{code}.TW"
-    except Exception as exc:
-        last_error = str(exc)
-
-    for symbol in candidate_symbols(stock):
+    errors = []
+    for getter, label in [(lambda: yahoo_chart_history(f"{code}.TW"), "Yahoo Finance chart API"), (lambda: twse_history(code), "TWSE official STOCK_DAY")]:
         try:
-            df = yahoo_chart_history(symbol)
+            df = getter()
             if df is not None and not df.empty:
-                return df, "Yahoo Finance chart API", symbol
+                return df, label, f"{code}.TW"
         except Exception as exc:
-            last_error = str(exc)
-
-    df = fallback_history(stock)
-    df.attrs["last_error"] = last_error
+            errors.append(str(exc))
+    try:
+        df = yf.download(f"{code}.TW", period="6mo", interval="1d", progress=False, auto_adjust=False, threads=False, timeout=REQUEST_TIMEOUT)
+        if df is not None and not df.empty:
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [c[0] for c in df.columns]
+            return df, "Yahoo Finance / yfinance", f"{code}.TW"
+    except Exception as exc:
+        errors.append(str(exc))
+    df = fallback_history(code)
+    df.attrs["last_error"] = " | ".join(errors[-3:])
     return df, "fallback-demo-data", code
 
 
@@ -248,8 +230,7 @@ def safe_float(value):
 
 
 def to_kline_payload(df: pd.DataFrame):
-    df = enrich_indicators(df)
-    df = df.reset_index()
+    df = enrich_indicators(df).reset_index()
     date_col = "Date" if "Date" in df.columns else df.columns[0]
     data = []
     for _, row in df.iterrows():
@@ -263,34 +244,15 @@ def to_kline_payload(df: pd.DataFrame):
 
 
 def build_meta(stock: str, data, source: str, resolved_symbol: str):
-    code = normalize_stock(stock)
-    info = STOCK_INFO_MAP.get(code, {})
+    code, info = normalize_stock(stock), STOCK_INFO_MAP.get(normalize_stock(stock), {})
     realtime = twse_realtime_quote(code)
-    latest = data[-1] if data else {}
-    previous = data[-2] if len(data) >= 2 else {}
+    latest, previous = (data[-1] if data else {}), (data[-2] if len(data) >= 2 else {})
     price = realtime.get("price") if realtime else None
     close = price if price is not None else latest.get("close")
     prev_close = (realtime.get("previous_close") if realtime else None) or previous.get("close")
     change = None if close is None or prev_close in (None, 0) else round(close - prev_close, 2)
     change_pct = None if change is None or prev_close in (None, 0) else round(change / prev_close * 100, 2)
-    return {
-        "code": code,
-        "name": (realtime.get("name") if realtime else None) or info.get("name") or code,
-        "market": (realtime.get("market") if realtime else None) or info.get("market") or "",
-        "industry": (realtime.get("industry") if realtime else None) or info.get("industry") or "",
-        "resolved_symbol": resolved_symbol,
-        "source": source,
-        "price": close,
-        "open": (realtime.get("open") if realtime else None) or latest.get("open"),
-        "high": (realtime.get("high") if realtime else None) or latest.get("high"),
-        "low": (realtime.get("low") if realtime else None) or latest.get("low"),
-        "close": close,
-        "previous_close": prev_close,
-        "change": change,
-        "change_pct": change_pct,
-        "volume": (realtime.get("volume_lot") if realtime else None) or latest.get("volume"),
-        "quote_time": realtime.get("time") if realtime else None,
-    }
+    return {"code": code, "name": (realtime.get("name") if realtime else None) or info.get("name") or code, "market": (realtime.get("market") if realtime else None) or info.get("market") or "", "industry": (realtime.get("industry") if realtime else None) or info.get("industry") or "", "resolved_symbol": resolved_symbol, "source": source, "price": close, "open": (realtime.get("open") if realtime else None) or latest.get("open"), "high": (realtime.get("high") if realtime else None) or latest.get("high"), "low": (realtime.get("low") if realtime else None) or latest.get("low"), "close": close, "previous_close": prev_close, "change": change, "change_pct": change_pct, "volume": (realtime.get("volume_lot") if realtime else None) or latest.get("volume"), "quote_time": realtime.get("time") if realtime else None}
 
 
 @app.get("/")
@@ -300,23 +262,32 @@ def root():
 
 @app.get("/api/kline/{stock}")
 def kline(stock: str):
-    df, source, resolved_symbol = get_history(stock)
-    data = to_kline_payload(df)
-    meta = build_meta(stock, data, source, resolved_symbol)
-    return JSONResponse({"stock": stock, "normalized_stock": normalize_stock(stock), "meta": meta, "resolved_symbol": resolved_symbol, "source": source, "last_close": meta.get("close"), "last_date": data[-1]["time"] if data else None, "data": data}, media_type="application/json; charset=utf-8")
+    try:
+        df, source, resolved_symbol = get_history(stock)
+        data = to_kline_payload(df)
+        meta = build_meta(stock, data, source, resolved_symbol)
+        return JSONResponse({"stock": stock, "normalized_stock": normalize_stock(stock), "meta": meta, "resolved_symbol": resolved_symbol, "source": source, "last_close": meta.get("close"), "last_date": data[-1]["time"] if data else None, "data": data}, media_type="application/json; charset=utf-8")
+    except Exception as exc:
+        df = fallback_history(stock)
+        data = to_kline_payload(df)
+        meta = build_meta(stock, data, "emergency-fallback", normalize_stock(stock))
+        return JSONResponse({"stock": stock, "normalized_stock": normalize_stock(stock), "meta": meta, "resolved_symbol": normalize_stock(stock), "source": "emergency-fallback", "error": str(exc), "data": data}, media_type="application/json; charset=utf-8")
 
 
 @app.get("/api/analysis/{stock}")
 def analysis(stock: str):
-    df, source, resolved_symbol = get_history(stock)
-    result = build_rule_based_analysis(df, normalize_stock(stock))
-    data = to_kline_payload(df)
-    result["source"] = source
-    result["resolved_symbol"] = resolved_symbol
-    result["normalized_stock"] = normalize_stock(stock)
-    result["meta"] = build_meta(stock, data, source, resolved_symbol)
-    if source == "fallback-demo-data":
-        result.setdefault("missing_data", []).append("TWSE / Yahoo 暫時無法取得資料，已使用後端備援資料維持系統運作")
-        if df.attrs.get("last_error"):
+    try:
+        df, source, resolved_symbol = get_history(stock)
+        result = build_rule_based_analysis(df, normalize_stock(stock))
+        data = to_kline_payload(df)
+        result.update({"source": source, "resolved_symbol": resolved_symbol, "normalized_stock": normalize_stock(stock), "meta": build_meta(stock, data, source, resolved_symbol)})
+        if source == "fallback-demo-data" and df.attrs.get("last_error"):
             result.setdefault("missing_data", []).append(f"資料源錯誤：{df.attrs.get('last_error')}")
-    return JSONResponse(result, media_type="application/json; charset=utf-8")
+        return JSONResponse(result, media_type="application/json; charset=utf-8")
+    except Exception as exc:
+        df = fallback_history(stock)
+        result = build_rule_based_analysis(df, normalize_stock(stock))
+        data = to_kline_payload(df)
+        result.update({"source": "emergency-fallback", "resolved_symbol": normalize_stock(stock), "normalized_stock": normalize_stock(stock), "meta": build_meta(stock, data, "emergency-fallback", normalize_stock(stock))})
+        result.setdefault("missing_data", []).append(f"後端分析已快速回退，不阻塞前端：{exc}")
+        return JSONResponse(result, media_type="application/json; charset=utf-8")
