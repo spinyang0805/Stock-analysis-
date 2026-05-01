@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: stock-analysis-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /
+
+  - type: web
+    name: stock-analysis-frontend
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://stock-analysis-api.onrender.com
