@@ -1,20 +1,40 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from "react";
+import { createChart } from "lightweight-charts";
 
-export default function App(){
-  const [stock,setStock]=useState('2330')
-  const [price,setPrice]=useState(null)
+export default function App() {
+  const chartRef = useRef();
+  const [symbol, setSymbol] = useState("2330");
+  const [analysis, setAnalysis] = useState("");
 
-  const handleSearch=()=>{
-    const p=Math.floor(Math.random()*200)+100
-    setPrice(p)
-  }
+  useEffect(() => {
+    const chart = createChart(chartRef.current, {
+      width: 900,
+      height: 400,
+      layout: { background: { color: "#0f172a" }, textColor: "#fff" },
+    });
+
+    const candle = chart.addCandlestickSeries();
+
+    fetch(`https://你的-backend.onrender.com/api/kline/${symbol}`)
+      .then(res => res.json())
+      .then(data => candle.setData(data));
+
+    fetch(`https://你的-backend.onrender.com/api/analysis/${symbol}`)
+      .then(res => res.json())
+      .then(data => setAnalysis(`${data.trend} - ${data.action}`));
+
+  }, [symbol]);
 
   return (
-    <div style={{padding:20,color:'#fff',background:'#0f172a',height:'100vh'}}>
-      <h1>台股 React 即時分析</h1>
-      <input value={stock} onChange={e=>setStock(e.target.value)} />
-      <button onClick={handleSearch}>查詢</button>
-      {price && <h2>價格: {price}</h2>}
+    <div style={{ background: "#0f172a", color: "white", padding: 20 }}>
+      <h1>專業台股看盤系統</h1>
+
+      <input value={symbol} onChange={e => setSymbol(e.target.value)} />
+      <button onClick={() => setSymbol(symbol)}>查詢</button>
+
+      <div ref={chartRef}></div>
+
+      <h2>{analysis}</h2>
     </div>
-  )
+  );
 }
