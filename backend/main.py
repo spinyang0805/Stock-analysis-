@@ -12,6 +12,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from analysis_engine import build_rule_based_analysis, enrich_indicators
+from jobs import run_daily_update
+from firebase_cache import get_cache_status
+
+try:
+    from dashboard_service import fetch_realtime_board, fetch_institutional, fetch_margin, analyze_dashboard
+except Exception:
+    fetch_realtime_board = fetch_institutional = fetch_margin = analyze_dashboard = None
 
 REQUEST_TIMEOUT = 4
 TWSE_MONTH_LIMIT = 4
@@ -46,11 +53,6 @@ STOCK_INFO_MAP = {
 def normalize_stock(stock: str) -> str:
     stock = str(stock).strip()
     return STOCK_NAME_MAP.get(stock, stock).upper().replace(".TW", "").replace(".TWO", "")
-
-
-def candidate_symbols(stock: str):
-    code = normalize_stock(stock)
-    return [f"{code}.TW", f"{code}.TWO"]
 
 
 def parse_twse_number(value):
@@ -260,6 +262,16 @@ def root():
     return JSONResponse({"status": "ok", "service": "TW Stock Decision API"}, media_type="application/json; charset=utf-8")
 
 
+@app.get("/api/job/daily")
+def trigger_daily():
+    return run_daily_update()
+
+
+@app.get("/api/cache/status/{stock}")
+def cache_status(stock: str):
+    return get_cache_status(normalize_stock(stock))
+
+
 @app.get("/api/kline/{stock}")
 def kline(stock: str):
     try:
@@ -291,3 +303,16 @@ def analysis(stock: str):
         result.update({"source": "emergency-fallback", "resolved_symbol": normalize_stock(stock), "normalized_stock": normalize_stock(stock), "meta": build_meta(stock, data, "emergency-fallback", normalize_stock(stock))})
         result.setdefault("missing_data", []).append(f"後端分析已快速回退，不阻塞前端：{exc}")
         return JSONResponse(result, media_type="application/json; charset=utf-8")
+
+
+@app.get("/api/dashboard/{stock}")
+def dashboard(stock: str):
+    code = normalize_stock(stock)
+    df, source, resolved_symbol = get_history(code)
+    kline_data = to_kline_payload(df)
+    analysis_result = build_rule_based_analysis(df, code)
+    realtime = fetch_realtime_board(code) if fetch_realtime_board else build_meta(code, kline_data, source, resolved_symbol)
+    inst = fetch_institutional(code) if fetch_institutional else {}
+    margin = fetch_margin(code) if fetch_margin else {}
+    board = analyze_dashboard(code, kline_data, analysis_result, realtime, inst, margin) if analyze_dashboard else {}
+    return JSONResponse({"basic": realtime, "kline": kline_data, "analysis": analysis_result, "dashboard": board, "source": source, "resolved_symbol": resolved_symbol}, media_type="application/json; charset=utf-8")
