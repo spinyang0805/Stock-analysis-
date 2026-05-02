@@ -13,7 +13,7 @@ def now_tw():
 
 def save_stock_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
     if db is None:
-        print("❌ Firebase not initialized")
+        print("Firebase not initialized")
         return False
 
     try:
@@ -28,17 +28,17 @@ def save_stock_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
               "updated_at": now_tw()
           })
 
-        print(f"✅ stock_daily write: {stock_id} {date}")
+        print(f"stock_daily write: {stock_id} {date}")
         return True
 
     except Exception as e:
-        print("🔥 stock_daily error:", e)
+        print("stock_daily error:", e)
         return False
 
 
 def save_chip_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
     if db is None:
-        print("❌ Firebase not initialized")
+        print("Firebase not initialized")
         return False
 
     try:
@@ -53,26 +53,49 @@ def save_chip_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
               "updated_at": now_tw()
           })
 
-        print(f"✅ chip_data write: {stock_id} {date}")
+        print(f"chip_data write: {stock_id} {date}")
         return True
 
     except Exception as e:
-        print("🔥 chip_data error:", e)
+        print("chip_data error:", e)
+        return False
+
+
+def save_job_log(job_id: str, payload: Dict[str, Any]) -> bool:
+    if db is None:
+        print("Firebase not initialized")
+        return False
+
+    try:
+        db.collection("job_logs").document(job_id).set({
+            **payload,
+            "job_id": job_id,
+            "updated_at": now_tw()
+        })
+        print(f"job_log write: {job_id}")
+        return True
+    except Exception as e:
+        print("job_log error:", e)
         return False
 
 
 def get_cache_status(stock_id: str):
     if db is None:
-        return {"firebase_enabled": False}
+        return {"firebase_enabled": False, "message": "Firebase not initialized"}
 
     try:
         daily_docs = list(db.collection("stock_daily").document(stock_id).collection("data").limit(3).stream())
         chip_docs = list(db.collection("chip_data").document(stock_id).collection("data").limit(3).stream())
+        job_docs = list(db.collection("job_logs").limit(3).stream())
 
         return {
             "firebase_enabled": True,
+            "stock_id": stock_id,
             "stock_daily_count": len(daily_docs),
-            "chip_data_count": len(chip_docs)
+            "chip_data_count": len(chip_docs),
+            "job_log_count": len(job_docs),
+            "stock_daily_samples": [d.to_dict() for d in daily_docs],
+            "chip_data_samples": [d.to_dict() for d in chip_docs]
         }
 
     except Exception as e:
