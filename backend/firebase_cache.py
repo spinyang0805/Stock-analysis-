@@ -39,7 +39,7 @@ def save_stock_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
             "date": date,
             "data": payload,
             "updated_at": now_tw()
-        })
+        }, merge=True)
         print(f"stock_daily write: {stock_id} {date}")
         return True
     except Exception as e:
@@ -57,8 +57,8 @@ def save_chip_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
             "date": date,
             "data": payload,
             "updated_at": now_tw()
-        })
-        print(f"chip_data write: {stock_id} {date}")
+        }, merge=True)
+        print(f"chip_data merge write: {stock_id} {date}")
         return True
     except Exception as e:
         print("chip_data error:", e)
@@ -70,7 +70,7 @@ def save_job_log(job_id: str, payload: Dict[str, Any]) -> bool:
         print("Firebase not initialized")
         return False
     try:
-        db.collection("job_logs").document(job_id).set({**payload, "job_id": job_id, "updated_at": now_tw()})
+        db.collection("job_logs").document(job_id).set({**payload, "job_id": job_id, "updated_at": now_tw()}, merge=True)
         print(f"job_log write: {job_id}")
         return True
     except Exception as e:
@@ -125,6 +125,23 @@ def get_valid_stock_daily_series(stock_id: str, limit: int = 260) -> List[Dict[s
     return result
 
 
+def get_latest_chip_daily(stock_id: str, limit: int = 30) -> Dict[str, Any]:
+    if db is None:
+        return {}
+    try:
+        docs = db.collection("chip_data").document(stock_id).collection("data").order_by("date", direction="DESCENDING").limit(limit).stream()
+        for doc in docs:
+            item = doc.to_dict()
+            payload = item.get("data", {}) or {}
+            if isinstance(payload, dict) and payload:
+                payload["date"] = item.get("date") or doc.id
+                payload["_doc_id"] = doc.id
+                return payload
+    except Exception as e:
+        print("latest chip read error:", e)
+    return {}
+
+
 def cleanup_invalid_stock_daily(stock_id: str, limit: int = 500) -> Dict[str, Any]:
     if db is None:
         return {"firebase_enabled": False, "message": "Firebase not initialized"}
@@ -164,6 +181,7 @@ def get_cache_status(stock_id: str):
             "chip_data_count": len(chip_samples),
             "job_log_count": len(job_docs),
             "latest_valid_stock_daily": latest_valid,
+            "latest_chip_daily": get_latest_chip_daily(stock_id),
             "stock_daily_samples": valid_daily_samples[:3],
             "invalid_stock_daily_samples": invalid_daily_samples[:3],
             "chip_data_samples": chip_samples[:3]
