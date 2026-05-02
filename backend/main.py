@@ -1,20 +1,20 @@
 from datetime import datetime, timedelta
-from typing import Tuple
 import math
 import random
-import time
 import threading
 
 import pandas as pd
-import requests
-import yfinance as yf
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from analysis_engine import build_rule_based_analysis, enrich_indicators
 from firebase import db
-from firebase_cache import get_cache_status
+from firebase_cache import (
+    cleanup_invalid_stock_daily,
+    get_cache_status,
+    get_valid_stock_daily_series,
+)
 from jobs import run_daily_update, run_on_demand_backfill, preload_hot_stocks
 from stock_list import search_products
 
@@ -22,9 +22,6 @@ try:
     from dashboard_service import fetch_realtime_board, fetch_institutional, fetch_margin, analyze_dashboard
 except Exception:
     fetch_realtime_board = fetch_institutional = fetch_margin = analyze_dashboard = None
-
-REQUEST_TIMEOUT = 4
-TWSE_MONTH_LIMIT = 4
 
 app = FastAPI(title="TW Stock Decision API")
 app.add_middleware(
@@ -58,98 +55,7 @@ def normalize_stock(stock: str) -> str:
     return str(mapped).upper().replace(".TW", "").replace(".TWO", "")
 
 
-def parse_number(value):
-    try:
-        if value in (None, "", "--", "---", "X0.00"):
-            return None
-        return float(str(value).replace(",", "").replace("+", ""))
-    except Exception:
-        return None
-
-
-def roc_to_datetime(roc_date: str) -> datetime:
-    y, m, d = roc_date.split("/")
-    return datetime(int(y) + 1911, int(m), int(d))
-
-
-def twse_month_history(stock: str, year: int, month: int) -> pd.DataFrame:
-    code = normalize_stock(stock)
-    url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
-    params = {"response": "json", "date": f"{year}{month:02d}01", "stockNo": code}
-    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json,text/plain,*/*"}
-    res = requests.get(url, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
-    res.raise_for_status()
-    payload = res.json()
-    if payload.get("stat") != "OK" or not payload.get("data"):
-        raise ValueError(f"TWSE no data for {code} {year}-{month:02d}")
-    rows = []
-    for row in payload["data"]:
-        try:
-            rows.append({
-                "Date": roc_to_datetime(row[0]),
-                "Open": parse_number(row[3]),
-                "High": parse_number(row[4]),
-                "Low": parse_number(row[5]),
-                "Close": parse_number(row[6]),
-                "Volume": parse_number(row[1]),
-            })
-        except Exception:
-            continue
-    return pd.DataFrame(rows)
-
-
-def twse_history(stock: str, months: int = TWSE_MONTH_LIMIT) -> pd.DataFrame:
-    today = datetime.now()
-    frames = []
-    for offset in range(months):
-        m = today.month - offset
-        y = today.year
-        while m <= 0:
-            m += 12
-            y -= 1
-        try:
-            frames.append(twse_month_history(stock, y, m))
-        except Exception:
-            continue
-    if not frames:
-        raise ValueError("TWSE monthly history returned no frames")
-    df = pd.concat(frames, ignore_index=True)
-    df = df.dropna(subset=["Open", "High", "Low", "Close"])
-    df = df.drop_duplicates(subset=["Date"]).sort_values("Date")
-    return df.set_index("Date")
-
-
-def yahoo_chart_history(symbol: str) -> pd.DataFrame:
-    now = int(time.time())
-    start = now - 370 * 24 * 60 * 60
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-    params = {"period1": start, "period2": now, "interval": "1d", "events": "history", "includeAdjustedClose": "true"}
-    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json,text/plain,*/*"}
-    res = requests.get(url, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
-    res.raise_for_status()
-    payload = res.json()
-    result = payload.get("chart", {}).get("result", [])
-    if not result:
-        raise ValueError("Yahoo chart API returned no result")
-    result = result[0]
-    timestamps = result.get("timestamp") or []
-    quote = (result.get("indicators", {}).get("quote") or [{}])[0]
-    rows = []
-    for idx, ts in enumerate(timestamps):
-        o = quote.get("open", [None] * len(timestamps))[idx]
-        h = quote.get("high", [None] * len(timestamps))[idx]
-        l = quote.get("low", [None] * len(timestamps))[idx]
-        c = quote.get("close", [None] * len(timestamps))[idx]
-        v = quote.get("volume", [0] * len(timestamps))[idx]
-        if None in (o, h, l, c):
-            continue
-        rows.append({"Date": datetime.fromtimestamp(ts), "Open": float(o), "High": float(h), "Low": float(l), "Close": float(c), "Volume": float(v or 0)})
-    if not rows:
-        raise ValueError("Yahoo chart API returned empty OHLCV rows")
-    return pd.DataFrame(rows).set_index("Date")
-
-
-def fallback_history(stock: str, days: int = 180) -> pd.DataFrame:
+def fallback_history(stock: str, days: int = 120) -> pd.DataFrame:
     random.seed(normalize_stock(stock))
     code = normalize_stock(stock)
     base_map = {"2330": 600, "3702": 100, "2317": 150, "2454": 900}
@@ -170,31 +76,29 @@ def fallback_history(stock: str, days: int = 180) -> pd.DataFrame:
     return pd.DataFrame(rows).set_index("Date")
 
 
-def get_history(stock: str) -> Tuple[pd.DataFrame, str, str]:
-    code = normalize_stock(stock)
-    errors = []
-    for getter, label in [
-        (lambda: yahoo_chart_history(f"{code}.TW"), "Yahoo Finance chart API"),
-        (lambda: yahoo_chart_history(f"{code}.TWO"), "Yahoo Finance chart API TPEx"),
-        (lambda: twse_history(code), "TWSE official STOCK_DAY"),
-    ]:
+def firebase_rows_to_df(rows):
+    data = []
+    for r in rows:
         try:
-            df = getter()
-            if df is not None and not df.empty:
-                return df, label, code
-        except Exception as exc:
-            errors.append(str(exc))
-    try:
-        df = yf.download(f"{code}.TW", period="6mo", interval="1d", progress=False, auto_adjust=False, threads=False, timeout=REQUEST_TIMEOUT)
-        if df is not None and not df.empty:
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = [c[0] for c in df.columns]
-            return df, "Yahoo Finance / yfinance", code
-    except Exception as exc:
-        errors.append(str(exc))
-    df = fallback_history(code)
-    df.attrs["last_error"] = " | ".join(errors[-3:])
-    return df, "fallback-demo-data", code
+            data.append({
+                "Date": pd.to_datetime(str(r["date"]), format="%Y%m%d"),
+                "Open": float(r["open"]),
+                "High": float(r["high"]),
+                "Low": float(r["low"]),
+                "Close": float(r["close"]),
+                "Volume": float(r.get("volume") or 0),
+            })
+        except Exception:
+            continue
+    if not data:
+        return pd.DataFrame()
+    return pd.DataFrame(data).drop_duplicates(subset=["Date"]).sort_values("Date").set_index("Date")
+
+
+def get_firebase_history(code: str, limit: int = 260):
+    rows = get_valid_stock_daily_series(code, limit=limit)
+    df = firebase_rows_to_df(rows)
+    return df, rows
 
 
 def safe_float(value):
@@ -207,6 +111,8 @@ def safe_float(value):
 
 
 def to_kline_payload(df: pd.DataFrame):
+    if df is None or df.empty:
+        return []
     df = enrich_indicators(df).reset_index()
     date_col = "Date" if "Date" in df.columns else df.columns[0]
     data = []
@@ -228,8 +134,7 @@ def to_kline_payload(df: pd.DataFrame):
     return data
 
 
-def build_meta(stock: str, data, source: str, resolved_symbol: str):
-    code = normalize_stock(stock)
+def build_meta(code: str, data, source: str):
     info = STOCK_INFO_MAP.get(code, {})
     latest = data[-1] if data else {}
     previous = data[-2] if len(data) >= 2 else {}
@@ -242,7 +147,6 @@ def build_meta(stock: str, data, source: str, resolved_symbol: str):
         "name": info.get("name") or code,
         "market": info.get("market") or "--",
         "industry": info.get("industry") or "--",
-        "resolved_symbol": resolved_symbol,
         "source": source,
         "price": close,
         "open": latest.get("open"),
@@ -287,6 +191,11 @@ def firebase_test():
         return JSONResponse({"status": "failed", "firebase_enabled": False, "error": str(exc)}, media_type="application/json; charset=utf-8")
 
 
+@app.get("/api/firebase/cleanup/{stock}")
+def cleanup_stock_cache(stock: str, limit: int = 500):
+    return cleanup_invalid_stock_daily(normalize_stock(stock), limit=limit)
+
+
 @app.get("/api/job/daily")
 def trigger_daily():
     return run_daily_update()
@@ -310,47 +219,62 @@ def cache_status(stock: str):
 @app.get("/api/kline/{stock}")
 def kline(stock: str):
     code = normalize_stock(stock)
-    backfill_started = start_backfill_if_needed(code)
-    try:
-        df, source, resolved_symbol = get_history(code)
-        data = to_kline_payload(df)
-        meta = build_meta(code, data, source, resolved_symbol)
-        return JSONResponse({"status": "loading" if backfill_started else "ok", "message": "資料導入中，已先顯示可用資料" if backfill_started else "ok", "stock": stock, "normalized_stock": code, "meta": meta, "resolved_symbol": resolved_symbol, "source": source, "last_close": meta.get("close"), "last_date": data[-1]["time"] if data else None, "data": data}, media_type="application/json; charset=utf-8")
-    except Exception as exc:
-        df = fallback_history(code)
-        data = to_kline_payload(df)
-        meta = build_meta(code, data, "emergency-fallback", code)
-        return JSONResponse({"status": "loading" if backfill_started else "fallback", "stock": stock, "normalized_stock": code, "meta": meta, "source": "emergency-fallback", "error": str(exc), "data": data}, media_type="application/json; charset=utf-8")
+    df, rows = get_firebase_history(code)
+    if df.empty:
+        started = start_backfill_if_needed(code)
+        return JSONResponse({
+            "status": "loading",
+            "message": "Firebase 尚無有效K線資料，已啟動背景 backfill。",
+            "stock": stock,
+            "normalized_stock": code,
+            "meta": build_meta(code, [], "Firebase stock_daily"),
+            "source": "Firebase stock_daily",
+            "data": [],
+            "backfill_started": started,
+        }, media_type="application/json; charset=utf-8")
+    data = to_kline_payload(df)
+    meta = build_meta(code, data, "Firebase stock_daily")
+    return JSONResponse({
+        "status": "ok",
+        "message": "ok",
+        "stock": stock,
+        "normalized_stock": code,
+        "meta": meta,
+        "source": "Firebase stock_daily",
+        "last_close": meta.get("close"),
+        "last_date": data[-1]["time"] if data else None,
+        "data": data,
+        "cache_rows": len(rows),
+    }, media_type="application/json; charset=utf-8")
 
 
 @app.get("/api/analysis/{stock}")
 def analysis(stock: str):
     code = normalize_stock(stock)
-    try:
-        df, source, resolved_symbol = get_history(code)
-        result = build_rule_based_analysis(df, code)
-        data = to_kline_payload(df)
-        result.update({"source": source, "resolved_symbol": resolved_symbol, "normalized_stock": code, "meta": build_meta(code, data, source, resolved_symbol)})
-        if source == "fallback-demo-data" and df.attrs.get("last_error"):
-            result.setdefault("missing_data", []).append(f"資料源錯誤：{df.attrs.get('last_error')}")
-        return JSONResponse(result, media_type="application/json; charset=utf-8")
-    except Exception as exc:
+    df, _ = get_firebase_history(code)
+    if df.empty:
         df = fallback_history(code)
-        result = build_rule_based_analysis(df, code)
-        data = to_kline_payload(df)
-        result.update({"source": "emergency-fallback", "resolved_symbol": code, "normalized_stock": code, "meta": build_meta(code, data, "emergency-fallback", code)})
-        result.setdefault("missing_data", []).append(f"後端分析已快速回退，不阻塞前端：{exc}")
-        return JSONResponse(result, media_type="application/json; charset=utf-8")
+        source = "fallback-demo-data"
+    else:
+        source = "Firebase stock_daily"
+    result = build_rule_based_analysis(df, code)
+    data = to_kline_payload(df)
+    result.update({"source": source, "normalized_stock": code, "meta": build_meta(code, data, source)})
+    return JSONResponse(result, media_type="application/json; charset=utf-8")
 
 
 @app.get("/api/dashboard/{stock}")
 def dashboard(stock: str):
     code = normalize_stock(stock)
-    df, source, resolved_symbol = get_history(code)
+    df, _ = get_firebase_history(code)
+    source = "Firebase stock_daily" if not df.empty else "fallback-demo-data"
+    if df.empty:
+        df = fallback_history(code)
     kline_data = to_kline_payload(df)
     analysis_result = build_rule_based_analysis(df, code)
-    realtime = fetch_realtime_board(code) if fetch_realtime_board else build_meta(code, kline_data, source, resolved_symbol)
+    basic = build_meta(code, kline_data, source)
+    realtime = fetch_realtime_board(code) if fetch_realtime_board else basic
     inst = fetch_institutional(code) if fetch_institutional else {}
     margin = fetch_margin(code) if fetch_margin else {}
     board = analyze_dashboard(code, kline_data, analysis_result, realtime, inst, margin) if analyze_dashboard else {}
-    return JSONResponse({"basic": realtime, "kline": kline_data, "analysis": analysis_result, "dashboard": board, "source": source, "resolved_symbol": resolved_symbol}, media_type="application/json; charset=utf-8")
+    return JSONResponse({"basic": {**basic, **(realtime or {})}, "kline": kline_data, "analysis": analysis_result, "dashboard": board, "source": source}, media_type="application/json; charset=utf-8")
