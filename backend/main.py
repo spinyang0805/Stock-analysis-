@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from analysis_engine import build_rule_based_analysis, enrich_indicators
 from jobs import run_daily_update
 from firebase_cache import get_cache_status
+from firebase import db
 
 try:
     from dashboard_service import fetch_realtime_board, fetch_institutional, fetch_margin, analyze_dashboard
@@ -260,6 +261,23 @@ def build_meta(stock: str, data, source: str, resolved_symbol: str):
 @app.get("/")
 def root():
     return JSONResponse({"status": "ok", "service": "TW Stock Decision API"}, media_type="application/json; charset=utf-8")
+
+
+@app.get("/api/firebase/test")
+def firebase_test():
+    if db is None:
+        return JSONResponse({"status": "failed", "firebase_enabled": False, "message": "Firebase not initialized. Check FIREBASE_KEY in Render Environment."}, media_type="application/json; charset=utf-8")
+
+    try:
+        payload = {
+            "status": "ok",
+            "message": "Firebase write test succeeded",
+            "created_at": datetime.now().isoformat(),
+        }
+        db.collection("system_health").document("test").set(payload)
+        return JSONResponse({"status": "ok", "firebase_enabled": True, "write": "system_health/test", "data": payload}, media_type="application/json; charset=utf-8")
+    except Exception as exc:
+        return JSONResponse({"status": "failed", "firebase_enabled": False, "error": str(exc)}, media_type="application/json; charset=utf-8")
 
 
 @app.get("/api/job/daily")
