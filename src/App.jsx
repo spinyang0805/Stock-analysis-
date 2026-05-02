@@ -25,16 +25,19 @@ const STOCKS = [
   { code: "3583", name: "辛耘", market: "上櫃", industry: "半導體設備" },
 ];
 
+function cleanCode(q) { return String(q || "").trim().split(/\s+/)[0].replace(".TW", "").replace(".TWO", ""); }
 function findStock(q) {
   const s = String(q || "").trim().toLowerCase();
   if (!s) return [];
   return STOCKS.filter(x => x.code.includes(s) || x.name.toLowerCase().includes(s)).slice(0, 8);
 }
 function resolveStock(q) {
-  const s = String(q || "2330").trim();
-  return STOCKS.find(x => x.code === s || x.name === s) || { code: s.replace(".TW", ""), name: s, market: "--", industry: "--" };
+  const s = cleanCode(q || "2330");
+  const found = STOCKS.find(x => x.code === s || x.name === s);
+  return found || { code: s, name: s, market: "--", industry: "--" };
 }
 function fmt(v, d = 2) { return v == null || Number.isNaN(Number(v)) ? "--" : Number(v).toFixed(d); }
+function displayValue(v) { return v == null || v === "" ? "待資料" : v; }
 function series(chart, Type, options, fallback) { return typeof chart.addSeries === "function" && Type ? chart.addSeries(Type, options) : chart[fallback](options); }
 function normalizeKline(payload) { return Array.isArray(payload?.data) ? payload.data.filter(x => x?.time && x.open != null && x.close != null) : []; }
 function val(data, key) { return data.filter(x => x[key] != null).map(x => ({ time: x.time, value: Number(x[key]) })); }
@@ -110,28 +113,30 @@ export default function App() {
           s.ma5?.setData(showMA ? val(k, "ma5") : []); s.ma20?.setData(showMA ? val(k, "ma20") : []); s.ma60?.setData(showMA ? val(k, "ma60") : []);
           s.bbU?.setData(showBB ? val(k, "bb_upper") : []); s.bbL?.setData(showBB ? val(k, "bb_lower") : []);
           chartRef.current.forEach(c => c.timeScale().fitContent());
-          setKlinePayload(kp); setAnalysis(ap || localAnalysis(code, k)); setDashboard(dp); setStatus("已連接 API，資料已載入");
+          setKlinePayload(kp); setAnalysis(ap || localAnalysis(code, k)); setDashboard(dp); setStatus(kp?.status === "loading" ? "資料導入中，請稍後重新查詢" : "已連接 API，資料已載入");
         }
       } catch (e) { if (!dead) setStatus(`API 連線失敗：${e.message}`); }
     }
     load(); return () => { dead = true; };
   }, [stock.code, showMA, showBB]);
 
-  function choose(x) { setStock(x); setInput(`${x.code} ${x.name}`); setOpenSuggest(false); }
+  function choose(x) { setStock(x); setInput(x.code); setOpenSuggest(false); }
   function submit() { const s = suggestions[0] || resolveStock(input); choose(s); }
 
   const meta = { ...stock, ...(klinePayload?.meta || {}), ...(analysis?.meta || {}), ...(dashboard?.basic || {}) };
   const latest = analysis?.indicators || {};
   const board = dashboard?.dashboard || {};
-  const chip = board.chip || {};
+  const chip = board.chip || dashboard?.chip || dashboard?.basic?.chip || {};
   const order = dashboard?.basic || {};
   const pc = (meta.change ?? 0) >= 0 ? "#22c55e" : "#ef4444";
+  const titleCode = meta.code || stock.code;
+  const titleName = meta.name && meta.name !== titleCode ? meta.name : stock.name;
 
   return <div style={{ minHeight: "100vh", background: "#020617", color: "white", fontFamily: "Arial, sans-serif" }}>
     <header style={{ padding: 24, borderBottom: "1px solid #1e293b", background: "#0f172a" }}>
       <div style={{ color: "#38bdf8", letterSpacing: 1 }}>TW STOCK DECISION SYSTEM</div>
       <h1>券商等級交易決策 Dashboard</h1>
-      <div style={{ fontSize: 26, fontWeight: 800 }}>{meta.name || stock.name} <span style={{ color: "#facc15" }}>{meta.code || stock.code}</span> <span style={{ color: "#94a3b8", fontSize: 15 }}>{meta.market || stock.market}・{meta.industry || stock.industry}</span></div>
+      <div style={{ fontSize: 26, fontWeight: 800 }}><span style={{ color: "#facc15" }}>{titleCode}</span> {titleName} <span style={{ color: "#94a3b8", fontSize: 15 }}>{meta.market || stock.market}・{meta.industry || stock.industry}</span></div>
       <div style={{ fontSize: 44, fontWeight: 900, color: pc }}>{fmt(meta.price)}</div>
       <div style={{ color: pc }}>{fmt(meta.change)} ({fmt(meta.change_pct)}%)　開 {fmt(meta.open)}　高 {fmt(meta.high)}　低 {fmt(meta.low)}　收 {fmt(meta.close)}</div>
       <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -146,11 +151,11 @@ export default function App() {
       </div>
     </header>
     <main style={{ padding: 18, display: "grid", gridTemplateColumns: "minmax(0,2fr) minmax(360px,.9fr)", gap: 18 }}>
-      <section style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 18, padding: 18 }}><h2>{meta.code || stock.code} {meta.name || stock.name} K線 + 均線 + 布林</h2><div ref={priceRef} /><h3>成交量</h3><div ref={volRef} /><h3>RSI14</h3><div ref={rsiRef} /><h3>MACD</h3><div ref={macdRef} /></section>
+      <section style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 18, padding: 18 }}><h2>{titleCode} {titleName} K線 + 均線 + 布林</h2><div ref={priceRef} /><h3>成交量</h3><div ref={volRef} /><h3>RSI14</h3><div ref={rsiRef} /><h3>MACD</h3><div ref={macdRef} /></section>
       <aside style={{ display: "grid", gap: 12, alignContent: "start" }}>
         <Card title="Decision Score"><div style={{ fontSize: 46, color: scoreColor(analysis?.score ?? 0), fontWeight: 900 }}>{analysis?.score ?? "--"}</div><b>{analysis?.trend}</b><p style={{ color: "#94a3b8" }}>{analysis?.summary}</p></Card>
         <Card title="原本技術分析總覽"><Row label="MA5" value={fmt(latest.ma5)} color="#facc15"/><Row label="MA20" value={fmt(latest.ma20)} color="#38bdf8"/><Row label="MA60" value={fmt(latest.ma60)} color="#a78bfa"/><Row label="RSI14" value={fmt(latest.rsi14)}/><Row label="MACD" value={fmt(latest.macd)}/><Row label="布林上軌" value={fmt(latest.bb_upper)}/><Row label="布林下軌" value={fmt(latest.bb_lower)}/></Card>
-        <Card title="籌碼分析"><Row label="外資" value={chip.foreign ?? "待資料"}/><Row label="投信" value={chip.investment_trust ?? "待資料"}/><Row label="自營商" value={chip.dealer ?? "待資料"}/><Row label="融資餘額" value={chip.margin_balance ?? "待資料"}/><Row label="融券餘額" value={chip.short_balance ?? "待資料"}/></Card>
+        <Card title="籌碼分析"><Row label="外資" value={displayValue(chip.foreign)}/><Row label="投信" value={displayValue(chip.investment_trust)}/><Row label="自營商" value={displayValue(chip.dealer)}/><Row label="融資餘額" value={displayValue(chip.margin_balance ?? chip.margin)}/><Row label="融券餘額" value={displayValue(chip.short_balance ?? chip.short)}/><Row label="資料來源" value={chip.source || "等待 Firebase chip_data"}/></Card>
         <Card title="五檔委買委賣"><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><div><b style={{color:"#22c55e"}}>買</b>{(order.bids||[]).map((b,i)=><Row key={i} label={b.qty} value={fmt(b.price)} color="#22c55e" />)}</div><div><b style={{color:"#ef4444"}}>賣</b>{(order.asks||[]).map((a,i)=><Row key={i} label={fmt(a.price)} value={a.qty} color="#ef4444" />)}</div></div></Card>
         <Card title="操作劇本"><Row label="突破" value={board.scenario?.breakout || "資料建立中"}/><Row label="回檔" value={board.scenario?.pullback || "資料建立中"}/><Row label="風險" value={board.scenario?.risk || "資料建立中"}/></Card>
       </aside>
