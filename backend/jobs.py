@@ -20,10 +20,6 @@ HOT_STOCKS = ["2330", "2317", "3702", "2454", "2382"]
 
 
 def fetch_json(url, params=None):
-    """Render sometimes fails CA validation against TWSE/TPEx.
-    Try normal TLS first; if certificate verification fails, retry without verify
-    so the job can still populate Firebase. Errors are surfaced to job_logs.
-    """
     try:
         res = requests.get(url, params=params, headers=HEADERS, timeout=REQUEST_TIMEOUT)
         res.raise_for_status()
@@ -73,6 +69,12 @@ def recent_dates(max_days: int = 10):
         yield (now - timedelta(days=i)).strftime("%Y%m%d")
 
 
+def back_dates_from(date_text: str, max_days: int = 10):
+    base = datetime.strptime(date_text, "%Y%m%d")
+    for i in range(max_days):
+        yield (base - timedelta(days=i)).strftime("%Y%m%d")
+
+
 def month_iter(months: int = 12):
     now = datetime.now()
     for i in range(months):
@@ -84,13 +86,46 @@ def month_iter(months: int = 12):
         yield y, m
 
 
+def _fields(payload):
+    if not isinstance(payload, dict):
+        return []
+    return payload.get("fields") or payload.get("fields9") or []
+
+
+def _rows(payload):
+    if not isinstance(payload, dict):
+        return []
+    if payload.get("data"):
+        return payload.get("data") or []
+    if isinstance(payload.get("tables"), list) and payload["tables"]:
+        return payload["tables"][0].get("data", []) or []
+    return []
+
+
+def _idx(fields, *keywords, default=None):
+    for i, name in enumerate(fields or []):
+        text = str(name)
+        if all(k in text for k in keywords):
+            return i
+    return default
+
+
+def _row_value(row, idx):
+    try:
+        if idx is None or idx >= len(row):
+            return None
+        return row[idx]
+    except Exception:
+        return None
+
+
 def latest_twse_daily_rows(max_lookback_days: int = 10):
     errors = []
     for d in recent_dates(max_lookback_days):
         payload, err = fetch_json(TWSE_ALL, params={"response": "json", "date": d})
         if err:
             errors.append(f"TWSE {d}: {err}")
-        rows = payload.get("data", []) if isinstance(payload, dict) else []
+        rows = _rows(payload)
         if rows:
             return d, rows, errors
     return today_str(), [], errors
@@ -107,11 +142,7 @@ def latest_tpex_daily_rows(max_lookback_days: int = 10):
             payload, err = fetch_json(TPEX_ALL, params=params)
             if err:
                 errors.append(f"TPEx {d}: {err}")
-            rows = []
-            if isinstance(payload, dict):
-                rows = payload.get("data", [])
-                if not rows and isinstance(payload.get("tables"), list):
-                    rows = payload.get("tables", [{}])[0].get("data", [])
+            rows = _rows(payload)
             if rows:
                 return d, rows, errors
     return today_str(), [], errors
@@ -163,9 +194,89 @@ def run_on_demand_backfill(stock_id: str, months: int = 12):
     return result
 
 
+def write_t86_chips(start_date: str, result: dict):
+    for d in back_dates_from(start_date, 10):
+        payload, err = fetch_json(TWSE_T86, params={"response": "json", "date": d, "selectType": "ALL"})
+        if err:
+            result["errors"].append(f"T86 {d}: {err}")
+        rows = _rows(payload)
+        if not rows:
+            continue
+        fields = _fields(payload)
+        code_i = _idx(fields, "證券", "代號", default=0)
+        name_i = _idx(fields, "證券", "名稱", default=1)
+        foreign_i = _idx(fields, "外資", "買賣超", default=4)
+        trust_i = _idx(fields, "投信", "買賣超", default=7)
+        dealer_i = _idx(fields, "自營商", "買賣超", default=8)
+        written = 0
+        for row in rows:
+            try:
+                stock_id = str(_row_value(row, code_i)).strip()
+                if not stock_id:
+                    continue
+                payload_doc = {
+                    "market": "TWSE",
+                    "name": _row_value(row, name_i),
+                    "foreign": safe_int(_row_value(row, foreign_i)),
+                    "investment_trust": safe_int(_row_value(row, trust_i)),
+                    "dealer": safe_int(_row_value(row, dealer_i)),
+                    "source_t86": "TWSE T86",
+                    "chip_date": d,
+                }
+                if save_chip_daily(stock_id, d, payload_doc):
+                    written += 1
+            except Exception as exc:
+                result["errors"].append(f"T86 row {d}: {exc}")
+        result["chips"] += written
+        result["t86_date"] = d
+        return written
+    return 0
+
+
+def write_margin_chips(start_date: str, result: dict):
+    for d in back_dates_from(start_date, 10):
+        payload, err = fetch_json(TWSE_MARGIN, params={"response": "json", "date": d, "selectType": "ALL"})
+        if err:
+            result["errors"].append(f"margin {d}: {err}")
+        rows = _rows(payload)
+        if not rows:
+            continue
+        fields = _fields(payload)
+        code_i = _idx(fields, "股票", "代號", default=0)
+        if code_i is None:
+            code_i = _idx(fields, "證券", "代號", default=0)
+        margin_i = _idx(fields, "融資", "今日餘額", default=None)
+        if margin_i is None:
+            margin_i = _idx(fields, "融資", "餘額", default=6)
+        short_i = _idx(fields, "融券", "今日餘額", default=None)
+        if short_i is None:
+            short_i = _idx(fields, "融券", "餘額", default=12)
+        written = 0
+        for row in rows:
+            try:
+                stock_id = str(_row_value(row, code_i)).strip()
+                if not stock_id:
+                    continue
+                payload_doc = {
+                    "market": "TWSE",
+                    "margin": safe_int(_row_value(row, margin_i)),
+                    "short": safe_int(_row_value(row, short_i)),
+                    "source_margin": "TWSE MI_MARGN",
+                    "margin_date": d,
+                }
+                if save_chip_daily(stock_id, d, payload_doc):
+                    written += 1
+            except Exception as exc:
+                result["errors"].append(f"margin row {d}: {exc}")
+        result["margin_rows"] = written
+        result["margin_date"] = d
+        return written
+    return 0
+
+
 def run_daily_update():
     requested_date = today_str()
-    result = {"requested_date": requested_date, "twse_date": None, "tpex_date": None, "stocks": 0, "chips": 0, "errors": []}
+    result = {"requested_date": requested_date, "twse_date": None, "tpex_date": None, "t86_date": None, "margin_date": None, "stocks": 0, "chips": 0, "margin_rows": 0, "errors": []}
 
     twse_date, twse_rows, twse_errors = latest_twse_daily_rows()
     result["twse_date"] = twse_date
@@ -215,26 +326,8 @@ def run_daily_update():
         except Exception as exc:
             result["errors"].append(f"TPEx daily row error: {exc}")
 
-    payload, err = fetch_json(TWSE_T86, params={"response": "json", "date": twse_date, "selectType": "ALL"})
-    if err:
-        result["errors"].append(f"T86 error: {err}")
-    for row in payload.get("data", []) if isinstance(payload, dict) else []:
-        try:
-            stock_id = row[0]
-            if save_chip_daily(stock_id, twse_date, {"market": "TWSE", "foreign": safe_int(row[4]), "investment_trust": safe_int(row[10]), "dealer": safe_int(row[11]), "source_t86": "TWSE T86"}):
-                result["chips"] += 1
-        except Exception as exc:
-            result["errors"].append(f"T86 row error: {exc}")
-
-    payload, err = fetch_json(TWSE_MARGIN, params={"response": "json", "date": twse_date, "selectType": "ALL"})
-    if err:
-        result["errors"].append(f"margin error: {err}")
-    for row in payload.get("data", []) if isinstance(payload, dict) else []:
-        try:
-            stock_id = row[0]
-            save_chip_daily(stock_id, twse_date, {"market": "TWSE", "margin": safe_int(row[12]), "short": safe_int(row[15]), "source_margin": "TWSE MI_MARGN"})
-        except Exception as exc:
-            result["errors"].append(f"margin row error: {exc}")
+    write_t86_chips(twse_date, result)
+    write_margin_chips(twse_date, result)
 
     save_job_log("daily_update_" + requested_date, result)
     return result
