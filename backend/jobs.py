@@ -15,6 +15,7 @@ TWSE_T86 = "https://www.twse.com.tw/rwd/zh/fund/T86"
 TWSE_MARGIN = "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN"
 TWSE_STOCK_DAY = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
 TPEX_ALL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyCloseQuotes"
+TPEX_STOCK_DAY = "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"
 
 HOT_STOCKS = ["2330", "2317", "3702", "2454", "2382"]
 
@@ -59,8 +60,12 @@ def roc_date_slash(date_text: str) -> str:
 
 
 def roc_to_yyyymmdd(roc_date: str) -> str:
-    y, m, d = roc_date.split("/")
-    return f"{int(y) + 1911}{int(m):02d}{int(d):02d}"
+    parts = str(roc_date).split("/")
+    if len(parts) != 3:
+        return str(roc_date).replace("/", "")
+    y, m, d = parts
+    year = int(y) + 1911 if int(y) < 1911 else int(y)
+    return f"{year}{int(m):02d}{int(d):02d}"
 
 
 def recent_dates(max_days: int = 10):
@@ -150,7 +155,7 @@ def latest_tpex_daily_rows(max_lookback_days: int = 10):
     return today_str(), [], [], errors
 
 
-def fetch_twse_stock_month(stock_id: str, year: int, month: int):
+def fetch_twse_stock_month(stock_id: str, year: int, month: int, product_type: str = "股票"):
     errors = []
     written = 0
     payload, err = fetch_json(
@@ -158,7 +163,7 @@ def fetch_twse_stock_month(stock_id: str, year: int, month: int):
         params={"response": "json", "date": f"{year}{month:02d}01", "stockNo": stock_id},
     )
     if err:
-        errors.append(f"stock month error {stock_id}: {err}")
+        errors.append(f"TWSE month error {stock_id}: {err}")
     if not isinstance(payload, dict) or payload.get("stat") != "OK":
         return 0, errors
     for row in payload.get("data", []):
@@ -166,6 +171,7 @@ def fetch_twse_stock_month(stock_id: str, year: int, month: int):
             date_text = roc_to_yyyymmdd(row[0])
             doc = {
                 "market": "TWSE",
+                "product_type": product_type,
                 "volume": safe_float(row[1]),
                 "turnover": safe_float(row[2]),
                 "open": safe_float(row[3]),
@@ -179,15 +185,74 @@ def fetch_twse_stock_month(stock_id: str, year: int, month: int):
             if save_stock_daily(stock_id, date_text, doc):
                 written += 1
         except Exception as exc:
-            errors.append(f"stock month row error {stock_id}: {exc}")
+            errors.append(f"TWSE month row error {stock_id}: {exc}")
     return written, errors
 
 
-def run_on_demand_backfill(stock_id: str, months: int = 12):
+def fetch_tpex_stock_month(stock_id: str, year: int, month: int, product_type: str = "股票"):
+    errors = []
+    written = 0
+    params_candidates = [
+        {"response": "json", "date": f"{year - 1911}/{month:02d}", "stockNo": stock_id},
+        {"response": "json", "date": f"{year}{month:02d}", "stockNo": stock_id},
+        {"response": "json", "date": f"{year - 1911}/{month:02d}/01", "stockNo": stock_id},
+    ]
+    payload = {}
+    err = None
+    for params in params_candidates:
+        payload, err = fetch_json(TPEX_STOCK_DAY, params=params)
+        rows = _rows(payload)
+        if rows:
+            break
+    if err:
+        errors.append(f"TPEx month error {stock_id}: {err}")
+    rows = _rows(payload)
+    fields = _fields(payload)
+    if not rows:
+        return 0, errors or [f"TPEx no rows {stock_id} {year}-{month:02d}"]
+
+    date_i = _idx(fields, "日期", default=0)
+    close_i = _idx(fields, "收盤", default=2)
+    change_i = _idx(fields, "漲跌", default=3)
+    open_i = _idx(fields, "開盤", default=4)
+    high_i = _idx(fields, "最高", default=5)
+    low_i = _idx(fields, "最低", default=6)
+    volume_i = _idx(fields, "成交", default=8)
+    turnover_i = _idx(fields, "金額", default=None)
+    trades_i = _idx(fields, "筆數", default=None)
+
+    for row in rows:
+        try:
+            date_text = roc_to_yyyymmdd(str(_row_value(row, date_i)))
+            doc = {
+                "market": "TPEx",
+                "product_type": product_type,
+                "volume": safe_float(_row_value(row, volume_i)),
+                "turnover": safe_float(_row_value(row, turnover_i)),
+                "open": safe_float(_row_value(row, open_i)),
+                "high": safe_float(_row_value(row, high_i)),
+                "low": safe_float(_row_value(row, low_i)),
+                "close": safe_float(_row_value(row, close_i)),
+                "change": safe_float(_row_value(row, change_i)),
+                "trades": safe_float(_row_value(row, trades_i)),
+                "source": "TPEx tradingStock",
+            }
+            if save_stock_daily(stock_id, date_text, doc):
+                written += 1
+        except Exception as exc:
+            errors.append(f"TPEx month row error {stock_id}: {exc}")
+    return written, errors
+
+
+def run_on_demand_backfill(stock_id: str, months: int = 12, market: str = "TWSE", product_type: str = "股票"):
     stock_id = str(stock_id).strip()
-    result = {"stock_id": stock_id, "months": months, "written_days": 0, "errors": [], "status": "running"}
+    market_key = "TPEx" if str(market).upper() in ("TPEX", "上櫃") else "TWSE"
+    result = {"stock_id": stock_id, "market": market_key, "product_type": product_type, "months": months, "written_days": 0, "errors": [], "status": "running"}
     for year, month in month_iter(months):
-        written, errors = fetch_twse_stock_month(stock_id, year, month)
+        if market_key == "TPEx":
+            written, errors = fetch_tpex_stock_month(stock_id, year, month, product_type=product_type)
+        else:
+            written, errors = fetch_twse_stock_month(stock_id, year, month, product_type=product_type)
         result["written_days"] += written
         result["errors"].extend(errors[:10])
         time.sleep(0.12)
