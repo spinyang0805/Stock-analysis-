@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Dict, List
 import requests
 
 HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json,text/plain,*/*"}
-TIMEOUT = 12
+TIMEOUT = 18
 
 TWSE_LISTED = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
 TPEX_LISTED = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TWSE_ETF = "https://openapi.twse.com.tw/v1/opendata/t187ap03_ETF"
+TWSE_DAY_ALL = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY_ALL"
+TPEX_DAILY = "https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyCloseQuotes"
 TWSE_BOND_CANDIDATES = [
     "https://openapi.twse.com.tw/v1/opendata/t187ap03_B",
     "https://openapi.twse.com.tw/v1/opendata/t187ap03_C",
@@ -55,9 +58,9 @@ FALLBACK_STOCKS = [
 ]
 
 
-def _get_json(url: str):
+def _get_json(url: str, params: Dict | None = None):
     try:
-        response = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        response = requests.get(url, params=params, headers=HEADERS, timeout=TIMEOUT)
         response.raise_for_status()
         return response.json()
     except Exception:
@@ -94,14 +97,24 @@ def _dedupe(items: List[Dict[str, str]]) -> List[Dict[str, str]]:
     return result
 
 
+def _infer_type(code: str, name: str) -> str:
+    upper = str(code).upper()
+    text = f"{code} {name}"
+    if upper.endswith("B") or "債" in text:
+        return "債券ETF"
+    if upper.startswith("00"):
+        return "ETF"
+    return "股票"
+
+
 def _listed_stocks() -> List[Dict[str, str]]:
     items = []
     for row in _get_json(TWSE_LISTED):
         code = _pick(row, ["公司代號", "Code", "SecuritiesCompanyCode"])
         name = _pick(row, ["公司名稱", "CompanyName", "名稱"])
         industry = _pick(row, ["產業別", "Industry", "產業類別"], "股票")
-        if code and code.isdigit():
-            items.append({"code": code, "name": name, "market": "上市", "type": "股票", "industry": industry})
+        if code:
+            items.append({"code": code, "name": name, "market": "上市", "type": _infer_type(code, name), "industry": industry})
     return items
 
 
@@ -111,8 +124,8 @@ def _tpex_stocks() -> List[Dict[str, str]]:
         code = _pick(row, ["SecuritiesCompanyCode", "公司代號", "Code"])
         name = _pick(row, ["CompanyName", "公司名稱", "名稱"])
         industry = _pick(row, ["Industry", "產業別", "產業類別"], "股票")
-        if code and code.isdigit():
-            items.append({"code": code, "name": name, "market": "上櫃", "type": "股票", "industry": industry})
+        if code:
+            items.append({"code": code, "name": name, "market": "上櫃", "type": _infer_type(code, name), "industry": industry})
     return items
 
 
@@ -122,7 +135,7 @@ def _etfs() -> List[Dict[str, str]]:
         code = _pick(row, ["證券代號", "基金代號", "Code", "代號"])
         name = _pick(row, ["證券名稱", "基金名稱", "Name", "名稱"])
         if code:
-            product_type = "債券ETF" if "債" in name or code.upper().endswith("B") else "ETF"
+            product_type = _infer_type(code, name)
             items.append({"code": code, "name": name, "market": "上市", "type": product_type, "industry": product_type})
     return items
 
@@ -134,19 +147,89 @@ def _bonds() -> List[Dict[str, str]]:
             code = _pick(row, ["證券代號", "債券代號", "Code", "代號"])
             name = _pick(row, ["證券名稱", "債券名稱", "Name", "名稱"])
             if code and name:
-                items.append({"code": code, "name": name, "market": "上市", "type": "債券", "industry": "債券"})
+                items.append({"code": code, "name": name, "market": "上市", "type": _infer_type(code, name), "industry": "債券"})
     return items
+
+
+def _rows(payload):
+    if isinstance(payload, dict):
+        if payload.get("data"):
+            return payload.get("data") or []
+        if isinstance(payload.get("tables"), list) and payload["tables"]:
+            return payload["tables"][0].get("data", []) or []
+    return []
+
+
+def _recent_dates(days: int = 10):
+    base = datetime.now()
+    for i in range(days):
+        yield (base - timedelta(days=i)).strftime("%Y%m%d")
+
+
+def _roc_date(yyyymmdd: str) -> str:
+    dt = datetime.strptime(yyyymmdd, "%Y%m%d")
+    return f"{dt.year - 1911}/{dt.month:02d}/{dt.day:02d}"
+
+
+def _twse_daily_products() -> List[Dict[str, str]]:
+    for day in _recent_dates(12):
+        payload = _get_json(TWSE_DAY_ALL, {"response": "json", "date": day})
+        rows = _rows(payload)
+        if not rows:
+            continue
+        result = []
+        for row in rows:
+            try:
+                code = str(row[0]).strip()
+                name = str(row[1]).strip()
+                if code and name:
+                    product_type = _infer_type(code, name)
+                    result.append({"code": code, "name": name, "market": "上市", "type": product_type, "industry": product_type})
+            except Exception:
+                continue
+        if result:
+            return result
+    return []
+
+
+def _tpex_daily_products() -> List[Dict[str, str]]:
+    for day in _recent_dates(12):
+        params_list = [
+            {"response": "json", "date": _roc_date(day)},
+            {"response": "json", "date": day},
+            {"response": "json"},
+        ]
+        for params in params_list:
+            payload = _get_json(TPEX_DAILY, params)
+            rows = _rows(payload)
+            if not rows:
+                continue
+            result = []
+            for row in rows:
+                try:
+                    code = str(row[0]).strip()
+                    name = str(row[1]).strip()
+                    if code and name and code[0].isdigit():
+                        product_type = _infer_type(code, name)
+                        result.append({"code": code, "name": name, "market": "上櫃", "type": product_type, "industry": product_type})
+                except Exception:
+                    continue
+            if result:
+                return result
+    return []
 
 
 @lru_cache(maxsize=1)
 def get_all_products() -> List[Dict[str, str]]:
     items = []
-    items.extend(SEED_PRODUCTS)
-    items.extend(FALLBACK_STOCKS)
+    items.extend(_twse_daily_products())
+    items.extend(_tpex_daily_products())
     items.extend(_listed_stocks())
     items.extend(_tpex_stocks())
     items.extend(_etfs())
     items.extend(_bonds())
+    items.extend(SEED_PRODUCTS)
+    items.extend(FALLBACK_STOCKS)
     return _dedupe(items)
 
 
