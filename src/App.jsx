@@ -25,6 +25,14 @@ const STOCKS = [
   { code: "3583", name: "辛耘", market: "上櫃", industry: "半導體設備" },
 ];
 
+const PERSPECTIVE_FALLBACK = [
+  { category: "trend", title: "趨勢面", status: "等待資料", level: "neutral", meaning: "依照 MA5、MA20、MA60 與四線多排判斷股票趨勢強弱。", logic: "MA5 > MA20 > MA60 或 MA5 > MA10 > MA20 > MA60" },
+  { category: "volume_price", title: "量價面", status: "等待資料", level: "neutral", meaning: "觀察成交量與價格同步或背離，用來判斷攻擊、出貨或洗盤。", logic: "Volume vs Volume_MA5 + Price_Change" },
+  { category: "chip", title: "籌碼面", status: "等待資料", level: "neutral", meaning: "觀察外資、投信、自營商與大戶籌碼是否集中。", logic: "Foreign / Trust / Dealer rolling sum and streak" },
+  { category: "credit", title: "信用交易", status: "等待資料", level: "neutral", meaning: "觀察融資、融券與券資比，辨識軋空或斷頭風險。", logic: "Short_Margin_Ratio、Margin_Ratio、Close vs MA60" },
+  { category: "risk", title: "風險面", status: "等待資料", level: "neutral", meaning: "整合融資過高、正乖離過大、跌破季線等風險訊號。", logic: "Margin_Ratio > 60% OR Bias > 15% OR Close < MA60" },
+];
+
 function cleanCode(q) { return String(q || "").trim().split(/\s+/)[0].replace(".TW", "").replace(".TWO", ""); }
 function findStock(q) {
   const s = String(q || "").trim().toLowerCase();
@@ -43,16 +51,66 @@ function normalizeKline(payload) { return Array.isArray(payload?.data) ? payload
 function val(data, key) { return data.filter(x => x[key] != null).map(x => ({ time: x.time, value: Number(x[key]) })); }
 function volume(data) { return data.map(x => ({ time: x.time, value: Number(x.volume || 0), color: x.close >= x.open ? "rgba(34,197,94,.55)" : "rgba(239,68,68,.55)" })); }
 function scoreColor(s) { return s >= 20 ? "#22c55e" : s <= -15 ? "#ef4444" : "#f59e0b"; }
+function levelColor(level) {
+  const key = String(level || "neutral").toLowerCase();
+  if (key.includes("bull")) return "#22c55e";
+  if (key.includes("bear") || key.includes("risk") || key.includes("warning")) return "#ef4444";
+  if (key.includes("strong")) return "#14b8a6";
+  return "#f59e0b";
+}
 function Card({ title, children }) { return <section style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 16, padding: 16 }}><h3 style={{ margin: "0 0 12px" }}>{title}</h3>{children}</section>; }
 function Row({ label, value, color }) { return <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(148,163,184,.14)", padding: "6px 0", gap: 12 }}><span style={{ color: "#94a3b8" }}>{label}</span><b style={{ color: color || "#e2e8f0" }}>{value ?? "--"}</b></div>; }
+
+function normalizePerspectives(analysis, dashboard) {
+  const sources = [
+    analysis?.perspective_cards,
+    analysis?.analysis?.perspective_cards,
+    dashboard?.analysis?.perspective_cards,
+    dashboard?.dashboard?.analysis?.perspective_cards,
+    dashboard?.decision?.perspective_cards,
+  ];
+  const cards = sources.find(Array.isArray);
+  if (!cards || cards.length === 0) return PERSPECTIVE_FALLBACK;
+  return cards.map((item, idx) => ({
+    category: item.category || `perspective_${idx}`,
+    title: item.title || item.category || "分析面向",
+    status: item.status || "待判斷",
+    level: item.level || "neutral",
+    meaning: item.meaning || item.description || "此面向資料建立中。",
+    logic: item.logic || item.condition || "後端尚未提供判斷邏輯",
+  }));
+}
+
+function AnalysisPerspectiveCard({ perspectives }) {
+  return <Card title="個股多面向分析">
+    <div style={{ display: "grid", gap: 10 }}>
+      {perspectives.map(item => <div key={item.category} style={{ border: "1px solid rgba(148,163,184,.18)", borderRadius: 14, padding: 12, background: "rgba(15,23,42,.7)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <b>{item.title}</b>
+          <span style={{ color: levelColor(item.level), border: `1px solid ${levelColor(item.level)}`, borderRadius: 999, padding: "3px 9px", fontSize: 12, whiteSpace: "nowrap" }}>{item.status}</span>
+        </div>
+        <p style={{ color: "#cbd5e1", margin: "8px 0 6px", lineHeight: 1.5 }}>{item.meaning}</p>
+        <div style={{ color: "#64748b", fontSize: 12 }}>判斷邏輯：{item.logic}</div>
+      </div>)}
+    </div>
+  </Card>;
+}
 
 function localAnalysis(code, k) {
   const last = k.at(-1) || {};
   const ma5 = last.ma5 ?? last.close;
   const ma20 = last.ma20 ?? last.close;
+  const ma60 = last.ma60 ?? last.close;
   const score = Math.round((last.close > ma5 ? 12 : -8) + (ma5 > ma20 ? 18 : -10));
   const trend = score >= 20 ? "偏多" : score <= -10 ? "偏空" : "整理";
-  return { score, trend, rating: score >= 20 ? "Bullish" : score <= -10 ? "Bearish" : "Neutral", summary: `${code} 由前端備援分析判斷為「${trend}」。`, indicators: last, signals: [] };
+  const perspective_cards = [
+    { category: "trend", title: "趨勢面", status: ma5 > ma20 && ma20 > ma60 ? "多頭排列" : ma5 < ma20 && ma20 < ma60 ? "空頭排列" : "均線整理", level: ma5 > ma20 && ma20 > ma60 ? "bullish" : ma5 < ma20 && ma20 < ma60 ? "bearish" : "neutral", meaning: ma5 > ma20 && ma20 > ma60 ? "短中長期均線依序向上，代表趨勢偏強。" : "均線尚未形成明確多頭排列，需等待方向確認。", logic: "MA5 > MA20 > MA60" },
+    { category: "volume_price", title: "量價面", status: "待後端量價矩陣", level: "neutral", meaning: "需由後端依成交量均線與漲跌幅判斷量增價漲、量增價跌、量縮價漲或量縮價跌。", logic: "Volume > Volume_MA5 AND Price_Change threshold" },
+    { category: "chip", title: "籌碼面", status: "等待 chip_data", level: "neutral", meaning: "需由 Firebase chip_data 彙總外資、投信、自營商與大戶籌碼。", logic: "foreign_5d_sum / trust_buy_streak / dealer_5d_sum" },
+    { category: "credit", title: "信用交易", status: "等待信用資料", level: "neutral", meaning: "需由融資、融券與券資比判斷軋空或斷頭風險。", logic: "Short_Margin_Ratio > 30% AND Close > Price_20D_Max" },
+    { category: "risk", title: "風險面", status: last.close < ma60 ? "跌破季線" : "待完整風險資料", level: last.close < ma60 ? "warning" : "neutral", meaning: last.close < ma60 ? "股價跌破 MA60，需留意中期趨勢轉弱。" : "尚需後端提供融資使用率與乖離率以完成風險判斷。", logic: "Close < MA60 OR Margin_Ratio > 60% OR Bias > 15%" },
+  ];
+  return { score, trend, rating: score >= 20 ? "Bullish" : score <= -10 ? "Bearish" : "Neutral", summary: `${code} 由前端備援分析判斷為「${trend}」。`, indicators: last, signals: [], perspective_cards };
 }
 
 export default function App() {
@@ -128,6 +186,7 @@ export default function App() {
   const board = dashboard?.dashboard || {};
   const chip = board.chip || dashboard?.chip || dashboard?.basic?.chip || {};
   const order = dashboard?.basic || {};
+  const perspectives = normalizePerspectives(analysis, dashboard);
   const pc = (meta.change ?? 0) >= 0 ? "#22c55e" : "#ef4444";
   const titleCode = meta.code || stock.code;
   const titleName = meta.name && meta.name !== titleCode ? meta.name : stock.name;
@@ -154,6 +213,7 @@ export default function App() {
       <section style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 18, padding: 18 }}><h2>{titleCode} {titleName} K線 + 均線 + 布林</h2><div ref={priceRef} /><h3>成交量</h3><div ref={volRef} /><h3>RSI14</h3><div ref={rsiRef} /><h3>MACD</h3><div ref={macdRef} /></section>
       <aside style={{ display: "grid", gap: 12, alignContent: "start" }}>
         <Card title="Decision Score"><div style={{ fontSize: 46, color: scoreColor(analysis?.score ?? 0), fontWeight: 900 }}>{analysis?.score ?? "--"}</div><b>{analysis?.trend}</b><p style={{ color: "#94a3b8" }}>{analysis?.summary}</p></Card>
+        <AnalysisPerspectiveCard perspectives={perspectives} />
         <Card title="原本技術分析總覽"><Row label="MA5" value={fmt(latest.ma5)} color="#facc15"/><Row label="MA20" value={fmt(latest.ma20)} color="#38bdf8"/><Row label="MA60" value={fmt(latest.ma60)} color="#a78bfa"/><Row label="RSI14" value={fmt(latest.rsi14)}/><Row label="MACD" value={fmt(latest.macd)}/><Row label="布林上軌" value={fmt(latest.bb_upper)}/><Row label="布林下軌" value={fmt(latest.bb_lower)}/></Card>
         <Card title="籌碼分析"><Row label="外資" value={displayValue(chip.foreign)}/><Row label="投信" value={displayValue(chip.investment_trust)}/><Row label="自營商" value={displayValue(chip.dealer)}/><Row label="融資餘額" value={displayValue(chip.margin_balance ?? chip.margin)}/><Row label="融券餘額" value={displayValue(chip.short_balance ?? chip.short)}/><Row label="資料來源" value={chip.source || "等待 Firebase chip_data"}/></Card>
         <Card title="五檔委買委賣"><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><div><b style={{color:"#22c55e"}}>買</b>{(order.bids||[]).map((b,i)=><Row key={i} label={b.qty} value={fmt(b.price)} color="#22c55e" />)}</div><div><b style={{color:"#ef4444"}}>賣</b>{(order.asks||[]).map((a,i)=><Row key={i} label={fmt(a.price)} value={a.qty} color="#ef4444" />)}</div></div></Card>
