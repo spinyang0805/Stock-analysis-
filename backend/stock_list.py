@@ -10,19 +10,48 @@ TIMEOUT = 12
 TWSE_LISTED = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
 TPEX_LISTED = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TWSE_ETF = "https://openapi.twse.com.tw/v1/opendata/t187ap03_ETF"
-# Bond endpoints are not as stable across TWSE/TPEx. We still include a curated seed
-# and merge remote results when the open data response is available.
 TWSE_BOND_CANDIDATES = [
     "https://openapi.twse.com.tw/v1/opendata/t187ap03_B",
     "https://openapi.twse.com.tw/v1/opendata/t187ap03_C",
 ]
 
 SEED_PRODUCTS = [
+    {"code": "0050", "name": "元大台灣50", "market": "上市", "type": "ETF", "industry": "ETF"},
+    {"code": "0056", "name": "元大高股息", "market": "上市", "type": "ETF", "industry": "ETF"},
+    {"code": "006208", "name": "富邦台50", "market": "上市", "type": "ETF", "industry": "ETF"},
+    {"code": "00878", "name": "國泰永續高股息", "market": "上市", "type": "ETF", "industry": "ETF"},
+    {"code": "00919", "name": "群益台灣精選高息", "market": "上市", "type": "ETF", "industry": "ETF"},
     {"code": "00679B", "name": "元大美債20年", "market": "上市", "type": "債券ETF", "industry": "債券"},
     {"code": "00687B", "name": "國泰20年美債", "market": "上市", "type": "債券ETF", "industry": "債券"},
     {"code": "00720B", "name": "元大投資級公司債", "market": "上市", "type": "債券ETF", "industry": "債券"},
     {"code": "00725B", "name": "國泰投資級公司債", "market": "上市", "type": "債券ETF", "industry": "債券"},
     {"code": "00857B", "name": "永豐20年美公債", "market": "上市", "type": "債券ETF", "industry": "債券"},
+]
+
+FALLBACK_STOCKS = [
+    {"code": "2330", "name": "台積電", "market": "上市", "type": "股票", "industry": "半導體"},
+    {"code": "2317", "name": "鴻海", "market": "上市", "type": "股票", "industry": "其他電子"},
+    {"code": "2454", "name": "聯發科", "market": "上市", "type": "股票", "industry": "半導體"},
+    {"code": "2308", "name": "台達電", "market": "上市", "type": "股票", "industry": "電子零組件"},
+    {"code": "2382", "name": "廣達", "market": "上市", "type": "股票", "industry": "電腦及週邊"},
+    {"code": "3231", "name": "緯創", "market": "上市", "type": "股票", "industry": "電腦及週邊"},
+    {"code": "2324", "name": "仁寶", "market": "上市", "type": "股票", "industry": "電腦及週邊"},
+    {"code": "2357", "name": "華碩", "market": "上市", "type": "股票", "industry": "電腦及週邊"},
+    {"code": "3702", "name": "大聯大", "market": "上市", "type": "股票", "industry": "電子通路"},
+    {"code": "2303", "name": "聯電", "market": "上市", "type": "股票", "industry": "半導體"},
+    {"code": "3711", "name": "日月光投控", "market": "上市", "type": "股票", "industry": "半導體"},
+    {"code": "2881", "name": "富邦金", "market": "上市", "type": "股票", "industry": "金融"},
+    {"code": "2882", "name": "國泰金", "market": "上市", "type": "股票", "industry": "金融"},
+    {"code": "2891", "name": "中信金", "market": "上市", "type": "股票", "industry": "金融"},
+    {"code": "2412", "name": "中華電", "market": "上市", "type": "股票", "industry": "通信網路"},
+    {"code": "3008", "name": "大立光", "market": "上市", "type": "股票", "industry": "光電"},
+    {"code": "3034", "name": "聯詠", "market": "上市", "type": "股票", "industry": "半導體"},
+    {"code": "3661", "name": "世芯-KY", "market": "上市", "type": "股票", "industry": "半導體"},
+    {"code": "6446", "name": "藥華藥", "market": "上櫃", "type": "股票", "industry": "生技醫療"},
+    {"code": "5347", "name": "世界", "market": "上櫃", "type": "股票", "industry": "半導體"},
+    {"code": "6488", "name": "環球晶", "market": "上櫃", "type": "股票", "industry": "半導體"},
+    {"code": "8069", "name": "元太", "market": "上櫃", "type": "股票", "industry": "光電"},
+    {"code": "4966", "name": "譜瑞-KY", "market": "上櫃", "type": "股票", "industry": "半導體"},
 ]
 
 
@@ -113,6 +142,7 @@ def _bonds() -> List[Dict[str, str]]:
 def get_all_products() -> List[Dict[str, str]]:
     items = []
     items.extend(SEED_PRODUCTS)
+    items.extend(FALLBACK_STOCKS)
     items.extend(_listed_stocks())
     items.extend(_tpex_stocks())
     items.extend(_etfs())
