@@ -172,8 +172,10 @@ def _roc_date(yyyymmdd: str) -> str:
 
 
 def _twse_daily_products() -> List[Dict[str, str]]:
-    for day in _recent_dates(12):
-        payload = _get_json(TWSE_DAY_ALL, {"response": "json", "date": day})
+    candidate_params = [{"response": "json"}]
+    candidate_params.extend({"response": "json", "date": day} for day in _recent_dates(12))
+    for params in candidate_params:
+        payload = _get_json(TWSE_DAY_ALL, params)
         rows = _rows(payload)
         if not rows:
             continue
@@ -193,29 +195,29 @@ def _twse_daily_products() -> List[Dict[str, str]]:
 
 
 def _tpex_daily_products() -> List[Dict[str, str]]:
+    candidate_params = [{"response": "json"}, {}]
     for day in _recent_dates(12):
-        params_list = [
+        candidate_params.extend([
             {"response": "json", "date": _roc_date(day)},
             {"response": "json", "date": day},
-            {"response": "json"},
-        ]
-        for params in params_list:
-            payload = _get_json(TPEX_DAILY, params)
-            rows = _rows(payload)
-            if not rows:
+        ])
+    for params in candidate_params:
+        payload = _get_json(TPEX_DAILY, params)
+        rows = _rows(payload)
+        if not rows:
+            continue
+        result = []
+        for row in rows:
+            try:
+                code = str(row[0]).strip()
+                name = str(row[1]).strip()
+                if code and name and code[0].isdigit():
+                    product_type = _infer_type(code, name)
+                    result.append({"code": code, "name": name, "market": "上櫃", "type": product_type, "industry": product_type})
+            except Exception:
                 continue
-            result = []
-            for row in rows:
-                try:
-                    code = str(row[0]).strip()
-                    name = str(row[1]).strip()
-                    if code and name and code[0].isdigit():
-                        product_type = _infer_type(code, name)
-                        result.append({"code": code, "name": name, "market": "上櫃", "type": product_type, "industry": product_type})
-                except Exception:
-                    continue
-            if result:
-                return result
+        if result:
+            return result
     return []
 
 
