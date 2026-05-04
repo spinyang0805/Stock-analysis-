@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const API = import.meta.env.VITE_API_BASE_URL || "https://stock-analysis-api-ihun.onrender.com";
+const API = "https://stock-analysis-api-ihun.onrender.com";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export default function SystemControlPanel() {
