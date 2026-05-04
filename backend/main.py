@@ -11,13 +11,14 @@ from fastapi.responses import JSONResponse
 from analysis_engine import build_rule_based_analysis, enrich_indicators
 from firebase import db
 from firebase_cache import (
+    audit_stock_daily_market,
     cleanup_invalid_stock_daily,
     get_cache_status,
     get_valid_stock_daily_series,
     get_latest_chip_daily,
 )
 from jobs import run_daily_update, run_on_demand_backfill, preload_hot_stocks
-from stock_list import search_products
+from stock_list import get_all_products, search_products
 from perspective_engine import generate_perspective_cards
 from signal_engine import generate_signals, generate_trade_plan, backtest_strategy
 
@@ -233,6 +234,60 @@ def enrich_analysis_payload(result, code, df, source, chip, backfill_started=Fal
     return result, data
 
 
+def product_universe(product_type: str = "股票", market: str = "all"):
+    items = []
+    for item in get_all_products():
+        if product_type != "all" and item.get("type") != product_type:
+            continue
+        if market != "all" and item.get("market") != market:
+            continue
+        code = normalize_stock(item.get("code"))
+        if not code:
+            continue
+        items.append({**item, "code": code})
+    seen = set()
+    result = []
+    for item in items:
+        if item["code"] in seen:
+            continue
+        seen.add(item["code"])
+        result.append(item)
+    return result
+
+
+def delete_doc_with_data_subcollection(doc_ref):
+    deleted_children = 0
+    for sub in doc_ref.collection("data").stream():
+        sub.reference.delete()
+        deleted_children += 1
+    doc_ref.delete()
+    return deleted_children
+
+
+def run_backfill_universe(products, months: int = 12):
+    result = {"status": "running", "months": months, "total": len(products), "processed": 0, "written_days": 0, "errors": [], "started_at": datetime.now().isoformat()}
+    if db is not None:
+        db.collection("job_logs").document("backfill_all_latest").set(result, merge=True)
+    for item in products:
+        code = item["code"]
+        try:
+            r = run_on_demand_backfill(code, months)
+            result["processed"] += 1
+            result["written_days"] += int(r.get("written_days", 0))
+            if r.get("errors"):
+                result["errors"].append({"stock_id": code, "errors": r.get("errors", [])[:3]})
+        except Exception as exc:
+            result["processed"] += 1
+            result["errors"].append({"stock_id": code, "error": str(exc)})
+        if db is not None and result["processed"] % 10 == 0:
+            db.collection("job_logs").document("backfill_all_latest").set({**result, "updated_at": datetime.now().isoformat()}, merge=True)
+    result["status"] = "done"
+    result["finished_at"] = datetime.now().isoformat()
+    if db is not None:
+        db.collection("job_logs").document("backfill_all_latest").set({**result, "updated_at": datetime.now().isoformat()}, merge=True)
+    return result
+
+
 @app.get("/")
 def root():
     return JSONResponse({"status": "ok", "service": "TW Stock Decision API"}, media_type="application/json; charset=utf-8")
@@ -241,6 +296,12 @@ def root():
 @app.get("/api/search")
 def search(q: str):
     return search_products(q)
+
+
+@app.get("/api/products")
+def products(product_type: str = "股票", market: str = "all", limit: int = 5000):
+    items = product_universe(product_type=product_type, market=market)[:limit]
+    return JSONResponse({"count": len(items), "items": items[:200], "note": "items response is capped at 200 preview rows"}, media_type="application/json; charset=utf-8")
 
 
 @app.get("/api/firebase/test")
@@ -253,6 +314,47 @@ def firebase_test():
         return JSONResponse({"status": "ok", "firebase_enabled": True, "write": "system_health/test", "data": payload}, media_type="application/json; charset=utf-8")
     except Exception as exc:
         return JSONResponse({"status": "failed", "firebase_enabled": False, "error": str(exc)}, media_type="application/json; charset=utf-8")
+
+
+@app.get("/api/firebase/audit_all")
+def firebase_audit_all(limit_stocks: int = 5000, limit_per_stock: int = 30):
+    return audit_stock_daily_market(limit_stocks=limit_stocks, limit_per_stock=limit_per_stock, delete_invalid=False)
+
+
+@app.get("/api/firebase/cleanup_all")
+def firebase_cleanup_all(limit_stocks: int = 5000, limit_per_stock: int = 260):
+    return audit_stock_daily_market(limit_stocks=limit_stocks, limit_per_stock=limit_per_stock, delete_invalid=True)
+
+
+@app.get("/api/firebase/reset_all")
+def firebase_reset_all(product_type: str = "股票", market: str = "all", offset: int = 0, limit: int = 500):
+    if db is None:
+        return JSONResponse({"status": "failed", "firebase_enabled": False, "message": "Firebase not initialized"}, media_type="application/json; charset=utf-8")
+    universe = product_universe(product_type=product_type, market=market)
+    batch = universe[offset:offset + limit]
+    deleted_stock_docs = 0
+    deleted_stock_data_docs = 0
+    deleted_analysis_cache = 0
+    for item in batch:
+        code = item["code"]
+        deleted_stock_data_docs += delete_doc_with_data_subcollection(db.collection("stock_daily").document(code))
+        deleted_stock_docs += 1
+        db.collection("analysis_cache").document(code).delete()
+        deleted_analysis_cache += 1
+    return JSONResponse({
+        "status": "ok",
+        "mode": "stock_universe_batch_reset",
+        "product_type": product_type,
+        "market": market,
+        "offset": offset,
+        "limit": limit,
+        "universe_count": len(universe),
+        "processed_count": len(batch),
+        "deleted_stock_docs": deleted_stock_docs,
+        "deleted_stock_data_docs": deleted_stock_data_docs,
+        "deleted_analysis_cache": deleted_analysis_cache,
+        "next_offset": offset + len(batch) if offset + len(batch) < len(universe) else None,
+    }, media_type="application/json; charset=utf-8")
 
 
 @app.get("/api/firebase/cleanup/{stock}")
@@ -274,6 +376,13 @@ def trigger_preload():
 def trigger_backfill(stock: str, months: int = 12):
     code = normalize_stock(stock)
     return start_thread(f"backfill-{code}", run_on_demand_backfill, code, months)
+
+
+@app.get("/api/job/backfill_all")
+def trigger_backfill_all(product_type: str = "股票", market: str = "上市", offset: int = 0, limit: int = 100, months: int = 12):
+    universe = product_universe(product_type=product_type, market=market)
+    batch = universe[offset:offset + limit]
+    return start_thread(f"backfill-all-{offset}-{offset + len(batch)}", run_backfill_universe, batch, months)
 
 
 @app.get("/api/cache/status/{stock}")
