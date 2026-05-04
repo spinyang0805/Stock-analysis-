@@ -18,12 +18,46 @@ def _is_number(value) -> bool:
         return False
 
 
+def _float(value):
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
 def is_valid_stock_payload(payload: Dict[str, Any]) -> bool:
     if not isinstance(payload, dict):
         return False
     if payload.get("preload") is True:
         return False
-    return all(_is_number(payload.get(k)) for k in ["open", "high", "low", "close"])
+    if not all(_is_number(payload.get(k)) for k in ["open", "high", "low", "close"]):
+        return False
+
+    open_price = _float(payload.get("open"))
+    high = _float(payload.get("high"))
+    low = _float(payload.get("low"))
+    close = _float(payload.get("close"))
+    volume = _float(payload.get("volume"))
+
+    if min(open_price, high, low, close) <= 0:
+        return False
+
+    # OHLC must be structurally valid. This filters wrong TWSE field parsing,
+    # e.g. close accidentally written as turnover/amount such as 44458732.
+    if high < max(open_price, close, low):
+        return False
+    if low > min(open_price, close, high):
+        return False
+
+    # Taiwan stock price sanity check. Keep it generous for ETFs/high-priced stocks,
+    # but reject amount/turnover numbers mistakenly parsed as prices.
+    if close > 10000 or open_price > 10000 or high > 10000 or low > 10000:
+        return False
+
+    if volume is not None and volume < 0:
+        return False
+
+    return True
 
 
 def save_stock_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
