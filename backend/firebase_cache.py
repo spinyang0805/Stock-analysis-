@@ -34,7 +34,14 @@ def save_stock_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
         print(f"skip invalid stock_daily: {stock_id} {date} {payload}")
         return False
     try:
-        db.collection("stock_daily").document(stock_id).collection("data").document(date).set({
+        parent_ref = db.collection("stock_daily").document(stock_id)
+        parent_ref.set({
+            "stock_id": stock_id,
+            "latest_date": date,
+            "latest": payload,
+            "updated_at": now_tw()
+        }, merge=True)
+        parent_ref.collection("data").document(date).set({
             "stock_id": stock_id,
             "date": date,
             "data": payload,
@@ -52,7 +59,14 @@ def save_chip_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
         print("Firebase not initialized")
         return False
     try:
-        db.collection("chip_data").document(stock_id).collection("data").document(date).set({
+        parent_ref = db.collection("chip_data").document(stock_id)
+        parent_ref.set({
+            "stock_id": stock_id,
+            "latest_date": date,
+            "latest": payload,
+            "updated_at": now_tw()
+        }, merge=True)
+        parent_ref.collection("data").document(date).set({
             "stock_id": stock_id,
             "date": date,
             "data": payload,
