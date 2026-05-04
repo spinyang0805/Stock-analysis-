@@ -2,6 +2,11 @@ from datetime import datetime
 from typing import Any, Dict, List
 import pytz
 
+try:
+    import auto_routes  # noqa: F401 - installs queue/screener routes during backend startup
+except Exception:
+    pass
+
 from firebase import db
 
 TW_TZ = pytz.timezone("Asia/Taipei")
