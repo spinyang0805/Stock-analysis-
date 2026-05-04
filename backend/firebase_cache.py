@@ -25,13 +25,13 @@ def _float(value):
         return None
 
 
-def is_valid_stock_payload(payload: Dict[str, Any]) -> bool:
+def explain_stock_payload_issue(payload: Dict[str, Any]) -> str:
     if not isinstance(payload, dict):
-        return False
+        return "payload_not_dict"
     if payload.get("preload") is True:
-        return False
+        return "preload_placeholder"
     if not all(_is_number(payload.get(k)) for k in ["open", "high", "low", "close"]):
-        return False
+        return "missing_or_non_numeric_ohlc"
 
     open_price = _float(payload.get("open"))
     high = _float(payload.get("high"))
@@ -40,24 +40,20 @@ def is_valid_stock_payload(payload: Dict[str, Any]) -> bool:
     volume = _float(payload.get("volume"))
 
     if min(open_price, high, low, close) <= 0:
-        return False
-
-    # OHLC must be structurally valid. This filters wrong TWSE field parsing,
-    # e.g. close accidentally written as turnover/amount such as 44458732.
+        return "non_positive_price"
     if high < max(open_price, close, low):
-        return False
+        return "invalid_ohlc_high"
     if low > min(open_price, close, high):
-        return False
-
-    # Taiwan stock price sanity check. Keep it generous for ETFs/high-priced stocks,
-    # but reject amount/turnover numbers mistakenly parsed as prices.
+        return "invalid_ohlc_low"
     if close > 10000 or open_price > 10000 or high > 10000 or low > 10000:
-        return False
-
+        return "price_too_large_probably_amount_field"
     if volume is not None and volume < 0:
-        return False
+        return "negative_volume"
+    return "valid"
 
-    return True
+
+def is_valid_stock_payload(payload: Dict[str, Any]) -> bool:
+    return explain_stock_payload_issue(payload) == "valid"
 
 
 def save_stock_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
@@ -197,15 +193,76 @@ def cleanup_invalid_stock_daily(stock_id: str, limit: int = 500) -> Dict[str, An
     deleted = 0
     kept = 0
     deleted_docs = []
+    invalid_reasons = {}
     for doc in docs:
         item = doc.to_dict()
-        if is_valid_stock_payload(item.get("data", {})):
+        reason = explain_stock_payload_issue(item.get("data", {}))
+        if reason == "valid":
             kept += 1
             continue
         doc.reference.delete()
         deleted += 1
         deleted_docs.append(doc.id)
-    return {"firebase_enabled": True, "stock_id": stock_id, "checked": len(docs), "kept": kept, "deleted": deleted, "deleted_docs": deleted_docs[:50]}
+        invalid_reasons[reason] = invalid_reasons.get(reason, 0) + 1
+    return {"firebase_enabled": True, "stock_id": stock_id, "checked": len(docs), "kept": kept, "deleted": deleted, "invalid_reasons": invalid_reasons, "deleted_docs": deleted_docs[:50]}
+
+
+def audit_stock_daily_market(limit_stocks: int = 3000, limit_per_stock: int = 30, delete_invalid: bool = False) -> Dict[str, Any]:
+    if db is None:
+        return {"firebase_enabled": False, "message": "Firebase not initialized"}
+
+    checked_stocks = 0
+    checked_docs = 0
+    valid_docs = 0
+    invalid_docs = 0
+    deleted_docs = 0
+    invalid_stocks = []
+    reason_counts = {}
+
+    for stock_doc in db.collection("stock_daily").limit(limit_stocks).stream():
+        stock_id = stock_doc.id
+        checked_stocks += 1
+        stock_invalid = []
+        docs = stock_doc.reference.collection("data").order_by("date", direction="DESCENDING").limit(limit_per_stock).stream()
+        for daily_doc in docs:
+            item = daily_doc.to_dict() or {}
+            payload = item.get("data", {})
+            reason = explain_stock_payload_issue(payload)
+            checked_docs += 1
+            if reason == "valid":
+                valid_docs += 1
+                continue
+            invalid_docs += 1
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+            sample = {
+                "date": item.get("date") or daily_doc.id,
+                "reason": reason,
+                "open": payload.get("open"),
+                "high": payload.get("high"),
+                "low": payload.get("low"),
+                "close": payload.get("close"),
+                "volume": payload.get("volume"),
+                "source": payload.get("source"),
+            }
+            stock_invalid.append(sample)
+            if delete_invalid:
+                daily_doc.reference.delete()
+                deleted_docs += 1
+        if stock_invalid:
+            invalid_stocks.append({"stock_id": stock_id, "invalid_count": len(stock_invalid), "samples": stock_invalid[:3]})
+
+    return {
+        "firebase_enabled": True,
+        "mode": "cleanup" if delete_invalid else "audit_only",
+        "checked_stocks": checked_stocks,
+        "checked_docs": checked_docs,
+        "valid_docs": valid_docs,
+        "invalid_docs": invalid_docs,
+        "deleted_docs": deleted_docs,
+        "invalid_stock_count": len(invalid_stocks),
+        "reason_counts": reason_counts,
+        "invalid_stocks": invalid_stocks[:100],
+    }
 
 
 def get_cache_status(stock_id: str):
