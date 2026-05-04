@@ -126,9 +126,10 @@ def latest_twse_daily_rows(max_lookback_days: int = 10):
         if err:
             errors.append(f"TWSE {d}: {err}")
         rows = _rows(payload)
+        fields = _fields(payload)
         if rows:
-            return d, rows, errors
-    return today_str(), [], errors
+            return d, rows, fields, errors
+    return today_str(), [], [], errors
 
 
 def latest_tpex_daily_rows(max_lookback_days: int = 10):
@@ -143,9 +144,10 @@ def latest_tpex_daily_rows(max_lookback_days: int = 10):
             if err:
                 errors.append(f"TPEx {d}: {err}")
             rows = _rows(payload)
+            fields = _fields(payload)
             if rows:
-                return d, rows, errors
-    return today_str(), [], errors
+                return d, rows, fields, errors
+    return today_str(), [], [], errors
 
 
 def fetch_twse_stock_month(stock_id: str, year: int, month: int):
@@ -274,53 +276,79 @@ def write_margin_chips(start_date: str, result: dict):
     return 0
 
 
+def _parse_twse_all_row(row, fields):
+    code_i = _idx(fields, "證券", "代號", default=0)
+    name_i = _idx(fields, "證券", "名稱", default=1)
+    volume_i = _idx(fields, "成交", "股數", default=2)
+    turnover_i = _idx(fields, "成交", "金額", default=3)
+    open_i = _idx(fields, "開盤", default=4)
+    high_i = _idx(fields, "最高", default=5)
+    low_i = _idx(fields, "最低", default=6)
+    close_i = _idx(fields, "收盤", default=7)
+    change_i = _idx(fields, "漲跌", "價差", default=8)
+    trades_i = _idx(fields, "成交", "筆數", default=9)
+    return str(_row_value(row, code_i)).strip(), {
+        "market": "TWSE",
+        "name": _row_value(row, name_i),
+        "volume": safe_float(_row_value(row, volume_i)),
+        "turnover": safe_float(_row_value(row, turnover_i)),
+        "open": safe_float(_row_value(row, open_i)),
+        "high": safe_float(_row_value(row, high_i)),
+        "low": safe_float(_row_value(row, low_i)),
+        "close": safe_float(_row_value(row, close_i)),
+        "change": safe_float(_row_value(row, change_i)),
+        "trades": safe_float(_row_value(row, trades_i)),
+        "source": "TWSE STOCK_DAY_ALL",
+    }
+
+
+def _parse_tpex_row(row, fields):
+    code_i = _idx(fields, "代號", default=0)
+    name_i = _idx(fields, "名稱", default=1)
+    close_i = _idx(fields, "收盤", default=2)
+    change_i = _idx(fields, "漲跌", default=3)
+    open_i = _idx(fields, "開盤", default=4)
+    high_i = _idx(fields, "最高", default=5)
+    low_i = _idx(fields, "最低", default=6)
+    volume_i = _idx(fields, "成交", "股數", default=8)
+    return str(_row_value(row, code_i)).strip(), {
+        "market": "TPEx",
+        "name": _row_value(row, name_i),
+        "close": safe_float(_row_value(row, close_i)),
+        "change": safe_float(_row_value(row, change_i)),
+        "open": safe_float(_row_value(row, open_i)),
+        "high": safe_float(_row_value(row, high_i)),
+        "low": safe_float(_row_value(row, low_i)),
+        "volume": safe_float(_row_value(row, volume_i)),
+        "source": "TPEx dailyCloseQuotes",
+    }
+
+
 def run_daily_update():
     requested_date = today_str()
     result = {"requested_date": requested_date, "twse_date": None, "tpex_date": None, "t86_date": None, "margin_date": None, "stocks": 0, "chips": 0, "margin_rows": 0, "errors": []}
 
-    twse_date, twse_rows, twse_errors = latest_twse_daily_rows()
+    twse_date, twse_rows, twse_fields, twse_errors = latest_twse_daily_rows()
     result["twse_date"] = twse_date
     result["errors"].extend(twse_errors[-5:])
     for row in twse_rows:
         try:
-            stock_id = row[0]
-            payload = {
-                "market": "TWSE",
-                "name": row[1] if len(row) > 1 else None,
-                "close": safe_float(row[2]),
-                "change": safe_float(row[3]),
-                "open": safe_float(row[4]) if len(row) > 4 else None,
-                "high": safe_float(row[5]) if len(row) > 5 else None,
-                "low": safe_float(row[6]) if len(row) > 6 else None,
-                "volume": safe_float(row[8]) if len(row) > 8 else None,
-                "source": "TWSE STOCK_DAY_ALL",
-                "data_date": twse_date,
-            }
-            if save_stock_daily(stock_id, twse_date, payload):
+            stock_id, payload = _parse_twse_all_row(row, twse_fields)
+            payload["data_date"] = twse_date
+            if stock_id and save_stock_daily(stock_id, twse_date, payload):
                 result["stocks"] += 1
         except Exception as exc:
             result["errors"].append(f"TWSE daily row error: {exc}")
 
-    tpex_date, tpex_rows, tpex_errors = latest_tpex_daily_rows()
+    tpex_date, tpex_rows, tpex_fields, tpex_errors = latest_tpex_daily_rows()
     result["tpex_date"] = tpex_date
     result["errors"].extend(tpex_errors[-5:])
     for row in tpex_rows:
         try:
-            stock_id = str(row[0]).strip()
+            stock_id, payload = _parse_tpex_row(row, tpex_fields)
             if not stock_id or not stock_id[:1].isdigit():
                 continue
-            payload = {
-                "market": "TPEx",
-                "name": row[1] if len(row) > 1 else None,
-                "close": safe_float(row[2]) if len(row) > 2 else None,
-                "change": safe_float(row[3]) if len(row) > 3 else None,
-                "open": safe_float(row[4]) if len(row) > 4 else None,
-                "high": safe_float(row[5]) if len(row) > 5 else None,
-                "low": safe_float(row[6]) if len(row) > 6 else None,
-                "volume": safe_float(row[8]) if len(row) > 8 else None,
-                "source": "TPEx dailyCloseQuotes",
-                "data_date": tpex_date,
-            }
+            payload["data_date"] = tpex_date
             if save_stock_daily(stock_id, tpex_date, payload):
                 result["stocks"] += 1
         except Exception as exc:
