@@ -26,11 +26,13 @@ def _clean_text(value):
 
 def _valid_code(code):
     code = str(code or "").strip().upper()
+    if code.startswith("004"):
+        return False
     if re.fullmatch(r"[1-9][0-9]{3}", code):
         return True
-    if re.fullmatch(r"00[0-9]{2,4}", code):
+    if re.fullmatch(r"00[5-9][0-9]{1,3}", code):
         return True
-    if re.fullmatch(r"00[0-9]{3,4}B", code):
+    if re.fullmatch(r"00[5-9][0-9]{2,3}[AB]", code):
         return True
     return False
 
@@ -40,6 +42,8 @@ def _infer_type(code, name):
     text = f"{code} {name}"
     if code.endswith("B") or "債" in text:
         return "債券ETF"
+    if code.endswith("A") or "主動" in text:
+        return "ETF"
     if code.startswith("00"):
         return "ETF"
     return "股票"
@@ -64,7 +68,7 @@ def _pick(row, keys, default=""):
 
 def _get_json(url):
     try:
-        res = requests.get(url, headers=HEADERS, timeout=8)
+        res = requests.get(url, headers=HEADERS, timeout=12)
         res.encoding = "utf-8-sig"
         res.raise_for_status()
         return res.json()
@@ -140,6 +144,8 @@ def _snapshot_products(db, limit=5000):
         {"code":"2408","name":"南亞科","market":"上市","type":"股票","industry":"半導體"},
         {"code":"0050","name":"元大台灣50","market":"上市","type":"ETF","industry":"ETF"},
         {"code":"0056","name":"元大高股息","market":"上市","type":"ETF","industry":"ETF"},
+        {"code":"00679B","name":"元大美債20年","market":"上市","type":"債券ETF","industry":"債券ETF"},
+        {"code":"00981A","name":"主動式ETF示例","market":"上市","type":"ETF","industry":"ETF"},
     ]
     return _dedupe(seed)
 
@@ -200,6 +206,19 @@ def _install(app, db):
     global _INSTALLED
     if _INSTALLED:
         return
+
+    @app.get("/api/init_universe")
+    def init_universe(limit: int = 5000):
+        if db is None:
+            return {"status":"failed","message":"Firebase not initialized"}
+        products = _external_products()
+        if not products:
+            products = _snapshot_products(db, limit=limit)
+        written = 0
+        for p in products[:limit]:
+            db.collection("product_universe").document(p["code"]).set({**p, "updated_at": datetime.now().isoformat()}, merge=True)
+            written += 1
+        return {"status":"ok","count":len(products),"written":written,"items":products[:50],"source":"external_products_or_snapshot"}
 
     @app.get("/api/products_fast")
     def products_fast(limit: int = 5000):
