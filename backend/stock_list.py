@@ -1,22 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Dict, List
 import requests
 
 HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json,text/plain,*/*"}
-TIMEOUT = 18
+TIMEOUT = 4
 
 TWSE_LISTED = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
 TPEX_LISTED = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TWSE_ETF = "https://openapi.twse.com.tw/v1/opendata/t187ap03_ETF"
-TWSE_DAY_ALL = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY_ALL"
-TPEX_DAILY = "https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyCloseQuotes"
-TWSE_BOND_CANDIDATES = [
-    "https://openapi.twse.com.tw/v1/opendata/t187ap03_B",
-    "https://openapi.twse.com.tw/v1/opendata/t187ap03_C",
-]
 
 SEED_PRODUCTS = [
     {"code": "0050", "name": "元大台灣50", "market": "上市", "type": "ETF", "industry": "ETF"},
@@ -58,9 +51,9 @@ FALLBACK_STOCKS = [
 ]
 
 
-def _get_json(url: str, params: Dict | None = None):
+def _get_json(url: str):
     try:
-        response = requests.get(url, params=params, headers=HEADERS, timeout=TIMEOUT)
+        response = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
         response.raise_for_status()
         return response.json()
     except Exception:
@@ -107,6 +100,26 @@ def _infer_type(code: str, name: str) -> str:
     return "股票"
 
 
+def _firebase_products(limit: int = 5000) -> List[Dict[str, str]]:
+    try:
+        from firebase import db
+        if db is None:
+            return []
+        items = []
+        for doc in db.collection("stock_daily").limit(limit).stream():
+            data = doc.to_dict() or {}
+            latest = data.get("latest") or {}
+            code = data.get("stock_id") or doc.id
+            name = latest.get("name") or code
+            market_raw = latest.get("market") or data.get("market") or "--"
+            market = "上櫃" if str(market_raw).upper() == "TPEX" else "上市" if str(market_raw).upper() == "TWSE" else market_raw
+            product_type = latest.get("product_type") or _infer_type(code, name)
+            items.append({"code": str(code), "name": str(name), "market": market, "type": product_type, "industry": product_type})
+        return items
+    except Exception:
+        return []
+
+
 def _listed_stocks() -> List[Dict[str, str]]:
     items = []
     for row in _get_json(TWSE_LISTED):
@@ -140,96 +153,18 @@ def _etfs() -> List[Dict[str, str]]:
     return items
 
 
-def _bonds() -> List[Dict[str, str]]:
-    items = []
-    for url in TWSE_BOND_CANDIDATES:
-        for row in _get_json(url):
-            code = _pick(row, ["證券代號", "債券代號", "Code", "代號"])
-            name = _pick(row, ["證券名稱", "債券名稱", "Name", "名稱"])
-            if code and name:
-                items.append({"code": code, "name": name, "market": "上市", "type": _infer_type(code, name), "industry": "債券"})
-    return items
-
-
-def _rows(payload):
-    if isinstance(payload, dict):
-        if payload.get("data"):
-            return payload.get("data") or []
-        if isinstance(payload.get("tables"), list) and payload["tables"]:
-            return payload["tables"][0].get("data", []) or []
-    return []
-
-
-def _recent_dates(days: int = 10):
-    base = datetime.now()
-    for i in range(days):
-        yield (base - timedelta(days=i)).strftime("%Y%m%d")
-
-
-def _roc_date(yyyymmdd: str) -> str:
-    dt = datetime.strptime(yyyymmdd, "%Y%m%d")
-    return f"{dt.year - 1911}/{dt.month:02d}/{dt.day:02d}"
-
-
-def _twse_daily_products() -> List[Dict[str, str]]:
-    candidate_params = [{"response": "json"}]
-    candidate_params.extend({"response": "json", "date": day} for day in _recent_dates(12))
-    for params in candidate_params:
-        payload = _get_json(TWSE_DAY_ALL, params)
-        rows = _rows(payload)
-        if not rows:
-            continue
-        result = []
-        for row in rows:
-            try:
-                code = str(row[0]).strip()
-                name = str(row[1]).strip()
-                if code and name:
-                    product_type = _infer_type(code, name)
-                    result.append({"code": code, "name": name, "market": "上市", "type": product_type, "industry": product_type})
-            except Exception:
-                continue
-        if result:
-            return result
-    return []
-
-
-def _tpex_daily_products() -> List[Dict[str, str]]:
-    candidate_params = [{"response": "json"}, {}]
-    for day in _recent_dates(12):
-        candidate_params.extend([
-            {"response": "json", "date": _roc_date(day)},
-            {"response": "json", "date": day},
-        ])
-    for params in candidate_params:
-        payload = _get_json(TPEX_DAILY, params)
-        rows = _rows(payload)
-        if not rows:
-            continue
-        result = []
-        for row in rows:
-            try:
-                code = str(row[0]).strip()
-                name = str(row[1]).strip()
-                if code and name and code[0].isdigit():
-                    product_type = _infer_type(code, name)
-                    result.append({"code": code, "name": name, "market": "上櫃", "type": product_type, "industry": product_type})
-            except Exception:
-                continue
-        if result:
-            return result
-    return []
-
-
 @lru_cache(maxsize=1)
 def get_all_products() -> List[Dict[str, str]]:
+    # Fast path: existing Firebase documents are the most important list for reset/cleanup.
+    firebase_items = _firebase_products()
+    if firebase_items:
+        return _dedupe(firebase_items + SEED_PRODUCTS + FALLBACK_STOCKS)
+
+    # External product lists are best-effort only and must not block the UI for minutes.
     items = []
-    items.extend(_twse_daily_products())
-    items.extend(_tpex_daily_products())
     items.extend(_listed_stocks())
     items.extend(_tpex_stocks())
     items.extend(_etfs())
-    items.extend(_bonds())
     items.extend(SEED_PRODUCTS)
     items.extend(FALLBACK_STOCKS)
     return _dedupe(items)
