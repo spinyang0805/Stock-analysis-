@@ -6,6 +6,7 @@ const API = import.meta.env.VITE_API_BASE_URL || "https://stock-analysis-api-ihu
 
 const STOCKS = [
   { code: "2330", name: "台積電", market: "上市", industry: "半導體" },
+  { code: "2408", name: "南亞科", market: "上市", industry: "半導體" },
   { code: "3702", name: "大聯大", market: "上市", industry: "電子通路" },
   { code: "2317", name: "鴻海", market: "上市", industry: "其他電子" },
   { code: "2454", name: "聯發科", market: "上市", industry: "半導體" },
@@ -171,7 +172,7 @@ export default function App() {
           s.ma5?.setData(showMA ? val(k, "ma5") : []); s.ma20?.setData(showMA ? val(k, "ma20") : []); s.ma60?.setData(showMA ? val(k, "ma60") : []);
           s.bbU?.setData(showBB ? val(k, "bb_upper") : []); s.bbL?.setData(showBB ? val(k, "bb_lower") : []);
           chartRef.current.forEach(c => c.timeScale().fitContent());
-          setKlinePayload(kp); setAnalysis(ap || localAnalysis(code, k)); setDashboard(dp); setStatus(kp?.status === "loading" ? "資料導入中，請稍後重新查詢" : "已連接 API，資料已載入");
+          setKlinePayload(kp); setAnalysis(ap || localAnalysis(code, k)); setDashboard(dp); setStatus(kp?.status === "loading" ? "資料導入中，請稍後重新查詢" : k.length === 0 ? "目前沒有K線資料，請先回補此股票" : "已連接 API，資料已載入");
         }
       } catch (e) { if (!dead) setStatus(`API 連線失敗：${e.message}`); }
     }
@@ -200,7 +201,7 @@ export default function App() {
       <div style={{ color: pc }}>{fmt(meta.change)} ({fmt(meta.change_pct)}%)　開 {fmt(meta.open)}　高 {fmt(meta.high)}　低 {fmt(meta.low)}　收 {fmt(meta.close)}</div>
       <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <div style={{ position: "relative" }}>
-          <input value={input} onFocus={() => setOpenSuggest(true)} onChange={e => { setInput(e.target.value); setOpenSuggest(true); }} onKeyDown={e => e.key === "Enter" && submit()} placeholder="輸入公司或股號，例如 大聯 / 3702" style={{ padding: "12px 14px", borderRadius: 10, border: "1px solid #334155", background: "#020617", color: "white", minWidth: 320 }} />
+          <input value={input} onFocus={() => setOpenSuggest(true)} onChange={e => { setInput(e.target.value); setOpenSuggest(true); }} onKeyDown={e => e.key === "Enter" && submit()} placeholder="輸入公司或股號，例如 南亞科 / 2408" style={{ padding: "12px 14px", borderRadius: 10, border: "1px solid #334155", background: "#020617", color: "white", minWidth: 320 }} />
           {openSuggest && suggestions.length > 0 && <div style={{ position: "absolute", top: 48, left: 0, right: 0, background: "#0f172a", border: "1px solid #334155", borderRadius: 12, zIndex: 10, overflow: "hidden" }}>{suggestions.map(x => <div key={x.code} onMouseDown={() => choose(x)} style={{ padding: "10px 12px", cursor: "pointer", borderBottom: "1px solid rgba(148,163,184,.15)" }}><b style={{ color: "#facc15" }}>{x.code}</b> {x.name}<span style={{ color: "#94a3b8", marginLeft: 8 }}>{x.market}・{x.industry}</span></div>)}</div>}
         </div>
         <button onClick={submit} style={{ padding: "12px 18px", borderRadius: 10, border: 0, background: "#2563eb", color: "white", fontWeight: 700 }}>查詢分析</button>
