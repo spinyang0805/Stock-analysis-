@@ -32,21 +32,22 @@ export default function SystemControlPanel() {
     }
   }
 
-  async function call(path, label) {
+  async function call(path, label, timeoutMs = 25000) {
     addLog(`開始：${label}`);
     try {
-      const data = await api(path);
+      const data = await api(path, timeoutMs);
       addLog(`完成：${label}`);
       return data;
     } catch (e) {
-      setJob({ error: e.message });
-      addLog(`失敗：${label} - ${e.message}`);
+      const message = e.name === "AbortError" ? "讀取逾時，稍後自動重試" : e.message;
+      setJob({ error: message });
+      addLog(`失敗：${label} - ${message}`);
       return null;
     }
   }
 
   async function getProductTotal() {
-    const productResult = await call(`/api/products?${query}&limit=5000`, "讀取全部商品清單");
+    const productResult = await call(`/api/products?${query}&limit=5000`, "讀取全部商品清單", 120000);
     return Number(productResult?.count || 0);
   }
 
