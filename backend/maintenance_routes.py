@@ -12,6 +12,21 @@ TWSE_LISTED = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
 TPEX_LISTED = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TWSE_ETF = "https://openapi.twse.com.tw/v1/opendata/t187ap03_ETF"
 
+NAME_FIX = {
+    "0050": "元大台灣50",
+    "0056": "元大高股息",
+    "00679B": "元大美債20年",
+    "00878": "國泰永續高股息",
+    "00919": "群益台灣精選高息",
+    "00981A": "主動式ETF",
+    "2330": "台積電",
+    "2408": "南亞科",
+    "2317": "鴻海",
+    "2454": "聯發科",
+    "2308": "台達電",
+    "2382": "廣達",
+}
+
 
 def _main():
     return sys.modules.get("main") or sys.modules.get("__main__")
@@ -19,9 +34,17 @@ def _main():
 
 def _clean_text(value):
     text = str(value or "").strip()
-    if "�" in text or "銝" in text:
+    if not text:
+        return ""
+    if "�" in text or "銝" in text or "�" in text:
         return ""
     return text
+
+
+def _safe_name(code, name):
+    code = str(code or "").strip().upper()
+    clean = _clean_text(name)
+    return NAME_FIX.get(code) or clean or code
 
 
 def _valid_code(code):
@@ -80,22 +103,22 @@ def _external_products():
     items = []
     for row in _get_json(TWSE_LISTED):
         code = _pick(row, ["公司代號", "Code", "SecuritiesCompanyCode"])
-        name = _pick(row, ["公司名稱", "CompanyName", "名稱"])
+        name = _safe_name(code, _pick(row, ["公司名稱", "CompanyName", "名稱"]))
         industry = _pick(row, ["產業別", "Industry", "產業類別"], "股票")
         if _valid_code(code):
-            items.append({"code": code, "name": name or code, "market": "上市", "type": _infer_type(code, name), "industry": industry or "股票"})
+            items.append({"code": code, "name": name, "market": "上市", "type": _infer_type(code, name), "industry": industry or "股票"})
     for row in _get_json(TPEX_LISTED):
         code = _pick(row, ["SecuritiesCompanyCode", "公司代號", "Code"])
-        name = _pick(row, ["CompanyName", "公司名稱", "名稱"])
+        name = _safe_name(code, _pick(row, ["CompanyName", "公司名稱", "名稱"]))
         industry = _pick(row, ["Industry", "產業別", "產業類別"], "股票")
         if _valid_code(code):
-            items.append({"code": code, "name": name or code, "market": "上櫃", "type": _infer_type(code, name), "industry": industry or "股票"})
+            items.append({"code": code, "name": name, "market": "上櫃", "type": _infer_type(code, name), "industry": industry or "股票"})
     for row in _get_json(TWSE_ETF):
         code = _pick(row, ["證券代號", "基金代號", "Code", "代號"])
-        name = _pick(row, ["證券名稱", "基金名稱", "Name", "名稱"])
+        name = _safe_name(code, _pick(row, ["證券名稱", "基金名稱", "Name", "名稱"]))
         if _valid_code(code):
             typ = _infer_type(code, name)
-            items.append({"code": code, "name": name or code, "market": "上市", "type": typ, "industry": typ})
+            items.append({"code": code, "name": name, "market": "上市", "type": typ, "industry": typ})
     return _dedupe(items)
 
 
@@ -107,7 +130,7 @@ def _dedupe(items):
         if not _valid_code(code) or code in seen:
             continue
         seen.add(code)
-        name = _clean_text(x.get("name")) or code
+        name = _safe_name(code, x.get("name"))
         market = _norm_market(x.get("market"))
         typ = x.get("type") or _infer_type(code, name)
         out.append({"code": code, "name": name, "market": market, "type": typ, "industry": x.get("industry") or typ})
@@ -146,7 +169,7 @@ def _snapshot_products(db, limit=5000):
                     code = str(d.get("code") or d.get("stock_id") or doc.id).strip().upper()
                     if not _valid_code(code):
                         continue
-                    name = _clean_text(d.get("name") or latest.get("name")) or code
+                    name = _safe_name(code, d.get("name") or latest.get("name"))
                     market = _norm_market(d.get("market") or latest.get("market"))
                     typ = d.get("type") or latest.get("product_type") or _infer_type(code, name)
                     industry = d.get("industry") or typ
