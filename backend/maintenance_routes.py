@@ -114,40 +114,50 @@ def _dedupe(items):
     return out
 
 
+def _seed_products():
+    return _dedupe([
+        {"code":"2330","name":"台積電","market":"上市","type":"股票","industry":"半導體"},
+        {"code":"2408","name":"南亞科","market":"上市","type":"股票","industry":"半導體"},
+        {"code":"2317","name":"鴻海","market":"上市","type":"股票","industry":"其他電子"},
+        {"code":"2454","name":"聯發科","market":"上市","type":"股票","industry":"半導體"},
+        {"code":"2308","name":"台達電","market":"上市","type":"股票","industry":"電子零組件"},
+        {"code":"2382","name":"廣達","market":"上市","type":"股票","industry":"電腦及週邊"},
+        {"code":"0050","name":"元大台灣50","market":"上市","type":"ETF","industry":"ETF"},
+        {"code":"0056","name":"元大高股息","market":"上市","type":"ETF","industry":"ETF"},
+        {"code":"00878","name":"國泰永續高股息","market":"上市","type":"ETF","industry":"ETF"},
+        {"code":"00919","name":"群益台灣精選高息","market":"上市","type":"ETF","industry":"ETF"},
+        {"code":"00679B","name":"元大美債20年","market":"上市","type":"債券ETF","industry":"債券ETF"},
+        {"code":"00981A","name":"主動式ETF","market":"上市","type":"ETF","industry":"ETF"},
+    ])
+
+
 def _snapshot_products(db, limit=5000):
     items = _external_products()
     if len(items) >= 100:
         return items[:limit]
 
-    for collection in ["product_universe", "stock_daily"]:
-        items = []
-        try:
-            for doc in db.collection(collection).limit(limit).stream():
-                d = doc.to_dict() or {}
-                latest = d.get("latest") or {}
-                code = str(d.get("code") or d.get("stock_id") or doc.id).strip().upper()
-                if not _valid_code(code):
-                    continue
-                name = _clean_text(d.get("name") or latest.get("name")) or code
-                market = _norm_market(d.get("market") or latest.get("market"))
-                typ = d.get("type") or latest.get("product_type") or _infer_type(code, name)
-                industry = d.get("industry") or typ
-                items.append({"code": code, "name": name, "market": market, "type": typ, "industry": industry})
-        except Exception:
-            pass
-        items = _dedupe(items)
-        if items:
-            return items[:limit]
+    if db is not None:
+        for collection in ["product_universe", "stock_daily"]:
+            items = []
+            try:
+                for doc in db.collection(collection).limit(limit).stream():
+                    d = doc.to_dict() or {}
+                    latest = d.get("latest") or {}
+                    code = str(d.get("code") or d.get("stock_id") or doc.id).strip().upper()
+                    if not _valid_code(code):
+                        continue
+                    name = _clean_text(d.get("name") or latest.get("name")) or code
+                    market = _norm_market(d.get("market") or latest.get("market"))
+                    typ = d.get("type") or latest.get("product_type") or _infer_type(code, name)
+                    industry = d.get("industry") or typ
+                    items.append({"code": code, "name": name, "market": market, "type": typ, "industry": industry})
+            except Exception:
+                pass
+            items = _dedupe(items)
+            if items:
+                return items[:limit]
 
-    seed = [
-        {"code":"2330","name":"台積電","market":"上市","type":"股票","industry":"半導體"},
-        {"code":"2408","name":"南亞科","market":"上市","type":"股票","industry":"半導體"},
-        {"code":"0050","name":"元大台灣50","market":"上市","type":"ETF","industry":"ETF"},
-        {"code":"0056","name":"元大高股息","market":"上市","type":"ETF","industry":"ETF"},
-        {"code":"00679B","name":"元大美債20年","market":"上市","type":"債券ETF","industry":"債券ETF"},
-        {"code":"00981A","name":"主動式ETF示例","market":"上市","type":"ETF","industry":"ETF"},
-    ]
-    return _dedupe(seed)
+    return _seed_products()
 
 
 def _delete_doc_data(doc_ref):
@@ -209,21 +219,43 @@ def _install(app, db):
 
     @app.get("/api/init_universe")
     def init_universe(limit: int = 5000):
-        if db is None:
-            return {"status":"failed","message":"Firebase not initialized"}
-        products = _external_products()
-        if not products:
-            products = _snapshot_products(db, limit=limit)
-        written = 0
-        for p in products[:limit]:
-            db.collection("product_universe").document(p["code"]).set({**p, "updated_at": datetime.now().isoformat()}, merge=True)
-            written += 1
-        return {"status":"ok","count":len(products),"written":written,"items":products[:50],"source":"external_products_or_snapshot"}
+        try:
+            if db is None:
+                return {"status":"failed","message":"Firebase not initialized"}
+            errors = []
+            products = []
+            try:
+                products = _external_products()
+            except Exception as exc:
+                errors.append({"stage":"external_products","error":str(exc)})
+            source = "external_products"
+            if not products:
+                try:
+                    products = _snapshot_products(db, limit=limit)
+                    source = "snapshot_or_seed"
+                except Exception as exc:
+                    errors.append({"stage":"snapshot_products","error":str(exc)})
+                    products = _seed_products()
+                    source = "seed"
+            written = 0
+            write_errors = []
+            for p in products[:limit]:
+                try:
+                    db.collection("product_universe").document(str(p["code"])).set({**p, "updated_at": datetime.now().isoformat()}, merge=True)
+                    written += 1
+                except Exception as exc:
+                    write_errors.append({"code": p.get("code"), "error": str(exc)})
+            return {"status":"ok","count":len(products),"written":written,"write_error_count":len(write_errors),"errors":errors,"write_errors":write_errors[:20],"items":products[:50],"source":source}
+        except Exception as exc:
+            return {"status":"failed","error":str(exc),"source":"init_universe_outer_exception"}
 
     @app.get("/api/products_fast")
     def products_fast(limit: int = 5000):
-        items = _snapshot_products(db, limit=limit)
-        return {"count": len(items), "items": items[:200], "source": "external_clean_universe_or_snapshot"}
+        try:
+            items = _snapshot_products(db, limit=limit)
+            return {"count": len(items), "items": items[:200], "source": "external_clean_universe_or_snapshot"}
+        except Exception as exc:
+            return {"count": 0, "items": [], "error": str(exc)}
 
     @app.get("/api/job/rebuild_safe")
     def rebuild_safe(months: int = 12, batch_delay: int = 2, limit: int = 5000):
