@@ -169,34 +169,6 @@ def _delete_doc_data(doc_ref):
     return count
 
 
-def _write_universe_job(job_id, limit):
-    m = _main()
-    db = m.db
-    ref = db.collection("job_queue").document(job_id)
-    try:
-        products = _external_products()
-        source = "external_products"
-        if not products:
-            products = _snapshot_products(db, limit=limit)
-            source = "snapshot_or_seed"
-        total = len(products[:limit])
-        ref.set({"job_id": job_id, "status": "running", "phase": "init_universe", "source": source, "total": total, "progress": 0, "updated_at": datetime.now().isoformat()}, merge=True)
-        written = 0
-        errors = []
-        for idx, p in enumerate(products[:limit], start=1):
-            try:
-                db.collection("product_universe").document(str(p["code"])).set({**p, "updated_at": datetime.now().isoformat()}, merge=True)
-                written += 1
-            except Exception as exc:
-                errors.append({"code": p.get("code"), "error": str(exc)})
-            if idx % 20 == 0 or idx == total:
-                ref.set({"status":"running","phase":"init_universe","progress":idx,"total":total,"written":written,"error_count":len(errors),"recent_errors":errors[-20:],"updated_at":datetime.now().isoformat()}, merge=True)
-                time.sleep(0.2)
-        ref.set({"status":"done","phase":"init_universe_done","progress":total,"total":total,"written":written,"error_count":len(errors),"recent_errors":errors[-50:],"finished_at":datetime.now().isoformat()}, merge=True)
-    except Exception as exc:
-        ref.set({"status":"failed","phase":"init_universe_failed","error":str(exc),"updated_at":datetime.now().isoformat()}, merge=True)
-
-
 def _run_rebuild(job_id, months, batch_delay, limit):
     m = _main()
     db = m.db
@@ -237,12 +209,25 @@ def _install(app, db):
 
     @app.get("/api/init_universe")
     def init_universe(limit: int = 5000):
+        items = _snapshot_products(db, limit=limit)
+        return {"status":"ready_for_batch","count":len(items),"message":"Use /api/init_universe_batch?offset=0&limit=50 and repeat until next_offset is null"}
+
+    @app.get("/api/init_universe_batch")
+    def init_universe_batch(offset: int = 0, limit: int = 50):
         if db is None:
             return {"status":"failed","message":"Firebase not initialized"}
-        job_id = f"init_universe_{int(datetime.now().timestamp())}"
-        db.collection("job_queue").document(job_id).set({"job_id":job_id,"status":"pending","phase":"created","created_at":datetime.now().isoformat()}, merge=True)
-        threading.Thread(target=_write_universe_job, args=(job_id, limit), daemon=True).start()
-        return {"status":"started","job_id":job_id,"message":"init_universe running in background"}
+        items = _snapshot_products(db, limit=5000)
+        batch = items[offset:offset + limit]
+        written = 0
+        errors = []
+        for p in batch:
+            try:
+                db.collection("product_universe").document(str(p["code"])).set({**p, "updated_at": datetime.now().isoformat()}, merge=True)
+                written += 1
+            except Exception as exc:
+                errors.append({"code":p.get("code"),"error":str(exc)})
+        next_offset = offset + len(batch) if offset + len(batch) < len(items) else None
+        return {"status":"ok","count":len(items),"offset":offset,"limit":limit,"processed":len(batch),"written":written,"error_count":len(errors),"errors":errors[:10],"next_offset":next_offset}
 
     @app.get("/api/products_fast")
     def products_fast(limit: int = 5000):
