@@ -12,20 +12,7 @@ TWSE_LISTED = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
 TPEX_LISTED = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TWSE_ETF = "https://openapi.twse.com.tw/v1/opendata/t187ap03_ETF"
 
-NAME_FIX = {
-    "0050": "元大台灣50",
-    "0056": "元大高股息",
-    "00679B": "元大美債20年",
-    "00878": "國泰永續高股息",
-    "00919": "群益台灣精選高息",
-    "00981A": "主動式ETF",
-    "2330": "台積電",
-    "2408": "南亞科",
-    "2317": "鴻海",
-    "2454": "聯發科",
-    "2308": "台達電",
-    "2382": "廣達",
-}
+NAME_FIX = {"0050":"元大台灣50","0056":"元大高股息","00679B":"元大美債20年","00878":"國泰永續高股息","00919":"群益台灣精選高息","00981A":"主動式ETF","2330":"台積電","2408":"南亞科","2317":"鴻海","2454":"聯發科","2308":"台達電","2382":"廣達"}
 
 
 def _main():
@@ -34,17 +21,14 @@ def _main():
 
 def _clean_text(value):
     text = str(value or "").strip()
-    if not text:
-        return ""
-    if "�" in text or "銝" in text or "�" in text:
+    if not text or "�" in text or "銝" in text:
         return ""
     return text
 
 
 def _safe_name(code, name):
     code = str(code or "").strip().upper()
-    clean = _clean_text(name)
-    return NAME_FIX.get(code) or clean or code
+    return NAME_FIX.get(code) or _clean_text(name) or code
 
 
 def _valid_code(code):
@@ -99,6 +83,21 @@ def _get_json(url):
         return []
 
 
+def _dedupe(items):
+    seen = set()
+    out = []
+    for x in items:
+        code = str(x.get("code", "")).strip().upper()
+        if not _valid_code(code) or code in seen:
+            continue
+        seen.add(code)
+        name = _safe_name(code, x.get("name"))
+        market = _norm_market(x.get("market"))
+        typ = x.get("type") or _infer_type(code, name)
+        out.append({"code": code, "name": name, "market": market, "type": typ, "industry": x.get("industry") or typ})
+    return out
+
+
 def _external_products():
     items = []
     for row in _get_json(TWSE_LISTED):
@@ -122,35 +121,9 @@ def _external_products():
     return _dedupe(items)
 
 
-def _dedupe(items):
-    seen = set()
-    out = []
-    for x in items:
-        code = str(x.get("code", "")).strip().upper()
-        if not _valid_code(code) or code in seen:
-            continue
-        seen.add(code)
-        name = _safe_name(code, x.get("name"))
-        market = _norm_market(x.get("market"))
-        typ = x.get("type") or _infer_type(code, name)
-        out.append({"code": code, "name": name, "market": market, "type": typ, "industry": x.get("industry") or typ})
-    return out
-
-
 def _seed_products():
     return _dedupe([
-        {"code":"2330","name":"台積電","market":"上市","type":"股票","industry":"半導體"},
-        {"code":"2408","name":"南亞科","market":"上市","type":"股票","industry":"半導體"},
-        {"code":"2317","name":"鴻海","market":"上市","type":"股票","industry":"其他電子"},
-        {"code":"2454","name":"聯發科","market":"上市","type":"股票","industry":"半導體"},
-        {"code":"2308","name":"台達電","market":"上市","type":"股票","industry":"電子零組件"},
-        {"code":"2382","name":"廣達","market":"上市","type":"股票","industry":"電腦及週邊"},
-        {"code":"0050","name":"元大台灣50","market":"上市","type":"ETF","industry":"ETF"},
-        {"code":"0056","name":"元大高股息","market":"上市","type":"ETF","industry":"ETF"},
-        {"code":"00878","name":"國泰永續高股息","market":"上市","type":"ETF","industry":"ETF"},
-        {"code":"00919","name":"群益台灣精選高息","market":"上市","type":"ETF","industry":"ETF"},
-        {"code":"00679B","name":"元大美債20年","market":"上市","type":"債券ETF","industry":"債券ETF"},
-        {"code":"00981A","name":"主動式ETF","market":"上市","type":"ETF","industry":"ETF"},
+        {"code":"2330","name":"台積電","market":"上市","type":"股票","industry":"半導體"}, {"code":"2408","name":"南亞科","market":"上市","type":"股票","industry":"半導體"}, {"code":"2317","name":"鴻海","market":"上市","type":"股票","industry":"其他電子"}, {"code":"2454","name":"聯發科","market":"上市","type":"股票","industry":"半導體"}, {"code":"2308","name":"台達電","market":"上市","type":"股票","industry":"電子零組件"}, {"code":"2382","name":"廣達","market":"上市","type":"股票","industry":"電腦及週邊"}, {"code":"0050","name":"元大台灣50","market":"上市","type":"ETF","industry":"ETF"}, {"code":"0056","name":"元大高股息","market":"上市","type":"ETF","industry":"ETF"}, {"code":"00878","name":"國泰永續高股息","market":"上市","type":"ETF","industry":"ETF"}, {"code":"00919","name":"群益台灣精選高息","market":"上市","type":"ETF","industry":"ETF"}, {"code":"00679B","name":"元大美債20年","market":"上市","type":"債券ETF","industry":"債券ETF"}, {"code":"00981A","name":"主動式ETF","market":"上市","type":"ETF","industry":"ETF"}
     ])
 
 
@@ -158,7 +131,6 @@ def _snapshot_products(db, limit=5000):
     items = _external_products()
     if len(items) >= 100:
         return items[:limit]
-
     if db is not None:
         for collection in ["product_universe", "stock_daily"]:
             items = []
@@ -179,7 +151,6 @@ def _snapshot_products(db, limit=5000):
             items = _dedupe(items)
             if items:
                 return items[:limit]
-
     return _seed_products()
 
 
@@ -198,6 +169,34 @@ def _delete_doc_data(doc_ref):
     return count
 
 
+def _write_universe_job(job_id, limit):
+    m = _main()
+    db = m.db
+    ref = db.collection("job_queue").document(job_id)
+    try:
+        products = _external_products()
+        source = "external_products"
+        if not products:
+            products = _snapshot_products(db, limit=limit)
+            source = "snapshot_or_seed"
+        total = len(products[:limit])
+        ref.set({"job_id": job_id, "status": "running", "phase": "init_universe", "source": source, "total": total, "progress": 0, "updated_at": datetime.now().isoformat()}, merge=True)
+        written = 0
+        errors = []
+        for idx, p in enumerate(products[:limit], start=1):
+            try:
+                db.collection("product_universe").document(str(p["code"])).set({**p, "updated_at": datetime.now().isoformat()}, merge=True)
+                written += 1
+            except Exception as exc:
+                errors.append({"code": p.get("code"), "error": str(exc)})
+            if idx % 20 == 0 or idx == total:
+                ref.set({"status":"running","phase":"init_universe","progress":idx,"total":total,"written":written,"error_count":len(errors),"recent_errors":errors[-20:],"updated_at":datetime.now().isoformat()}, merge=True)
+                time.sleep(0.2)
+        ref.set({"status":"done","phase":"init_universe_done","progress":total,"total":total,"written":written,"error_count":len(errors),"recent_errors":errors[-50:],"finished_at":datetime.now().isoformat()}, merge=True)
+    except Exception as exc:
+        ref.set({"status":"failed","phase":"init_universe_failed","error":str(exc),"updated_at":datetime.now().isoformat()}, merge=True)
+
+
 def _run_rebuild(job_id, months, batch_delay, limit):
     m = _main()
     db = m.db
@@ -205,10 +204,8 @@ def _run_rebuild(job_id, months, batch_delay, limit):
     products = _snapshot_products(db, limit=limit)
     total = len(products)
     ref.set({"status":"running","phase":"snapshot","total":total,"progress":0,"updated_at":datetime.now().isoformat()}, merge=True)
-
     for p in products:
         db.collection("product_universe").document(p["code"]).set({**p, "updated_at": datetime.now().isoformat()}, merge=True)
-
     deleted_docs = 0
     collections = ["stock_daily", "chip_data", "analysis_cache", "indicators"]
     for ci, col in enumerate(collections, start=1):
@@ -218,7 +215,6 @@ def _run_rebuild(job_id, months, batch_delay, limit):
                 ref.set({"phase":"reset","collection":col,"progress":idx,"total":total,"deleted_data_docs":deleted_docs,"updated_at":datetime.now().isoformat()}, merge=True)
         ref.set({"phase":"reset","collection":col,"collection_index":ci,"deleted_data_docs":deleted_docs,"updated_at":datetime.now().isoformat()}, merge=True)
         time.sleep(1)
-
     written = 0
     errors = []
     for idx, p in enumerate(products, start=1):
@@ -231,7 +227,6 @@ def _run_rebuild(job_id, months, batch_delay, limit):
             errors.append({"code":p["code"],"name":p.get("name"),"error":str(exc)})
         ref.set({"phase":"backfill","status":"running","progress":idx,"total":total,"current_stock":p["code"],"current_name":p.get("name"),"written_days":written,"error_count":len(errors),"recent_errors":errors[-20:],"updated_at":datetime.now().isoformat()}, merge=True)
         time.sleep(batch_delay)
-
     ref.set({"phase":"done","status":"done","progress":total,"total":total,"written_days":written,"error_count":len(errors),"recent_errors":errors[-50:],"finished_at":datetime.now().isoformat()}, merge=True)
 
 
@@ -242,35 +237,12 @@ def _install(app, db):
 
     @app.get("/api/init_universe")
     def init_universe(limit: int = 5000):
-        try:
-            if db is None:
-                return {"status":"failed","message":"Firebase not initialized"}
-            errors = []
-            products = []
-            try:
-                products = _external_products()
-            except Exception as exc:
-                errors.append({"stage":"external_products","error":str(exc)})
-            source = "external_products"
-            if not products:
-                try:
-                    products = _snapshot_products(db, limit=limit)
-                    source = "snapshot_or_seed"
-                except Exception as exc:
-                    errors.append({"stage":"snapshot_products","error":str(exc)})
-                    products = _seed_products()
-                    source = "seed"
-            written = 0
-            write_errors = []
-            for p in products[:limit]:
-                try:
-                    db.collection("product_universe").document(str(p["code"])).set({**p, "updated_at": datetime.now().isoformat()}, merge=True)
-                    written += 1
-                except Exception as exc:
-                    write_errors.append({"code": p.get("code"), "error": str(exc)})
-            return {"status":"ok","count":len(products),"written":written,"write_error_count":len(write_errors),"errors":errors,"write_errors":write_errors[:20],"items":products[:50],"source":source}
-        except Exception as exc:
-            return {"status":"failed","error":str(exc),"source":"init_universe_outer_exception"}
+        if db is None:
+            return {"status":"failed","message":"Firebase not initialized"}
+        job_id = f"init_universe_{int(datetime.now().timestamp())}"
+        db.collection("job_queue").document(job_id).set({"job_id":job_id,"status":"pending","phase":"created","created_at":datetime.now().isoformat()}, merge=True)
+        threading.Thread(target=_write_universe_job, args=(job_id, limit), daemon=True).start()
+        return {"status":"started","job_id":job_id,"message":"init_universe running in background"}
 
     @app.get("/api/products_fast")
     def products_fast(limit: int = 5000):
