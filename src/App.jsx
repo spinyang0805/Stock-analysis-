@@ -2,15 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as LightweightCharts from "lightweight-charts";
 
 const { createChart, CandlestickSeries, LineSeries, HistogramSeries } = LightweightCharts;
-const API = import.meta.env.VITE_API_BASE_URL || "https://stock-analysis-api-ihun.onrender.com";
-const APP_VERSION = "v14";
-const BUILD_LABEL = "2026-05-14 21:28";
-const COMMIT_LABEL = "front-chart-flow-fix";
+const DEFAULT_API = "https://stock-analysis-api-ihun.onrender.com";
+const RAW_API = import.meta.env.VITE_API_BASE_URL || DEFAULT_API;
+const API = String(RAW_API).includes("stock-analysis-api-ihun") ? String(RAW_API).replace(/\/$/, "") : DEFAULT_API;
+const APP_VERSION = "v15";
+const BUILD_LABEL = "2026-05-14 21:36";
+const COMMIT_LABEL = "api-base-fix";
 
 const STOCKS = [
   { code: "2330", name: "台積電", market: "上市", industry: "半導體" },
   { code: "2408", name: "南亞科", market: "上市", industry: "半導體" },
-  { code: "3702", name: "大聯大", market: "上市", industry: "電子通路" },
   { code: "2317", name: "鴻海", market: "上市", industry: "其他電子" },
   { code: "2454", name: "聯發科", market: "上市", industry: "半導體" },
   { code: "2308", name: "台達電", market: "上市", industry: "電子零組件" },
@@ -23,75 +24,47 @@ const STOCKS = [
 function cleanCode(value) {
   return String(value || "2330").trim().replace(".TW", "").replace(".TWO", "").split(/\s+/)[0].toUpperCase();
 }
-
 function findStock(q) {
   const s = String(q || "").trim().toLowerCase();
   if (!s) return [];
   return STOCKS.filter((x) => x.code.toLowerCase().includes(s) || x.name.toLowerCase().includes(s)).slice(0, 8);
 }
-
 function resolveStock(q) {
-  const s = String(q || "2330").trim();
-  const found = STOCKS.find((x) => x.code === s.toUpperCase() || x.name === s);
-  return found || { code: cleanCode(s), name: s || cleanCode(s), market: "--", industry: "--" };
+  const raw = String(q || "2330").trim();
+  const found = STOCKS.find((x) => x.code === raw.toUpperCase() || x.name === raw);
+  return found || { code: cleanCode(raw), name: raw || cleanCode(raw), market: "--", industry: "--" };
 }
-
 function fmt(v, d = 2) {
   const n = Number(v);
   return Number.isFinite(n) ? n.toFixed(d) : "--";
 }
-
-function addSeries(chart, Type, options, fallback) {
-  return typeof chart.addSeries === "function" && Type ? chart.addSeries(Type, options) : chart[fallback](options);
-}
-
 function toChartTime(row) {
   const date = String(row?.date || "").trim();
   if (/^\d{8}$/.test(date)) return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
   if (typeof row?.time === "number" && Number.isFinite(row.time)) return Math.floor(row.time);
   return null;
 }
-
 function normalizeRows(payload) {
   const rows = Array.isArray(payload?.data) ? payload.data : [];
   const used = new Set();
   return rows
-    .map((r) => ({
-      ...r,
-      time: toChartTime(r),
-      open: Number(r.open),
-      high: Number(r.high),
-      low: Number(r.low),
-      close: Number(r.close),
-      volume: Number(r.volume || 0),
-    }))
+    .map((r) => ({ ...r, time: toChartTime(r), open: Number(r.open), high: Number(r.high), low: Number(r.low), close: Number(r.close), volume: Number(r.volume || 0) }))
     .filter((r) => r.time && [r.open, r.high, r.low, r.close].every(Number.isFinite))
     .sort((a, b) => String(a.time).localeCompare(String(b.time)))
-    .filter((r) => {
-      if (used.has(r.time)) return false;
-      used.add(r.time);
-      return true;
-    });
+    .filter((r) => { if (used.has(r.time)) return false; used.add(r.time); return true; });
 }
-
 function line(rows, key) {
-  return rows
-    .filter((r) => r[key] !== null && r[key] !== undefined && Number.isFinite(Number(r[key])))
-    .map((r) => ({ time: r.time, value: Number(r[key]) }));
+  return rows.filter((r) => r[key] !== null && r[key] !== undefined && Number.isFinite(Number(r[key]))).map((r) => ({ time: r.time, value: Number(r[key]) }));
 }
-
 function volumeRows(rows) {
-  return rows.map((r) => ({
-    time: r.time,
-    value: Number(r.volume || 0),
-    color: r.close >= r.open ? "rgba(34,197,94,.55)" : "rgba(239,68,68,.55)",
-  }));
+  return rows.map((r) => ({ time: r.time, value: Number(r.volume || 0), color: r.close >= r.open ? "rgba(34,197,94,.55)" : "rgba(239,68,68,.55)" }));
 }
-
+function addSeries(chart, Type, options, fallback) {
+  return typeof chart.addSeries === "function" && Type ? chart.addSeries(Type, options) : chart[fallback](options);
+}
 function Card({ title, children }) {
   return <section style={cardStyle}><h3 style={{ marginTop: 0 }}>{title}</h3>{children}</section>;
 }
-
 function Row({ label, value }) {
   return <div style={{ display: "flex", justifyContent: "space-between", gap: 12, borderBottom: "1px solid rgba(148,163,184,.16)", padding: "6px 0" }}><span style={{ color: "#94a3b8" }}>{label}</span><b>{value}</b></div>;
 }
@@ -103,7 +76,6 @@ export default function App() {
   const macdRef = useRef(null);
   const charts = useRef([]);
   const series = useRef({});
-
   const [input, setInput] = useState("2330");
   const [stock, setStock] = useState(resolveStock("2330"));
   const [openSuggest, setOpenSuggest] = useState(false);
@@ -113,7 +85,6 @@ export default function App() {
   const [status, setStatus] = useState("初始化中");
   const [showMA, setShowMA] = useState(true);
   const [showBB, setShowBB] = useState(true);
-
   const suggestions = useMemo(() => findStock(input), [input]);
 
   useEffect(() => {
@@ -143,10 +114,7 @@ export default function App() {
     };
     const resize = () => charts.current.forEach((c) => c.applyOptions({ width: priceRef.current?.clientWidth || 900 }));
     window.addEventListener("resize", resize);
-    return () => {
-      window.removeEventListener("resize", resize);
-      charts.current.forEach((c) => c.remove());
-    };
+    return () => { window.removeEventListener("resize", resize); charts.current.forEach((c) => c.remove()); };
   }, []);
 
   useEffect(() => {
@@ -168,20 +136,20 @@ export default function App() {
     let alive = true;
     async function load() {
       const code = stock.code;
-      setStatus(`讀取 ${code} K線中...`);
+      setStatus(`讀取 ${code} K線中... API=${API}`);
       setRows([]);
       setPayload(null);
       try {
-        const kRes = await fetch(`${API}/api/kline/${code}`);
+        const kUrl = `${API}/api/kline/${code}`;
+        const kRes = await fetch(kUrl, { cache: "no-store" });
         const kJson = await kRes.json();
-        if (!kRes.ok) throw new Error(kJson?.detail || kJson?.error || `HTTP ${kRes.status}`);
+        if (!kRes.ok) throw new Error(`${kJson?.detail || kJson?.error || `HTTP ${kRes.status}`} @ ${kUrl}`);
         const nextRows = normalizeRows(kJson);
         if (!alive) return;
         setPayload(kJson);
         setRows(nextRows);
-        setStatus(nextRows.length ? `已載入 ${nextRows.length} 筆K線資料（${APP_VERSION}）` : `API回傳0筆K線（${APP_VERSION}）`);
-
-        fetch(`${API}/api/analysis/${code}`)
+        setStatus(nextRows.length ? `已載入 ${nextRows.length} 筆K線資料（${APP_VERSION} / ${API}）` : `API回傳0筆K線（${APP_VERSION} / ${API}）`);
+        fetch(`${API}/api/analysis/${code}`, { cache: "no-store" })
           .then((r) => r.ok ? r.json() : null)
           .then((j) => { if (alive) setAnalysis(j); })
           .catch(() => {});
@@ -207,7 +175,7 @@ export default function App() {
   return <div style={{ minHeight: "100vh", background: "#020617", color: "white", fontFamily: "Arial, sans-serif" }}>
     <header style={{ padding: 24, borderBottom: "1px solid #1e293b", background: "#0f172a" }}>
       <div style={{ color: "#38bdf8", letterSpacing: 1, fontWeight: 800 }}>TW STOCK DECISION SYSTEM {APP_VERSION}</div>
-      <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>Build: {BUILD_LABEL} | Commit: {COMMIT_LABEL}</div>
+      <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>Build: {BUILD_LABEL} | Commit: {COMMIT_LABEL} | API: {API}</div>
       <h1>券商等級交易決策 Dashboard</h1>
       <div style={{ fontSize: 26, fontWeight: 800 }}><span style={{ color: "#facc15" }}>{meta.code || stock.code}</span> {meta.name || stock.name} <span style={{ color: "#94a3b8", fontSize: 15 }}>{meta.market || stock.market}・{meta.industry || stock.industry}</span></div>
       <div style={{ fontSize: 44, fontWeight: 900, color: pc }}>{fmt(meta.price ?? latest.close)}</div>
@@ -233,7 +201,7 @@ export default function App() {
         <h3>MACD</h3><div ref={macdRef} />
       </section>
       <aside style={{ display: "grid", gap: 12, alignContent: "start" }}>
-        <Card title="資料狀態"><Row label="版本" value={APP_VERSION} /><Row label="K線筆數" value={rows.length} /><Row label="API狀態" value={payload?.status || "--"} /><Row label="資料日期" value={meta.data_date || latest.date || "--"} /></Card>
+        <Card title="資料狀態"><Row label="版本" value={APP_VERSION} /><Row label="API" value={API} /><Row label="K線筆數" value={rows.length} /><Row label="API狀態" value={payload?.status || "--"} /><Row label="資料日期" value={meta.data_date || latest.date || "--"} /></Card>
         <Card title="Decision Score"><div style={{ fontSize: 46, color: Number(analysis?.score || 0) <= -15 ? "#ef4444" : "#22c55e", fontWeight: 900 }}>{analysis?.score ?? "--"}</div><b>{analysis?.trend || "等待分析"}</b><p style={{ color: "#94a3b8" }}>{analysis?.summary || "K線資料載入後會顯示分析結果。"}</p></Card>
         <Card title="技術指標"><Row label="MA5" value={fmt(latest.ma5)} /><Row label="MA20" value={fmt(latest.ma20)} /><Row label="MA60" value={fmt(latest.ma60)} /><Row label="RSI14" value={fmt(latest.rsi14)} /><Row label="MACD" value={fmt(latest.macd)} /></Card>
       </aside>
