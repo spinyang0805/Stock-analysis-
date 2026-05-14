@@ -1,5 +1,10 @@
 from typing import Any, Dict, List, Optional
 
+try:
+    import chip_routes  # noqa: F401
+except Exception as exc:
+    print("chip_routes import error:", exc)
+
 
 def _num(value: Any, default: Optional[float] = None) -> Optional[float]:
     try:
