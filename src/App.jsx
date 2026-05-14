@@ -48,8 +48,34 @@ function resolveStock(q) {
 function fmt(v, d = 2) { return v == null || Number.isNaN(Number(v)) ? "--" : Number(v).toFixed(d); }
 function displayValue(v) { return v == null || v === "" ? "待資料" : v; }
 function series(chart, Type, options, fallback) { return typeof chart.addSeries === "function" && Type ? chart.addSeries(Type, options) : chart[fallback](options); }
-function normalizeKline(payload) { return Array.isArray(payload?.data) ? payload.data.filter(x => x?.time && x.open != null && x.close != null) : []; }
-function val(data, key) { return data.filter(x => x[key] != null).map(x => ({ time: x.time, value: Number(x[key]) })); }
+function chartTime(x) {
+  const date = String(x?.date || "").trim();
+  if (/^\d{8}$/.test(date)) return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
+  if (typeof x?.time === "number" && Number.isFinite(x.time)) return Math.floor(x.time);
+  return null;
+}
+function normalizeKline(payload) {
+  const rows = Array.isArray(payload?.data) ? payload.data : [];
+  const seen = new Set();
+  return rows
+    .map((x) => ({
+      ...x,
+      time: chartTime(x),
+      open: Number(x.open),
+      high: Number(x.high),
+      low: Number(x.low),
+      close: Number(x.close),
+      volume: Number(x.volume || 0),
+    }))
+    .filter((x) => x.time && [x.open, x.high, x.low, x.close].every(Number.isFinite))
+    .sort((a, b) => String(a.time).localeCompare(String(b.time)))
+    .filter((x) => {
+      if (seen.has(x.time)) return false;
+      seen.add(x.time);
+      return true;
+    });
+}
+function val(data, key) { return data.filter(x => x[key] != null && Number.isFinite(Number(x[key]))).map(x => ({ time: x.time, value: Number(x[key]) })); }
 function volume(data) { return data.map(x => ({ time: x.time, value: Number(x.volume || 0), color: x.close >= x.open ? "rgba(34,197,94,.55)" : "rgba(239,68,68,.55)" })); }
 function scoreColor(s) { return s >= 20 ? "#22c55e" : s <= -15 ? "#ef4444" : "#f59e0b"; }
 function levelColor(level) {
@@ -172,7 +198,7 @@ export default function App() {
           s.ma5?.setData(showMA ? val(k, "ma5") : []); s.ma20?.setData(showMA ? val(k, "ma20") : []); s.ma60?.setData(showMA ? val(k, "ma60") : []);
           s.bbU?.setData(showBB ? val(k, "bb_upper") : []); s.bbL?.setData(showBB ? val(k, "bb_lower") : []);
           chartRef.current.forEach(c => c.timeScale().fitContent());
-          setKlinePayload(kp); setAnalysis(ap || localAnalysis(code, k)); setDashboard(dp); setStatus(kp?.status === "loading" ? "資料導入中，請稍後重新查詢" : k.length === 0 ? "目前沒有K線資料，請先回補此股票" : "已連接 API，資料已載入");
+          setKlinePayload(kp); setAnalysis(ap || localAnalysis(code, k)); setDashboard(dp); setStatus(kp?.status === "loading" ? "資料導入中，請稍後重新查詢" : k.length === 0 ? "目前沒有K線資料，請先回補此股票" : `已載入 ${k.length} 筆K線資料`);
         }
       } catch (e) { if (!dead) setStatus(`API 連線失敗：${e.message}`); }
     }
