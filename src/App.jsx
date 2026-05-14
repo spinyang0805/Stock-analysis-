@@ -5,13 +5,14 @@ const { createChart, CandlestickSeries, LineSeries, HistogramSeries } = Lightwei
 const DEFAULT_API = "https://stock-analysis-api-ihun.onrender.com";
 const RAW_API = import.meta.env.VITE_API_BASE_URL || DEFAULT_API;
 const API = String(RAW_API).includes("stock-analysis-api-ihun") ? String(RAW_API).replace(/\/$/, "") : DEFAULT_API;
-const APP_VERSION = "v15";
-const BUILD_LABEL = "2026-05-14 21:36";
-const COMMIT_LABEL = "api-base-fix";
+const APP_VERSION = "v16";
+const BUILD_LABEL = "2026-05-14 21:45";
+const COMMIT_LABEL = "multi-kline-schema";
 
 const STOCKS = [
   { code: "2330", name: "台積電", market: "上市", industry: "半導體" },
   { code: "2408", name: "南亞科", market: "上市", industry: "半導體" },
+  { code: "3702", name: "大聯大", market: "上市", industry: "電子通路" },
   { code: "2317", name: "鴻海", market: "上市", industry: "其他電子" },
   { code: "2454", name: "聯發科", market: "上市", industry: "半導體" },
   { code: "2308", name: "台達電", market: "上市", industry: "電子零組件" },
@@ -38,23 +39,61 @@ function fmt(v, d = 2) {
   const n = Number(v);
   return Number.isFinite(n) ? n.toFixed(d) : "--";
 }
+function pickRows(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.rows)) return payload.rows;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.kline)) return payload.kline;
+  if (Array.isArray(payload?.kline_data)) return payload.kline_data;
+  if (Array.isArray(payload?.daily)) return payload.daily;
+  if (Array.isArray(payload?.result?.data)) return payload.result.data;
+  if (Array.isArray(payload?.result?.rows)) return payload.result.rows;
+  if (Array.isArray(payload?.basic?.data)) return payload.basic.data;
+  return [];
+}
 function toChartTime(row) {
-  const date = String(row?.date || "").trim();
+  const date = String(row?.date || row?.Date || row?.data_date || "").trim();
   if (/^\d{8}$/.test(date)) return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
   if (typeof row?.time === "number" && Number.isFinite(row.time)) return Math.floor(row.time);
+  if (typeof row?.timestamp === "number" && Number.isFinite(row.timestamp)) return Math.floor(row.timestamp);
   return null;
 }
+function n(...values) {
+  for (const v of values) {
+    const x = Number(v);
+    if (Number.isFinite(x)) return x;
+  }
+  return NaN;
+}
 function normalizeRows(payload) {
-  const rows = Array.isArray(payload?.data) ? payload.data : [];
+  const rows = pickRows(payload);
   const used = new Set();
   return rows
-    .map((r) => ({ ...r, time: toChartTime(r), open: Number(r.open), high: Number(r.high), low: Number(r.low), close: Number(r.close), volume: Number(r.volume || 0) }))
+    .map((r) => ({
+      ...r,
+      time: toChartTime(r),
+      open: n(r.open, r.Open, r.o),
+      high: n(r.high, r.High, r.h),
+      low: n(r.low, r.Low, r.l),
+      close: n(r.close, r.Close, r.c),
+      volume: n(r.volume, r.Volume, r.vol, 0),
+      ma5: n(r.ma5, r.MA5),
+      ma20: n(r.ma20, r.MA20),
+      ma60: n(r.ma60, r.MA60),
+      bb_upper: n(r.bb_upper, r.BB_UPPER),
+      bb_lower: n(r.bb_lower, r.BB_LOWER),
+      rsi14: n(r.rsi14, r.RSI14),
+      macd_hist: n(r.macd_hist, r.MACD_HIST),
+      macd: n(r.macd, r.MACD),
+    }))
     .filter((r) => r.time && [r.open, r.high, r.low, r.close].every(Number.isFinite))
     .sort((a, b) => String(a.time).localeCompare(String(b.time)))
     .filter((r) => { if (used.has(r.time)) return false; used.add(r.time); return true; });
 }
 function line(rows, key) {
-  return rows.filter((r) => r[key] !== null && r[key] !== undefined && Number.isFinite(Number(r[key]))).map((r) => ({ time: r.time, value: Number(r[key]) }));
+  return rows.filter((r) => Number.isFinite(Number(r[key]))).map((r) => ({ time: r.time, value: Number(r[key]) }));
 }
 function volumeRows(rows) {
   return rows.map((r) => ({ time: r.time, value: Number(r.volume || 0), color: r.close >= r.open ? "rgba(34,197,94,.55)" : "rgba(239,68,68,.55)" }));
@@ -148,7 +187,8 @@ export default function App() {
         if (!alive) return;
         setPayload(kJson);
         setRows(nextRows);
-        setStatus(nextRows.length ? `已載入 ${nextRows.length} 筆K線資料（${APP_VERSION} / ${API}）` : `API回傳0筆K線（${APP_VERSION} / ${API}）`);
+        const rawCount = pickRows(kJson).length;
+        setStatus(nextRows.length ? `已載入 ${nextRows.length} 筆K線資料（raw:${rawCount} / ${APP_VERSION}）` : `API回傳0筆可畫K線（raw:${rawCount} / status:${kJson?.status || "--"} / ${APP_VERSION}）`);
         fetch(`${API}/api/analysis/${code}`, { cache: "no-store" })
           .then((r) => r.ok ? r.json() : null)
           .then((j) => { if (alive) setAnalysis(j); })
@@ -170,6 +210,7 @@ export default function App() {
 
   const meta = { ...stock, ...(payload?.meta || {}), ...(analysis?.meta || {}) };
   const latest = rows.at(-1) || {};
+  const rawRows = pickRows(payload).length;
   const pc = Number(meta.change || 0) >= 0 ? "#22c55e" : "#ef4444";
 
   return <div style={{ minHeight: "100vh", background: "#020617", color: "white", fontFamily: "Arial, sans-serif" }}>
@@ -201,7 +242,7 @@ export default function App() {
         <h3>MACD</h3><div ref={macdRef} />
       </section>
       <aside style={{ display: "grid", gap: 12, alignContent: "start" }}>
-        <Card title="資料狀態"><Row label="版本" value={APP_VERSION} /><Row label="API" value={API} /><Row label="K線筆數" value={rows.length} /><Row label="API狀態" value={payload?.status || "--"} /><Row label="資料日期" value={meta.data_date || latest.date || "--"} /></Card>
+        <Card title="資料狀態"><Row label="版本" value={APP_VERSION} /><Row label="API" value={API} /><Row label="Raw筆數" value={rawRows} /><Row label="K線筆數" value={rows.length} /><Row label="API狀態" value={payload?.status || "--"} /><Row label="資料日期" value={meta.data_date || latest.date || "--"} /></Card>
         <Card title="Decision Score"><div style={{ fontSize: 46, color: Number(analysis?.score || 0) <= -15 ? "#ef4444" : "#22c55e", fontWeight: 900 }}>{analysis?.score ?? "--"}</div><b>{analysis?.trend || "等待分析"}</b><p style={{ color: "#94a3b8" }}>{analysis?.summary || "K線資料載入後會顯示分析結果。"}</p></Card>
         <Card title="技術指標"><Row label="MA5" value={fmt(latest.ma5)} /><Row label="MA20" value={fmt(latest.ma20)} /><Row label="MA60" value={fmt(latest.ma60)} /><Row label="RSI14" value={fmt(latest.rsi14)} /><Row label="MACD" value={fmt(latest.macd)} /></Card>
       </aside>
