@@ -1,12 +1,12 @@
 from datetime import datetime
 import re
 import sys
-import threading
 import time
 
 import requests
 
 _INSTALLED = False
+_PRODUCTS_CACHE = None
 HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json,text/plain,*/*"}
 TWSE_LISTED = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
 TPEX_LISTED = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
@@ -75,7 +75,7 @@ def _pick(row, keys, default=""):
 
 def _get_json(url):
     try:
-        res = requests.get(url, headers=HEADERS, timeout=12)
+        res = requests.get(url, headers=HEADERS, timeout=6)
         res.encoding = "utf-8-sig"
         res.raise_for_status()
         return res.json()
@@ -127,9 +127,13 @@ def _seed_products():
     ])
 
 
-def _snapshot_products(db, limit=5000):
+def _snapshot_products(db, limit=5000, use_cache=True):
+    global _PRODUCTS_CACHE
+    if use_cache and _PRODUCTS_CACHE:
+        return _PRODUCTS_CACHE[:limit]
     items = _external_products()
     if len(items) >= 100:
+        _PRODUCTS_CACHE = items
         return items[:limit]
     if db is not None:
         for collection in ["product_universe", "stock_daily"]:
@@ -150,8 +154,10 @@ def _snapshot_products(db, limit=5000):
                 pass
             items = _dedupe(items)
             if items:
+                _PRODUCTS_CACHE = items
                 return items[:limit]
-    return _seed_products()
+    _PRODUCTS_CACHE = _seed_products()
+    return _PRODUCTS_CACHE[:limit]
 
 
 def _delete_doc_data(doc_ref):
@@ -209,14 +215,14 @@ def _install(app, db):
 
     @app.get("/api/init_universe")
     def init_universe(limit: int = 5000):
-        items = _snapshot_products(db, limit=limit)
-        return {"status":"ready_for_batch","count":len(items),"message":"Use /api/init_universe_batch?offset=0&limit=50 and repeat until next_offset is null"}
+        items = _snapshot_products(db, limit=limit, use_cache=False)
+        return {"status":"ready_for_batch","count":len(items),"message":"Use /api/init_universe_batch?offset=0&limit=10 and repeat until next_offset is null"}
 
     @app.get("/api/init_universe_batch")
-    def init_universe_batch(offset: int = 0, limit: int = 50):
+    def init_universe_batch(offset: int = 0, limit: int = 10):
         if db is None:
             return {"status":"failed","message":"Firebase not initialized"}
-        items = _snapshot_products(db, limit=5000)
+        items = _snapshot_products(db, limit=5000, use_cache=True)
         batch = items[offset:offset + limit]
         written = 0
         errors = []
@@ -233,7 +239,7 @@ def _install(app, db):
     def products_fast(limit: int = 5000):
         try:
             items = _snapshot_products(db, limit=limit)
-            return {"count": len(items), "items": items[:200], "source": "external_clean_universe_or_snapshot"}
+            return {"count": len(items), "items": items[:200], "source": "cached_external_or_snapshot"}
         except Exception as exc:
             return {"count": 0, "items": [], "error": str(exc)}
 
@@ -243,6 +249,7 @@ def _install(app, db):
             return {"status":"failed","message":"Firebase not initialized"}
         job_id = f"rebuild_safe_{int(datetime.now().timestamp())}"
         db.collection("job_queue").document(job_id).set({"job_id":job_id,"status":"pending","phase":"created","months":months,"created_at":datetime.now().isoformat()}, merge=True)
+        import threading
         threading.Thread(target=_run_rebuild, args=(job_id, months, batch_delay, limit), daemon=True).start()
         return {"status":"started","job_id":job_id,"months":months,"batch_delay":batch_delay}
 
@@ -257,6 +264,7 @@ def boot():
                 _install(m.app, m.db)
                 return
             time.sleep(0.1)
+    import threading
     threading.Thread(target=wait, daemon=True).start()
 
 
