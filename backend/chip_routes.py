@@ -38,8 +38,6 @@ def _date_list(days=20):
 
 
 def _mock_chip_rows(code, days=20):
-    # Temporary deterministic seed data so Firestore collection can be built and UI/API can work.
-    # Later this can be replaced with TWSE/TPEX real institutional endpoints.
     random.seed(str(code))
     rows = []
     base = (sum(ord(c) for c in str(code)) % 11) - 5
@@ -82,7 +80,6 @@ def _sum(rows, key, days):
 def _analyze_rows(rows):
     rows = sorted(rows or [], key=lambda x: str(x.get("date", "")))
     recent5 = rows[-5:]
-    recent10 = rows[-10:]
     latest = rows[-1] if rows else {}
 
     foreign_5d_sum = _sum(rows, "foreign_buy", 5)
@@ -225,6 +222,43 @@ def _install(app):
     if _INSTALLED:
         return
 
+    # IMPORTANT: Static routes must be declared before /api/chip/{stock},
+    # otherwise FastAPI will treat "backfill_all" as the stock parameter.
+    @app.get("/api/chip/backfill_all")
+    def chip_backfill_all(product_type: str = "all", market: str = "all", offset: int = 0, limit: int = 20, days: int = 20):
+        m = _main()
+        if m.db is None:
+            return _json({"status": "failed", "message": "Firebase not initialized", "next_offset": offset})
+        products = _universe(m, product_type=product_type, market=market, limit=5000)
+        batch = products[offset:offset + limit]
+        written = 0
+        errors = []
+        for item in batch:
+            code = str(item.get("code") or "").strip().upper()
+            if not code:
+                continue
+            try:
+                rows = _mock_chip_rows(code, days=days)
+                _write_chip_rows(m.db, code, rows)
+                written += 1
+            except Exception as exc:
+                errors.append({"code": code, "error": str(exc)})
+        next_offset = offset + len(batch) if offset + len(batch) < len(products) else None
+        return _json({
+            "status": "ok",
+            "route": "/api/chip/backfill_all",
+            "collection": "chip_daily",
+            "analysis_collection": "chip_analysis",
+            "universe_count": len(products),
+            "offset": offset,
+            "limit": limit,
+            "processed": len(batch),
+            "written_stocks": written,
+            "error_count": len(errors),
+            "errors": errors[:10],
+            "next_offset": next_offset,
+        })
+
     @app.get("/api/chip/init/{stock}")
     def chip_init(stock: str, days: int = 20):
         m = _main()
@@ -249,6 +283,7 @@ def _install(app):
         latest = rows[-1] if rows else {}
         return _json({
             "status": "ok",
+            "route": "/api/chip/{stock}",
             "stock": stock,
             "normalized_stock": code,
             "source": "Firebase chip_daily",
@@ -257,40 +292,6 @@ def _install(app):
             "row_count": len(rows),
             "analysis": analysis,
             "updated_at": datetime.now().isoformat(),
-        })
-
-    @app.get("/api/chip/backfill_all")
-    def chip_backfill_all(product_type: str = "all", market: str = "all", offset: int = 0, limit: int = 20, days: int = 20):
-        m = _main()
-        if m.db is None:
-            return _json({"status": "failed", "message": "Firebase not initialized"})
-        products = _universe(m, product_type=product_type, market=market, limit=5000)
-        batch = products[offset:offset + limit]
-        written = 0
-        errors = []
-        for item in batch:
-            code = str(item.get("code") or "").strip().upper()
-            if not code:
-                continue
-            try:
-                rows = _mock_chip_rows(code, days=days)
-                _write_chip_rows(m.db, code, rows)
-                written += 1
-            except Exception as exc:
-                errors.append({"code": code, "error": str(exc)})
-        next_offset = offset + len(batch) if offset + len(batch) < len(products) else None
-        return _json({
-            "status": "ok",
-            "collection": "chip_daily",
-            "analysis_collection": "chip_analysis",
-            "universe_count": len(products),
-            "offset": offset,
-            "limit": limit,
-            "processed": len(batch),
-            "written_stocks": written,
-            "error_count": len(errors),
-            "errors": errors[:10],
-            "next_offset": next_offset,
         })
 
     _INSTALLED = True
