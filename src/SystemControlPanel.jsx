@@ -1,188 +1,92 @@
 import { useState } from "react";
 
 const API = "https://stock-analysis-api-ihun.onrender.com";
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export default function SystemControlPanel() {
-  const [job, setJob] = useState(null);
+  const [result, setResult] = useState(null);
   const [log, setLog] = useState([]);
-  const [progress, setProgress] = useState({ running: false, phase: "idle", done: 0, total: 0 });
-  const [batchSize, setBatchSize] = useState(20);
-  const [delaySeconds, setDelaySeconds] = useState(30);
-  const [retrySeconds, setRetrySeconds] = useState(30);
-  const [months, setMonths] = useState(12);
-  const [productType, setProductType] = useState("all");
-  const [market, setMarket] = useState("all");
+  const [busy, setBusy] = useState(false);
+  const [stock, setStock] = useState("2330");
+  const [auditStocks, setAuditStocks] = useState(500);
+  const [auditRows, setAuditRows] = useState(30);
 
   const addLog = (text) => setLog((prev) => [`${new Date().toLocaleTimeString()} ${text}`, ...prev].slice(0, 24));
-  const query = `product_type=${encodeURIComponent(productType)}&market=${encodeURIComponent(market)}`;
-  const pct = progress.total ? Math.floor((progress.done / progress.total) * 100) : 0;
 
-  async function api(path, timeoutMs = 25000) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+  async function call(path, label) {
+    setBusy(true);
+    addLog(`Start: ${label}`);
     try {
-      const res = await fetch(`${API}${path}`, { signal: controller.signal });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.detail || data?.error || `HTTP ${res.status}`);
-      setJob(data);
-      return data;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  async function call(path, label, timeoutMs = 25000) {
-    addLog(`開始：${label}`);
-    try {
-      const data = await api(path, timeoutMs);
-      addLog(`完成：${label}`);
-      return data;
+      const res = await fetch(API + path);
+      const json = await res.json();
+      setResult(json);
+      addLog(`Done: ${label}`);
     } catch (e) {
-      const message = e.name === "AbortError" ? "讀取逾時，稍後自動重試" : e.message;
-      setJob({ error: message });
-      addLog(`失敗：${label} - ${message}`);
-      return null;
+      const message = String(e.message || e);
+      setResult({ error: message });
+      addLog(`Failed: ${label} - ${message}`);
+    } finally {
+      setBusy(false);
     }
-  }
-
-  async function getProductTotal() {
-    const productResult = await call(`/api/products?${query}&limit=5000`, "讀取全部商品清單", 120000);
-    return Number(productResult?.count || 0);
-  }
-
-  async function safeResetLoop() {
-    if (progress.running) return;
-    setProgress({ running: true, phase: "讀取清單", done: 0, total: 0 });
-    const total = await getProductTotal();
-    if (!total) {
-      setProgress({ running: false, phase: "失敗：無商品清單", done: 0, total: 0 });
-      return;
-    }
-
-    setProgress({ running: true, phase: "安全清空資料", done: 0, total });
-    addLog(`開始：安全清空全部清單，共 ${total} 檔，每批 ${batchSize}，每批等待 ${delaySeconds} 秒，失敗等待 ${retrySeconds} 秒`);
-
-    for (let offset = 0; offset < total; offset += batchSize) {
-      const label = `清空 offset=${offset} 到 ${Math.min(offset + batchSize, total)}`;
-      let ok = false;
-      while (!ok) {
-        const data = await call(`/api/firebase/reset_all?${query}&offset=${offset}&limit=${batchSize}`, label);
-        if (data) {
-          ok = true;
-          const done = Math.min(offset + batchSize, total);
-          setProgress({ running: true, phase: "安全清空資料", done, total });
-          if (data.next_offset === null) {
-            addLog("後端回報 next_offset=null，清空流程完成");
-            setProgress({ running: false, phase: "清空完成", done, total });
-            return;
-          }
-          await sleep(delaySeconds * 1000);
-        } else {
-          addLog(`無回應或失敗，等待 ${retrySeconds} 秒後重試同一批`);
-          await sleep(retrySeconds * 1000);
-        }
-      }
-    }
-
-    setProgress({ running: false, phase: "清空完成", done: total, total });
-    addLog("完成：安全清空全部清單");
-  }
-
-  async function rebuildAll() {
-    if (progress.running) return;
-    setProgress({ running: true, phase: "讀取清單", done: 0, total: 0 });
-    addLog("開始：一鍵重建全部資料");
-
-    const total = await getProductTotal();
-    if (!total) {
-      setProgress({ running: false, phase: "失敗：無商品清單", done: 0, total: 0 });
-      return;
-    }
-
-    setProgress({ running: true, phase: "清空資料", done: 0, total });
-    for (let offset = 0; offset < total; offset += batchSize) {
-      let ok = false;
-      while (!ok) {
-        const data = await call(`/api/firebase/reset_all?${query}&offset=${offset}&limit=${batchSize}`, `清空 ${offset}-${Math.min(offset + batchSize, total)}`);
-        if (data) {
-          ok = true;
-          setProgress({ running: true, phase: "清空資料", done: Math.min(offset + batchSize, total), total });
-          await sleep(delaySeconds * 1000);
-        } else {
-          addLog(`清空失敗，等待 ${retrySeconds} 秒後重試同一批`);
-          await sleep(retrySeconds * 1000);
-        }
-      }
-    }
-
-    setProgress({ running: true, phase: "回補資料", done: 0, total });
-    for (let offset = 0; offset < total; offset += batchSize) {
-      let ok = false;
-      while (!ok) {
-        const data = await call(`/api/job/backfill_all?${query}&offset=${offset}&limit=${batchSize}&months=${months}`, `回補 ${offset}-${Math.min(offset + batchSize, total)}`);
-        if (data) {
-          ok = true;
-          setProgress({ running: true, phase: "回補資料", done: Math.min(offset + batchSize, total), total });
-          await sleep(delaySeconds * 1000);
-        } else {
-          addLog(`回補失敗，等待 ${retrySeconds} 秒後重試同一批`);
-          await sleep(retrySeconds * 1000);
-        }
-      }
-    }
-
-    setProgress({ running: true, phase: "更新今日資料", done: total, total });
-    await call(`/api/job/daily`, "更新今日資料");
-    setProgress({ running: false, phase: "完成", done: total, total });
-    addLog("完成：一鍵重建全部資料");
   }
 
   return (
-    <section style={{ background: "#020617", color: "white", padding: 18, fontFamily: "Arial, sans-serif" }}>
-      <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 18, padding: 18 }}>
-        <div style={{ color: "#38bdf8", fontWeight: 800, letterSpacing: 1 }}>SYSTEM MAINTENANCE CONSOLE</div>
-        <h2 style={{ margin: "8px 0" }}>資料維護控制台</h2>
-        <p style={{ color: "#94a3b8" }}>安全模式：每批 20 筆，成功等待 30 秒；失敗等待 30 秒後重試同一批，直到商品清單全部跑完。</p>
+    <section style={pageStyle}>
+      <div style={boxStyle}>
+        <div style={eyebrowStyle}>SYSTEM CONTROL</div>
+        <h2 style={titleStyle}>Read-Only Operations</h2>
+        <p style={mutedStyle}>Destructive database reset and rebuild workflows were moved to the Database Maintenance tab.</p>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 12 }}>
-          <select value={productType} onChange={(e) => setProductType(e.target.value)} style={fieldStyle}>
-            <option value="all">全部</option>
-            <option value="股票">股票</option>
-            <option value="ETF">ETF</option>
-            <option value="債券ETF">債券ETF</option>
-          </select>
-          <select value={market} onChange={(e) => setMarket(e.target.value)} style={fieldStyle}>
-            <option value="all">全部市場</option>
-            <option value="上市">上市</option>
-            <option value="上櫃">上櫃</option>
-          </select>
-          <label>每批 <input type="number" value={batchSize} onChange={(e) => setBatchSize(Number(e.target.value || 20))} style={inputStyle} /></label>
-          <label>成功秒 <input type="number" value={delaySeconds} onChange={(e) => setDelaySeconds(Number(e.target.value || 30))} style={inputStyle} /></label>
-          <label>重試秒 <input type="number" value={retrySeconds} onChange={(e) => setRetrySeconds(Number(e.target.value || 30))} style={inputStyle} /></label>
-          <label>月數 <input type="number" value={months} onChange={(e) => setMonths(Number(e.target.value || 12))} style={inputStyle} /></label>
+        <div style={buttonRowStyle}>
+          <button disabled={busy} onClick={() => call("/", "API health")} style={primaryButtonStyle}>API Health</button>
+          <button disabled={busy} onClick={() => call("/api/firebase/test", "Firebase health")} style={primaryButtonStyle}>Firebase Health</button>
+          <button disabled={busy} onClick={() => call(`/api/cache/status/${encodeURIComponent(stock)}`, `Cache status ${stock}`)} style={primaryButtonStyle}>Cache Status</button>
+          <button disabled={busy} onClick={() => call(`/api/firebase/audit_all?limit_stocks=${auditStocks}&limit_per_stock=${auditRows}`, "Audit stock_daily")} style={primaryButtonStyle}>Audit stock_daily</button>
         </div>
 
-        <button style={{ ...btnStyle, background: "#dc2626", fontSize: 18 }} disabled={progress.running} onClick={safeResetLoop}>💣 安全清空全部</button>
-        <button style={{ ...btnStyle, background: "#16a34a", fontSize: 18, marginLeft: 10 }} disabled={progress.running} onClick={rebuildAll}>🚀 清空並回補全部</button>
-        <button style={{ ...btnStyle, marginLeft: 10 }} onClick={() => call(`/api/kline/2330`, "測試2330")}>🧪 測試2330</button>
-
-        <div style={{ marginTop: 16, background: "#020617", borderRadius: 999, overflow: "hidden", border: "1px solid #334155" }}>
-          <div style={{ width: `${pct}%`, height: 18, background: "#22c55e", transition: "width .3s" }} />
+        <div style={controlRowStyle}>
+          <label style={labelStyle}>
+            Stock
+            <input value={stock} onChange={(e) => setStock(e.target.value)} style={inputStyle} />
+          </label>
+          <label style={labelStyle}>
+            Audit stocks
+            <input type="number" value={auditStocks} onChange={(e) => setAuditStocks(Number(e.target.value || 500))} style={inputStyle} />
+          </label>
+          <label style={labelStyle}>
+            Rows per stock
+            <input type="number" value={auditRows} onChange={(e) => setAuditRows(Number(e.target.value || 30))} style={inputStyle} />
+          </label>
         </div>
-        <div style={{ marginTop: 8, color: "#cbd5e1" }}>階段：{progress.phase}　進度：{progress.done}/{progress.total}　{pct}%</div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 12, marginTop: 14 }}>
-          <div style={panelStyle}><h3>API 回傳</h3><pre style={preStyle}>{JSON.stringify(job || {}, null, 2)}</pre></div>
-          <div style={panelStyle}><h3>操作紀錄</h3>{log.map((x, i) => <div key={i} style={{ color: "#cbd5e1", fontSize: 13, padding: "3px 0" }}>{x}</div>)}</div>
+        <div style={gridStyle}>
+          <div style={panelStyle}>
+            <h3 style={panelTitleStyle}>API Response</h3>
+            <pre style={preStyle}>{JSON.stringify(result || {}, null, 2)}</pre>
+          </div>
+          <div style={panelStyle}>
+            <h3 style={panelTitleStyle}>Log</h3>
+            {log.map((x, i) => (
+              <div key={i} style={logLineStyle}>{x}</div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-const fieldStyle = { padding: 10, borderRadius: 10, background: "#020617", color: "white", border: "1px solid #334155" };
-const inputStyle = { width: 80, padding: 8, borderRadius: 10, background: "#020617", color: "white", border: "1px solid #334155" };
-const btnStyle = { padding: "10px 12px", borderRadius: 10, border: 0, background: "#2563eb", color: "white", fontWeight: 800, cursor: "pointer" };
-const panelStyle = { border: "1px solid #1e293b", borderRadius: 14, padding: 12, background: "rgba(15,23,42,.75)" };
-const preStyle = { maxHeight: 320, overflow: "auto", color: "#cbd5e1", background: "#020617", padding: 12, borderRadius: 12, fontSize: 12 };
+const pageStyle = { background: "#020617", color: "white", padding: 18, fontFamily: "Arial, sans-serif" };
+const boxStyle = { background: "#0f172a", border: "1px solid #334155", borderRadius: 12, padding: 18 };
+const eyebrowStyle = { color: "#38bdf8", fontWeight: 800, letterSpacing: 1 };
+const titleStyle = { margin: "8px 0" };
+const mutedStyle = { color: "#94a3b8" };
+const controlRowStyle = { display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginTop: 12 };
+const buttonRowStyle = { display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginTop: 12 };
+const labelStyle = { display: "grid", gap: 6, color: "#cbd5e1", fontSize: 13 };
+const inputStyle = { width: 110, padding: 10, borderRadius: 10, background: "#020617", color: "white", border: "1px solid #334155" };
+const primaryButtonStyle = { padding: "10px 12px", borderRadius: 10, border: 0, background: "#2563eb", color: "white", fontWeight: 800, cursor: "pointer" };
+const gridStyle = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 12, marginTop: 14 };
+const panelStyle = { border: "1px solid #1e293b", borderRadius: 12, padding: 12, background: "rgba(15,23,42,.75)" };
+const panelTitleStyle = { marginTop: 0 };
+const preStyle = { maxHeight: 320, overflow: "auto", color: "#cbd5e1", background: "#020617", padding: 12, borderRadius: 10, fontSize: 12 };
+const logLineStyle = { color: "#cbd5e1", fontSize: 13, padding: "3px 0" };
