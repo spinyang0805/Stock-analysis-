@@ -9,8 +9,7 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "vite": "latest",
+    "vite": "5.4.11",
     "react": "latest",
     "react-dom": "latest",
     "lucide-react": "latest",

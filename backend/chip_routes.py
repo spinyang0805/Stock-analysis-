@@ -238,7 +238,9 @@ def _install(app):
         if m.db is None:
             return _json({"status": "failed", "message": "Firebase not initialized", "next_offset": offset})
         products = _universe(m, product_type=product_type, market=market, limit=5000)
-        batch = products[offset:offset + limit]
+        requested_limit = max(1, int(limit or 1))
+        effective_limit = min(requested_limit, 5)
+        batch = products[offset:offset + effective_limit]
         written = 0
         errors = []
         for item in batch:
@@ -259,7 +261,9 @@ def _install(app):
             "analysis_collection": "chip_analysis",
             "universe_count": len(products),
             "offset": offset,
-            "limit": limit,
+            "limit": effective_limit,
+            "requested_limit": requested_limit,
+            "message": "Single request is capped at 5 stocks to avoid long browser requests and Firestore quota errors.",
             "processed": len(batch),
             "written_stocks": written,
             "error_count": len(errors),

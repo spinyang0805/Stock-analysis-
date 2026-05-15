@@ -1,7 +1,9 @@
 import { useState } from "react";
 
 const API = "https://stock-analysis-api-ihun.onrender.com";
-const PAGE_VERSION = "batch-v4-zh-tw";
+const PAGE_VERSION = "batch-v5-safe-chip-backfill";
+const SAFE_REQUEST_LIMIT = 5;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function BatchPage() {
   const [chipOffset, setChipOffset] = useState(0);
@@ -21,28 +23,58 @@ export default function BatchPage() {
   async function runChipCurrent() {
     if (chipBusy || chipDone) return;
     setChipBusy(true);
-    const path = `/api/chip/backfill_all?product_type=${encodeURIComponent(chipType)}&market=${encodeURIComponent(chipMarket)}&offset=${chipOffset}&limit=${chipLimit}`;
 
     try {
-      addChipLog(`開始籌碼批次回補，起始=${chipOffset}，批次=${chipLimit}`);
-      const res = await fetch(API + path);
-      const json = await res.json();
-      setChipResult(json);
+      const targetEnd = chipOffset + Number(chipLimit || SAFE_REQUEST_LIMIT);
+      let cursor = chipOffset;
+      let totalWritten = 0;
+      let totalProcessed = 0;
+      let latestJson = null;
+      addChipLog(`開始籌碼批次回補，目標 ${chipOffset} 到 ${targetEnd}，單次最多 ${SAFE_REQUEST_LIMIT} 檔`);
 
-      if (json.universe_count !== undefined) setChipTotal(Number(json.universe_count));
+      while (cursor < targetEnd) {
+        const requestLimit = Math.min(SAFE_REQUEST_LIMIT, targetEnd - cursor);
+        const path = `/api/chip/backfill_all?product_type=${encodeURIComponent(chipType)}&market=${encodeURIComponent(chipMarket)}&offset=${cursor}&limit=${requestLimit}`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 90000);
+        let json;
 
-      if (json.next_offset === null) {
-        setChipDone(true);
-        setChipOffset(Number(json.universe_count || chipOffset));
-        addChipLog(`籌碼回補完成，處理=${json.processed}，寫入=${json.written_stocks}`);
-      } else if (json.next_offset !== undefined) {
-        setChipOffset(Number(json.next_offset));
-        addChipLog(`本批完成，處理=${json.processed}，寫入=${json.written_stocks}，下一批=${json.next_offset}`);
-      } else {
-        addChipLog("後端未回傳下一批位置，請檢查 API 回應。");
+        try {
+          const res = await fetch(API + path, { signal: controller.signal, cache: "no-store" });
+          json = await res.json();
+          if (!res.ok) throw new Error(json?.detail || json?.error || `HTTP ${res.status}`);
+        } finally {
+          clearTimeout(timer);
+        }
+
+        latestJson = json;
+        setChipResult(json);
+        if (json.universe_count !== undefined) setChipTotal(Number(json.universe_count));
+
+        totalProcessed += Number(json.processed || 0);
+        totalWritten += Number(json.written_stocks || 0);
+        if (json.error_count) {
+          addChipLog(`本小批有 ${json.error_count} 筆錯誤，可能是 Firestore 暫時限流；已先停止，稍後可從 ${cursor} 重試。`);
+          break;
+        }
+
+        if (json.next_offset === null) {
+          setChipDone(true);
+          setChipOffset(Number(json.universe_count || cursor));
+          addChipLog(`籌碼回補完成，處理=${totalProcessed}，寫入=${totalWritten}`);
+          return;
+        }
+
+        cursor = Number(json.next_offset ?? (cursor + requestLimit));
+        setChipOffset(cursor);
+        addChipLog(`小批完成，累計處理=${totalProcessed}，寫入=${totalWritten}，下一批=${cursor}`);
+        await sleep(2500);
       }
+
+      setChipResult(latestJson || {});
+      addChipLog(`本輪完成，處理=${totalProcessed}，寫入=${totalWritten}，目前位置=${cursor}`);
     } catch (e) {
-      const msg = String(e.message || e);
+      const msg = e.name === "AbortError" ? "單次請求逾時，已停止本輪，請稍後從目前位置重試" : String(e.message || e);
       setChipResult({ error: msg });
       addChipLog(`執行失敗：${msg}`);
     } finally {
