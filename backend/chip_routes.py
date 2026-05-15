@@ -178,8 +178,8 @@ def _analyze_rows(rows):
 def _read_chip_rows(db, code, limit=20):
     rows = []
     try:
-        docs = db.collection("chip_daily").document(code).collection("data").order_by("date").limit(limit).stream()
-        rows = [d.to_dict() or {} for d in docs]
+        docs = db.collection("chip_daily").document(code).collection("data").order_by("date", direction="DESCENDING").limit(limit).stream()
+        rows = sorted([d.to_dict() or {} for d in docs], key=lambda x: str(x.get("date", "")))
     except Exception:
         try:
             docs = db.collection("chip_daily").document(code).collection("data").stream()

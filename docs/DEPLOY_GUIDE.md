@@ -143,7 +143,7 @@ Schedule:
 
 The workflow is also manually runnable through GitHub Actions `workflow_dispatch`.
 
-Current chip-history coverage is TWSE T86 plus TWSE margin/short data. TPEx chip history is not implemented yet.
+Current chip-history coverage is TWSE T86, TWSE margin/short, TPEx institutional dailyTrade, and TPEx margin/balance data.
 
 ## Batch Initialization
 

@@ -160,7 +160,7 @@ Daily document:
 
 Important: the current chip initialization route can generate mock/seed rows. Do not label those rows as real exchange data.
 
-Daily and historical real-data jobs write TWSE T86 and margin fields into the same documents:
+Daily and historical real-data jobs write TWSE/TPEx institutional and margin fields into the same documents:
 
 ```json
 {
@@ -175,6 +175,11 @@ Daily and historical real-data jobs write TWSE T86 and margin fields into the sa
   "source_margin": "TWSE MI_MARGN"
 }
 ```
+
+TPEx rows use:
+
+- `source_t86`: `TPEx insti/dailyTrade`
+- `source_margin`: `TPEx margin/balance`
 
 ## `chip_analysis`
 

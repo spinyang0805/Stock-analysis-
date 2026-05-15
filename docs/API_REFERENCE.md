@@ -316,6 +316,6 @@ Current coverage:
 
 - TWSE institutional T86 data.
 - TWSE margin/short balance data.
+- TPEx institutional dailyTrade data.
+- TPEx margin/balance data.
 - Writes real rows to `chip_daily`. `/api/chip/{stock}` analyzes the latest `chip_daily` rows on read.
-
-The existing TPEx chip history source is not implemented yet, so responses and job logs should be treated as TWSE coverage.

@@ -164,7 +164,7 @@ Chip routes write to:
 - `chip_daily`
 - `chip_analysis`
 
-Daily jobs also write real TWSE T86 and margin/short rows to `chip_daily`, so dashboard analysis and chip API reads use the same collection. Historical chip backfill currently covers TWSE data.
+Daily jobs also write real TWSE and TPEx institutional plus margin/short rows to `chip_daily`, so dashboard analysis and chip API reads use the same collection.
 
 ## Background Work
 

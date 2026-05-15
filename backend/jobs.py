@@ -16,6 +16,8 @@ TWSE_MARGIN = "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN"
 TWSE_STOCK_DAY = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
 TPEX_ALL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyCloseQuotes"
 TPEX_STOCK_DAY = "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"
+TPEX_INSTITUTIONAL = "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade"
+TPEX_MARGIN = "https://www.tpex.org.tw/www/zh-tw/margin/balance"
 
 HOT_STOCKS = ["2330", "2317", "3702", "2454", "2382"]
 
@@ -132,6 +134,16 @@ def _row_value(row, idx):
         return row[idx]
     except Exception:
         return None
+
+
+def _table_rows(payload):
+    if not isinstance(payload, dict):
+        return [], []
+    tables = payload.get("tables")
+    if isinstance(tables, list) and tables:
+        table = tables[0] or {}
+        return table.get("data", []) or [], table.get("fields", []) or []
+    return _rows(payload), _fields(payload)
 
 
 def latest_twse_daily_rows(max_lookback_days: int = 10):
@@ -358,16 +370,99 @@ def write_margin_chips(start_date: str, result: dict):
     return 0
 
 
+def _parse_tpex_insti_row(row):
+    if isinstance(row, str):
+        parts = row.split()
+    elif isinstance(row, list):
+        parts = [str(x) for x in row]
+    else:
+        return None, None
+    if len(parts) < 24:
+        return None, None
+    code = parts[0].strip()
+    name = parts[1].strip()
+    values = parts[2:]
+    return code, {
+        "market": "TPEx",
+        "name": name,
+        "foreign_buy": safe_int(values[8]) if len(values) > 8 else None,
+        "investment_trust_buy": safe_int(values[11]) if len(values) > 11 else None,
+        "dealer_buy": safe_int(values[20]) if len(values) > 20 else None,
+        "institution_total_buy": safe_int(values[23]) if len(values) > 23 else None,
+        "source_t86": "TPEx insti/dailyTrade",
+        "source": "TPEx insti/dailyTrade",
+    }
+
+
+def write_tpex_insti_chips(date_text: str, result: dict):
+    payload, err = fetch_json(TPEX_INSTITUTIONAL, params={"response": "json", "date": date_text, "sect": "AL", "type": "Daily"})
+    if err:
+        result["errors"].append(f"TPEx insti {date_text}: {err}")
+    rows, _ = _table_rows(payload)
+    if not rows:
+        return 0
+    written = 0
+    for row in rows:
+        try:
+            stock_id, payload_doc = _parse_tpex_insti_row(row)
+            if stock_id and save_chip_daily(stock_id, date_text, {**payload_doc, "chip_date": date_text}):
+                written += 1
+        except Exception as exc:
+            result["errors"].append(f"TPEx insti row {date_text}: {exc}")
+    result["tpex_chips"] = result.get("tpex_chips", 0) + written
+    result["tpex_t86_date"] = date_text
+    return written
+
+
+def write_tpex_margin_chips(date_text: str, result: dict):
+    payload, err = fetch_json(TPEX_MARGIN, params={"response": "json", "date": date_text})
+    if err:
+        result["errors"].append(f"TPEx margin {date_text}: {err}")
+    rows, fields = _table_rows(payload)
+    if not rows:
+        return 0
+    code_i = _idx(fields, "代號", default=0)
+    name_i = _idx(fields, "名稱", default=1)
+    margin_i = _idx(fields, "資餘額", default=6)
+    short_i = _idx(fields, "券餘額", default=14)
+    written = 0
+    for row in rows:
+        try:
+            stock_id = str(_row_value(row, code_i)).strip()
+            if not stock_id:
+                continue
+            payload_doc = {
+                "market": "TPEx",
+                "name": _row_value(row, name_i),
+                "margin": safe_int(_row_value(row, margin_i)),
+                "margin_balance": safe_int(_row_value(row, margin_i)),
+                "short": safe_int(_row_value(row, short_i)),
+                "short_balance": safe_int(_row_value(row, short_i)),
+                "source_margin": "TPEx margin/balance",
+                "source": "TPEx margin/balance",
+                "margin_date": date_text,
+            }
+            if save_chip_daily(stock_id, date_text, payload_doc):
+                written += 1
+        except Exception as exc:
+            result["errors"].append(f"TPEx margin row {date_text}: {exc}")
+    result["tpex_margin_rows"] = result.get("tpex_margin_rows", 0) + written
+    result["tpex_margin_date"] = date_text
+    return written
+
+
 def run_chip_history_backfill(months: int = 12, max_days: int = None, sleep_seconds: float = 0.25):
     days = int(max_days or max(20, months * 22))
     result = {
         "status": "running",
-        "coverage": "TWSE",
+        "coverage": "TWSE+TPEx",
         "months": months,
         "target_trading_days": days,
         "processed_dates": 0,
         "t86_written": 0,
         "margin_written": 0,
+        "tpex_t86_written": 0,
+        "tpex_margin_written": 0,
         "errors": [],
         "started_at": datetime.now().isoformat(),
     }
@@ -377,9 +472,13 @@ def run_chip_history_backfill(months: int = 12, max_days: int = None, sleep_seco
         per_day = {"chips": 0, "margin_rows": 0, "errors": []}
         t86_written = write_t86_chips(date_text, per_day)
         margin_written = write_margin_chips(date_text, per_day)
+        tpex_t86_written = write_tpex_insti_chips(date_text, per_day)
+        tpex_margin_written = write_tpex_margin_chips(date_text, per_day)
         result["processed_dates"] += 1
         result["t86_written"] += int(t86_written or 0)
         result["margin_written"] += int(margin_written or 0)
+        result["tpex_t86_written"] += int(tpex_t86_written or 0)
+        result["tpex_margin_written"] += int(tpex_margin_written or 0)
         if per_day.get("errors"):
             result["errors"].extend(per_day["errors"][-3:])
             result["errors"] = result["errors"][-100:]
@@ -443,7 +542,7 @@ def _parse_tpex_row(row, fields):
 
 def run_daily_update():
     requested_date = today_str()
-    result = {"requested_date": requested_date, "twse_date": None, "tpex_date": None, "t86_date": None, "margin_date": None, "stocks": 0, "chips": 0, "margin_rows": 0, "errors": []}
+    result = {"requested_date": requested_date, "twse_date": None, "tpex_date": None, "t86_date": None, "margin_date": None, "tpex_t86_date": None, "tpex_margin_date": None, "stocks": 0, "chips": 0, "margin_rows": 0, "tpex_chips": 0, "tpex_margin_rows": 0, "errors": []}
 
     twse_date, twse_rows, twse_fields, twse_errors = latest_twse_daily_rows()
     result["twse_date"] = twse_date
@@ -473,6 +572,8 @@ def run_daily_update():
 
     write_t86_chips(twse_date, result)
     write_margin_chips(twse_date, result)
+    write_tpex_insti_chips(tpex_date, result)
+    write_tpex_margin_chips(tpex_date, result)
 
     save_job_log("daily_update_" + requested_date, result)
     return result
