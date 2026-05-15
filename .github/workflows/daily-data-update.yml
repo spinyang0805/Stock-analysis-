@@ -1,0 +1,36 @@
+name: Daily data update
+
+on:
+  schedule:
+    # 18:30 Asia/Taipei. Runs after the regular Taiwan market close.
+    - cron: "30 10 * * 1-5"
+    # Weekly deeper one-year refresh, Sunday 19:00 Asia/Taipei.
+    - cron: "0 11 * * 0"
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Trigger daily stock and chip update
+        run: |
+          curl --fail --show-error --silent --max-time 120 \
+            "https://stock-analysis-api-ihun.onrender.com/api/job/daily"
+
+      - name: Keep recent chip history warm
+        run: |
+          curl --fail --show-error --silent --max-time 120 \
+            "https://stock-analysis-api-ihun.onrender.com/api/chip/backfill_history_all?months=1&max_days=22"
+
+      - name: Weekly one-year stock backfill
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 11 * * 0'
+        run: |
+          curl --fail --show-error --silent --max-time 120 \
+            "https://stock-analysis-api-ihun.onrender.com/api/job/backfill_all_yearly?product_type=all&market=all&months=12"
+
+      - name: Weekly one-year chip backfill
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 11 * * 0'
+        run: |
+          curl --fail --show-error --silent --max-time 120 \
+            "https://stock-analysis-api-ihun.onrender.com/api/chip/backfill_history_all?months=12"

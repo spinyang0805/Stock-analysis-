@@ -116,6 +116,12 @@ Parameters:
 | limit | 100 | batch size |
 | months | 12 | months to backfill |
 
+### GET `/api/job/backfill_all_yearly?product_type=all&market=all&months=12`
+
+Starts a background one-year stock history backfill for the full selected product universe.
+
+This endpoint is intended for scheduled weekly refreshes and manual maintenance actions.
+
 ## Cache
 
 ### GET `/api/cache/status/{stock}`
@@ -301,3 +307,15 @@ Response must include `next_offset`:
 ```
 
 Important: `/api/chip/backfill_all` must be declared before `/api/chip/{stock}` in FastAPI.
+
+### GET `/api/chip/backfill_history_all?months=12`
+
+Starts a background historical chip-data backfill.
+
+Current coverage:
+
+- TWSE institutional T86 data.
+- TWSE margin/short balance data.
+- Writes real rows to `chip_daily`. `/api/chip/{stock}` analyzes the latest `chip_daily` rows on read.
+
+The existing TPEx chip history source is not implemented yet, so responses and job logs should be treated as TWSE coverage.

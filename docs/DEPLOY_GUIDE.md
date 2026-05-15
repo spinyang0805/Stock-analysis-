@@ -128,6 +128,23 @@ GET https://stock-analysis-api-ihun.onrender.com/api/chip/2330
 https://stock-analysis-ya45.onrender.com?v=latest
 ```
 
+## Automatic Data Updates
+
+GitHub Actions workflow:
+
+```text
+.github/workflows/daily-data-update.yml
+```
+
+Schedule:
+
+- Monday-Friday 18:30 Asia/Taipei: calls `/api/job/daily` and warms recent chip history.
+- Sunday 19:00 Asia/Taipei: also calls `/api/job/backfill_all_yearly?product_type=all&market=all&months=12` and `/api/chip/backfill_history_all?months=12`.
+
+The workflow is also manually runnable through GitHub Actions `workflow_dispatch`.
+
+Current chip-history coverage is TWSE T86 plus TWSE margin/short data. TPEx chip history is not implemented yet.
+
 ## Batch Initialization
 
 Initialize product universe:
@@ -141,12 +158,14 @@ Backfill stock daily data:
 
 ```http
 GET /api/job/backfill_all?product_type=股票&market=上市&offset=0&limit=100&months=12
+GET /api/job/backfill_all_yearly?product_type=all&market=all&months=12
 ```
 
 Backfill chip data:
 
 ```http
 GET /api/chip/backfill_all?product_type=all&market=上市&offset=0&limit=100&days=20
+GET /api/chip/backfill_history_all?months=12
 ```
 
 Continue batch calls until `next_offset` is `null`.

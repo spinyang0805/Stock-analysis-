@@ -78,10 +78,10 @@ See [API Reference](API_REFERENCE.md) for details.
 | Health | `/` |
 | Products | `/api/search`, `/api/products`, `/api/products_fast` |
 | Firebase maintenance | `/api/firebase/test`, `/api/firebase/audit_all`, `/api/firebase/cleanup_all`, `/api/firebase/reset_all`, `/api/firebase/cleanup/{stock}` |
-| Jobs | `/api/job/daily`, `/api/job/preload`, `/api/job/backfill/{stock}`, `/api/job/backfill_all`, `/api/job/backfill_all_auto`, `/api/job/status/{job_id}` |
+| Jobs | `/api/job/daily`, `/api/job/preload`, `/api/job/backfill/{stock}`, `/api/job/backfill_all`, `/api/job/backfill_all_yearly`, `/api/job/backfill_all_auto`, `/api/job/status/{job_id}` |
 | Cache | `/api/cache/status/{stock}` |
 | Dashboard data | `/api/kline/{stock}`, `/api/analysis/{stock}`, `/api/dashboard/{stock}`, `/api/backtest/{stock}` |
-| Chip | `/api/chip/backfill_all`, `/api/chip/init/{stock}`, `/api/chip/{stock}` |
+| Chip | `/api/chip/backfill_all`, `/api/chip/backfill_history_all`, `/api/chip/init/{stock}`, `/api/chip/{stock}` |
 | Universe maintenance | `/api/init_universe`, `/api/init_universe_batch` |
 
 ## Kline Endpoint
@@ -163,6 +163,8 @@ Chip routes write to:
 
 - `chip_daily`
 - `chip_analysis`
+
+Daily jobs also write real TWSE T86 and margin/short rows to `chip_daily`, so dashboard analysis and chip API reads use the same collection. Historical chip backfill currently covers TWSE data.
 
 ## Background Work
 

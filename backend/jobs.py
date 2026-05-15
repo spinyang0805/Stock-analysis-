@@ -80,6 +80,16 @@ def back_dates_from(date_text: str, max_days: int = 10):
         yield (base - timedelta(days=i)).strftime("%Y%m%d")
 
 
+def recent_trading_dates(max_days: int = 260):
+    d = datetime.now()
+    dates = []
+    while len(dates) < max_days:
+        if d.weekday() < 5:
+            dates.append(d.strftime("%Y%m%d"))
+        d -= timedelta(days=1)
+    return dates
+
+
 def month_iter(months: int = 12):
     now = datetime.now()
     for i in range(months):
@@ -285,9 +295,13 @@ def write_t86_chips(start_date: str, result: dict):
                     "market": "TWSE",
                     "name": _row_value(row, name_i),
                     "foreign": safe_int(_row_value(row, foreign_i)),
+                    "foreign_buy": safe_int(_row_value(row, foreign_i)),
                     "investment_trust": safe_int(_row_value(row, trust_i)),
+                    "investment_trust_buy": safe_int(_row_value(row, trust_i)),
                     "dealer": safe_int(_row_value(row, dealer_i)),
+                    "dealer_buy": safe_int(_row_value(row, dealer_i)),
                     "source_t86": "TWSE T86",
+                    "source": "TWSE T86",
                     "chip_date": d,
                 }
                 if save_chip_daily(stock_id, d, payload_doc):
@@ -327,8 +341,11 @@ def write_margin_chips(start_date: str, result: dict):
                 payload_doc = {
                     "market": "TWSE",
                     "margin": safe_int(_row_value(row, margin_i)),
+                    "margin_balance": safe_int(_row_value(row, margin_i)),
                     "short": safe_int(_row_value(row, short_i)),
+                    "short_balance": safe_int(_row_value(row, short_i)),
                     "source_margin": "TWSE MI_MARGN",
+                    "source": "TWSE MI_MARGN",
                     "margin_date": d,
                 }
                 if save_chip_daily(stock_id, d, payload_doc):
@@ -339,6 +356,41 @@ def write_margin_chips(start_date: str, result: dict):
         result["margin_date"] = d
         return written
     return 0
+
+
+def run_chip_history_backfill(months: int = 12, max_days: int = None, sleep_seconds: float = 0.25):
+    days = int(max_days or max(20, months * 22))
+    result = {
+        "status": "running",
+        "coverage": "TWSE",
+        "months": months,
+        "target_trading_days": days,
+        "processed_dates": 0,
+        "t86_written": 0,
+        "margin_written": 0,
+        "errors": [],
+        "started_at": datetime.now().isoformat(),
+    }
+    save_job_log("chip_history_backfill_latest", result)
+
+    for date_text in recent_trading_dates(days):
+        per_day = {"chips": 0, "margin_rows": 0, "errors": []}
+        t86_written = write_t86_chips(date_text, per_day)
+        margin_written = write_margin_chips(date_text, per_day)
+        result["processed_dates"] += 1
+        result["t86_written"] += int(t86_written or 0)
+        result["margin_written"] += int(margin_written or 0)
+        if per_day.get("errors"):
+            result["errors"].extend(per_day["errors"][-3:])
+            result["errors"] = result["errors"][-100:]
+        if result["processed_dates"] % 5 == 0:
+            save_job_log("chip_history_backfill_latest", {**result, "updated_at": datetime.now().isoformat()})
+        time.sleep(sleep_seconds)
+
+    result["status"] = "done"
+    result["finished_at"] = datetime.now().isoformat()
+    save_job_log("chip_history_backfill_latest", result)
+    return result
 
 
 def _parse_twse_all_row(row, fields):

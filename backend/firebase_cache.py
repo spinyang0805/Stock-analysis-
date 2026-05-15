@@ -101,23 +101,35 @@ def save_chip_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
         print("Firebase not initialized")
         return False
     try:
-        parent_ref = db.collection("chip_data").document(stock_id)
+        normalized = dict(payload or {})
+        if "foreign_buy" not in normalized and "foreign" in normalized:
+            normalized["foreign_buy"] = normalized.get("foreign")
+        if "investment_trust_buy" not in normalized and "investment_trust" in normalized:
+            normalized["investment_trust_buy"] = normalized.get("investment_trust")
+        if "dealer_buy" not in normalized and "dealer" in normalized:
+            normalized["dealer_buy"] = normalized.get("dealer")
+        if "margin_balance" not in normalized and "margin" in normalized:
+            normalized["margin_balance"] = normalized.get("margin")
+        if "short_balance" not in normalized and "short" in normalized:
+            normalized["short_balance"] = normalized.get("short")
+        normalized.update({
+            "stock_id": stock_id,
+            "date": date,
+            "updated_at": now_tw(),
+        })
+
+        parent_ref = db.collection("chip_daily").document(stock_id)
         parent_ref.set({
             "stock_id": stock_id,
             "latest_date": date,
-            "latest": payload,
+            "latest": normalized,
             "updated_at": now_tw()
         }, merge=True)
-        parent_ref.collection("data").document(date).set({
-            "stock_id": stock_id,
-            "date": date,
-            "data": payload,
-            "updated_at": now_tw()
-        }, merge=True)
-        print(f"chip_data merge write: {stock_id} {date}")
+        parent_ref.collection("data").document(date).set(normalized, merge=True)
+        print(f"chip_daily merge write: {stock_id} {date}")
         return True
     except Exception as e:
-        print("chip_data error:", e)
+        print("chip_daily error:", e)
         return False
 
 
@@ -184,17 +196,19 @@ def get_valid_stock_daily_series(stock_id: str, limit: int = 260) -> List[Dict[s
 def get_latest_chip_daily(stock_id: str, limit: int = 30) -> Dict[str, Any]:
     if db is None:
         return {}
-    try:
-        docs = db.collection("chip_data").document(stock_id).collection("data").order_by("date", direction="DESCENDING").limit(limit).stream()
-        for doc in docs:
-            item = doc.to_dict()
-            payload = item.get("data", {}) or {}
-            if isinstance(payload, dict) and payload:
-                payload["date"] = item.get("date") or doc.id
-                payload["_doc_id"] = doc.id
-                return payload
-    except Exception as e:
-        print("latest chip read error:", e)
+    for collection in ["chip_daily", "chip_data"]:
+        try:
+            docs = db.collection(collection).document(stock_id).collection("data").order_by("date", direction="DESCENDING").limit(limit).stream()
+            for doc in docs:
+                item = doc.to_dict() or {}
+                payload = item.get("data", {}) if isinstance(item.get("data"), dict) else item
+                if isinstance(payload, dict) and payload:
+                    payload["date"] = payload.get("date") or item.get("date") or doc.id
+                    payload["_doc_id"] = doc.id
+                    payload["_collection"] = collection
+                    return payload
+        except Exception as e:
+            print(f"latest chip read error from {collection}:", e)
     return {}
 
 
@@ -282,7 +296,7 @@ def get_cache_status(stock_id: str):
         return {"firebase_enabled": False, "message": "Firebase not initialized"}
     try:
         daily_docs_raw = list(db.collection("stock_daily").document(stock_id).collection("data").order_by("date", direction="DESCENDING").limit(10).stream())
-        chip_docs_raw = list(db.collection("chip_data").document(stock_id).collection("data").order_by("date", direction="DESCENDING").limit(10).stream())
+        chip_docs_raw = list(db.collection("chip_daily").document(stock_id).collection("data").order_by("date", direction="DESCENDING").limit(10).stream())
         job_docs = list(db.collection("job_logs").limit(3).stream())
         daily_samples = _to_dicts(daily_docs_raw)
         chip_samples = _to_dicts(chip_docs_raw)
@@ -295,13 +309,13 @@ def get_cache_status(stock_id: str):
             "stock_daily_count": len(valid_daily_samples),
             "stock_daily_raw_sample_count": len(daily_samples),
             "stock_daily_invalid_sample_count": len(invalid_daily_samples),
-            "chip_data_count": len(chip_samples),
+            "chip_daily_count": len(chip_samples),
             "job_log_count": len(job_docs),
             "latest_valid_stock_daily": latest_valid,
             "latest_chip_daily": get_latest_chip_daily(stock_id),
             "stock_daily_samples": valid_daily_samples[:3],
             "invalid_stock_daily_samples": invalid_daily_samples[:3],
-            "chip_data_samples": chip_samples[:3]
+            "chip_daily_samples": chip_samples[:3]
         }
     except Exception as e:
         return {"firebase_enabled": False, "error": str(e)}

@@ -53,7 +53,9 @@ Database-related operations must live in `DatabaseMaintenancePage.jsx`:
 - `GET /api/init_universe_batch?offset={offset}&limit={limit}`
 - `GET /api/firebase/reset_all?product_type={type}&market={market}&offset={offset}&limit={limit}`
 - `GET /api/job/backfill_all?product_type={type}&market={market}&offset={offset}&limit={limit}&months={months}`
+- `GET /api/job/backfill_all_yearly?product_type={type}&market={market}&months=12`
 - `GET /api/job/daily`
+- `GET /api/chip/backfill_history_all?months=12`
 - `GET /api/kline/2330` smoke test
 
 `BatchPage.jsx` should not own product universe sync after this split. It should focus on chip-specific backfill through `/api/chip/backfill_all`.

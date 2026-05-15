@@ -62,6 +62,8 @@ flowchart TD
 - Route order matters for chip endpoints: `/api/chip/backfill_all` must be registered before `/api/chip/{stock}`.
 - Bump visible frontend version labels when making user-visible frontend changes.
 - Do not assume generated chip seed data is real TWSE/TPEX institutional data.
+- Real daily chip updates and chip history backfills write `chip_daily`; old `chip_data` is legacy only.
+- Scheduled updates live in `.github/workflows/daily-data-update.yml`.
 - Keep JSON responses UTF-8 and include `status` where possible.
 
 ## Known Code Areas

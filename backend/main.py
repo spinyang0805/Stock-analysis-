@@ -17,7 +17,7 @@ from firebase_cache import (
     get_valid_stock_daily_series,
     get_latest_chip_daily,
 )
-from jobs import run_daily_update, run_on_demand_backfill, preload_hot_stocks
+from jobs import run_daily_update, run_on_demand_backfill, preload_hot_stocks, run_chip_history_backfill
 from stock_list import get_all_products, search_products
 from perspective_engine import generate_perspective_cards
 from signal_engine import generate_signals, generate_trade_plan, backtest_strategy
@@ -383,6 +383,18 @@ def trigger_backfill_all(product_type: str = "股票", market: str = "上市", o
     universe = product_universe(product_type=product_type, market=market)
     batch = universe[offset:offset + limit]
     return start_thread(f"backfill-all-{offset}-{offset + len(batch)}", run_backfill_universe, batch, months)
+
+
+@app.get("/api/job/backfill_all_yearly")
+def trigger_backfill_all_yearly(product_type: str = "all", market: str = "all", months: int = 12):
+    universe = product_universe(product_type=product_type, market=market)
+    return start_thread(f"backfill-all-yearly-{len(universe)}", run_backfill_universe, universe, months)
+
+
+@app.get("/api/chip/backfill_history_all")
+def trigger_chip_history_backfill(months: int = 12, max_days: int = None):
+    days = int(max_days or max(20, months * 22))
+    return start_thread(f"chip-history-{days}d", run_chip_history_backfill, months, days)
 
 
 @app.get("/api/cache/status/{stock}")

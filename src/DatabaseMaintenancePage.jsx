@@ -171,6 +171,29 @@ export default function DatabaseMaintenancePage() {
     addLog("Clear-and-rebuild workflow complete.");
   }
 
+  async function runDailyUpdate() {
+    if (progress.running) return;
+    setProgress({ running: true, phase: "starting daily update", done: 0, total: 1 });
+    await call("/api/job/daily", "Daily stock and chip update");
+    setProgress({ running: false, phase: "daily update queued", done: 1, total: 1 });
+  }
+
+  async function runChipHistoryBackfill() {
+    if (progress.running) return;
+    if (!window.confirm("This will start a background TWSE chip history backfill for about one year. Continue?")) return;
+    setProgress({ running: true, phase: "starting chip history backfill", done: 0, total: 1 });
+    await call("/api/chip/backfill_history_all?months=12", "Backfill one year chip history");
+    setProgress({ running: false, phase: "chip history backfill queued", done: 1, total: 1 });
+  }
+
+  async function runStockYearlyBackfill() {
+    if (progress.running) return;
+    if (!window.confirm("This will start a background one-year stock history backfill for the selected universe. Continue?")) return;
+    setProgress({ running: true, phase: "starting yearly stock backfill", done: 0, total: 1 });
+    await call(`/api/job/backfill_all_yearly?${query}&months=12`, "Backfill one year stock history");
+    setProgress({ running: false, phase: "yearly stock backfill queued", done: 1, total: 1 });
+  }
+
   function resetUniverseState() {
     setUniverseOffset(0);
     setUniverseDone(false);
@@ -253,6 +276,9 @@ export default function DatabaseMaintenancePage() {
         <div style={buttonRowStyle}>
           <button style={dangerButtonStyle} disabled={progress.running} onClick={safeResetLoop}>Clear Selected Cache</button>
           <button style={successButtonStyle} disabled={progress.running} onClick={rebuildAll}>Clear And Rebuild</button>
+          <button style={primaryButtonStyle} disabled={progress.running} onClick={runDailyUpdate}>Daily Update Now</button>
+          <button style={primaryButtonStyle} disabled={progress.running} onClick={runStockYearlyBackfill}>Backfill 1Y Stock History</button>
+          <button style={primaryButtonStyle} disabled={progress.running} onClick={runChipHistoryBackfill}>Backfill 1Y Chip History</button>
           <button style={secondaryButtonStyle} onClick={() => call("/api/kline/2330", "Kline smoke test 2330")}>Smoke Test 2330</button>
         </div>
 
