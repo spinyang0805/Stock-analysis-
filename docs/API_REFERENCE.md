@@ -217,6 +217,41 @@ Main fields:
 - `data_rows`
 - `data_requirement`
 
+### GET `/api/ai/context/{stock}`
+
+Returns the deterministic JSON package that should be sent to the AI model after a stock lookup.
+
+Example:
+
+```http
+GET /api/ai/context/2330
+```
+
+Response shape:
+
+```json
+{
+  "schema_version":"ai_stock_context_v1",
+  "stock":"2330",
+  "data_coverage":{},
+  "market_data":{},
+  "technical":{},
+  "chip":{},
+  "ui_context":{},
+  "rule_engine":{"direction":"bullish","score":42,"confidence":80,"rule_cards":[]},
+  "missing_data":[],
+  "unavailable_decision_inputs":[],
+  "ai_prompt_template":"..."
+}
+```
+
+Notes:
+
+- This API is read-only and does not call the AI provider.
+- Send this JSON to the AI model with the prompt in `docs/AI_PROMPT.md`.
+- `data_coverage` confirms whether stock, chip, and credit data are available.
+- Missing large-holder/shareholder/maintenance-ratio inputs are listed and must not be inferred.
+
 ## Dashboard
 
 ### GET `/api/dashboard/{stock}`

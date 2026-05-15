@@ -189,6 +189,14 @@ def _read_chip_rows(db, code, limit=20):
     return rows
 
 
+def read_chip_rows(db, code, limit=20):
+    return _read_chip_rows(db, code, limit=limit)
+
+
+def analyze_chip_rows(rows):
+    return _analyze_rows(rows)
+
+
 def _write_chip_rows(db, code, rows):
     latest = rows[-1] if rows else {}
     analysis = _analyze_rows(rows)

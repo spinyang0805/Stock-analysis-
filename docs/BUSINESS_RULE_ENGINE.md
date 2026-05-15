@@ -13,6 +13,7 @@ This document describes how the backend converts stock rows and chip rows into s
 | Trade plan | `backend/signal_engine.py` | `generate_trade_plan` |
 | Backtest | `backend/signal_engine.py` | `backtest_strategy` |
 | Chip score | `backend/chip_routes.py` | `_analyze_rows` |
+| AI rule context | `backend/rule_engine.py` | `build_ai_rule_context` |
 
 ## Data Inputs
 
@@ -184,6 +185,39 @@ Keep these outputs stable for the frontend:
 - Prefer additive fields over renaming fields.
 - Keep signal levels simple, such as `bullish`, `bearish`, `warning`, `neutral`.
 - Include enough context for the UI to show human-readable reasons.
+
+## AI Rule Context
+
+`GET /api/ai/context/{stock}` builds a deterministic JSON package for AI analysis.
+
+It combines:
+
+- `stock_daily` kline rows and indicators.
+- `chip_daily` recent rows and chip metrics.
+- Existing perspective cards, signals, and trade plan.
+- Data availability checks.
+- Deterministic rule cards.
+- Missing data warnings.
+- `ai_prompt_template` for the AI model.
+
+The endpoint is intentionally read-only. It does not call Groq or any AI provider directly; the caller should fetch this JSON and send it to the AI model with the prompt in `docs/AI_PROMPT.md`.
+
+Data that can currently be judged:
+
+| Area | Available |
+|---|---|
+| MA trend, RSI, MACD, Bollinger, volume-price | yes, from `stock_daily` |
+| Prior 20-day high/low breakout | yes, from `stock_daily` |
+| Institutional 1D/5D/10D buy-sell | yes, from `chip_daily` |
+| Margin balance, short balance, short/margin ratio | yes, from `chip_daily` when the daily job has written margin data |
+| Short squeeze watch | yes, if short/margin ratio and price history exist |
+
+Data that is not currently in Firestore and must not be inferred:
+
+- 400-lot large holder ratio.
+- Shareholder concentration.
+- Retail shareholder count.
+- Margin maintenance ratio.
 
 ## Backtest
 

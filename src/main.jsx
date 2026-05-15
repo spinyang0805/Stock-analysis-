@@ -7,10 +7,10 @@ import BatchPage from './BatchPage.jsx'
 import DatabaseMaintenancePage from './DatabaseMaintenancePage.jsx'
 
 const tabs = [
-  { id: 'dashboard', label: 'Dashboard', component: App },
-  { id: 'chip-batch', label: 'Chip Batch', component: BatchPage },
-  { id: 'database', label: 'Database Maintenance', component: DatabaseMaintenancePage },
-  { id: 'system', label: 'System Control', component: SystemControlPanel },
+  { id: 'dashboard', label: '股票分析', component: App },
+  { id: 'chip-batch', label: '籌碼批次', component: BatchPage },
+  { id: 'database', label: '資料庫維護', component: DatabaseMaintenancePage },
+  { id: 'system', label: '系統控制', component: SystemControlPanel },
 ]
 
 function RootShell() {
@@ -19,7 +19,7 @@ function RootShell() {
 
   return (
     <div style={shellStyle}>
-      <nav style={navStyle} aria-label="Application sections">
+      <nav style={navStyle} aria-label="系統功能頁籤">
         {tabs.map((tab) => {
           const active = tab.id === activeTab
           return (

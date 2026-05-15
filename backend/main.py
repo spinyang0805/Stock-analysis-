@@ -20,7 +20,9 @@ from firebase_cache import (
 from jobs import run_daily_update, run_on_demand_backfill, preload_hot_stocks, run_chip_history_backfill
 from stock_list import get_all_products, search_products
 from perspective_engine import generate_perspective_cards
+from rule_engine import build_ai_rule_context
 from signal_engine import generate_signals, generate_trade_plan, backtest_strategy
+from chip_routes import analyze_chip_rows, read_chip_rows
 
 try:
     from dashboard_service import fetch_realtime_board, fetch_institutional, fetch_margin, analyze_dashboard
@@ -234,6 +236,17 @@ def enrich_analysis_payload(result, code, df, source, chip, backfill_started=Fal
     return result, data
 
 
+def get_chip_context(code: str, limit: int = 60):
+    rows = []
+    if db is not None:
+        rows = read_chip_rows(db, code, limit=limit)
+    analysis = analyze_chip_rows(rows)
+    latest = rows[-1] if rows else (get_latest_chip_daily(code) or {})
+    metrics = analysis.get("metrics") if isinstance(analysis, dict) else {}
+    chip_for_rules = {**(latest or {}), **(metrics or {})}
+    return rows, analysis, chip_for_rules
+
+
 def product_universe(product_type: str = "股票", market: str = "all"):
     items = []
     for item in get_all_products():
@@ -429,7 +442,7 @@ def kline(stock: str):
 def analysis(stock: str):
     code = normalize_stock(stock)
     df, _, source, backfill_started = ensure_analysis_history(code)
-    chip = get_latest_chip_daily(code) or {}
+    _, _, chip = get_chip_context(code)
     result = build_rule_based_analysis(df, code)
     result, _ = enrich_analysis_payload(result, code, df, source, chip, backfill_started)
     return JSONResponse(result, media_type="application/json; charset=utf-8")
@@ -440,7 +453,7 @@ def dashboard(stock: str):
     code = normalize_stock(stock)
     df, _, source, backfill_started = ensure_analysis_history(code)
     kline_data = to_kline_payload(df)
-    chip = get_latest_chip_daily(code) or {}
+    chip_rows, chip_analysis, chip = get_chip_context(code)
     analysis_result = build_rule_based_analysis(df, code)
     analysis_result, kline_data = enrich_analysis_payload(analysis_result, code, df, source, chip, backfill_started)
     basic = build_meta(code, kline_data, source)
@@ -448,7 +461,30 @@ def dashboard(stock: str):
     inst = fetch_institutional(code) if fetch_institutional else {}
     margin = fetch_margin(code) if fetch_margin else {}
     board = analyze_dashboard(code, kline_data, analysis_result, realtime, inst, margin) if analyze_dashboard else {}
-    return JSONResponse({"basic": {**basic, **(realtime or {})}, "kline": kline_data, "analysis": analysis_result, "dashboard": board, "chip": chip, "source": source, "backfill_started": backfill_started}, media_type="application/json; charset=utf-8")
+    return JSONResponse({"basic": {**basic, **(realtime or {})}, "kline": kline_data, "analysis": analysis_result, "dashboard": board, "chip": {"latest_chip": chip_rows[-1] if chip_rows else chip, "rows": chip_rows[-20:], "row_count": len(chip_rows), "analysis": chip_analysis}, "source": source, "backfill_started": backfill_started}, media_type="application/json; charset=utf-8")
+
+
+@app.get("/api/ai/context/{stock}")
+def ai_context(stock: str):
+    code = normalize_stock(stock)
+    df, _, source, backfill_started = ensure_analysis_history(code)
+    chip_rows, chip_analysis, chip = get_chip_context(code, limit=80)
+    result = build_rule_based_analysis(df, code)
+    result, kline_data = enrich_analysis_payload(result, code, df, source, chip, backfill_started)
+    meta = build_meta(code, kline_data, source)
+    context = build_ai_rule_context(
+        stock=code,
+        meta=meta,
+        kline=kline_data,
+        analysis=result,
+        perspective_cards=result.get("perspective_cards") or [],
+        signals=result.get("signals") or {},
+        trade_plan=result.get("trade_plan") or {},
+        chip_rows=chip_rows,
+        chip_analysis=chip_analysis,
+        source=source,
+    )
+    return JSONResponse(context, media_type="application/json; charset=utf-8")
 
 
 @app.get("/api/backtest/{stock}")

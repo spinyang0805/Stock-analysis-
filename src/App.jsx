@@ -7,7 +7,7 @@ const RAW_API = import.meta.env.VITE_API_BASE_URL || DEFAULT_API;
 const API = String(RAW_API).includes("stock-analysis-api-ihun") ? String(RAW_API).replace(/\/$/, "") : DEFAULT_API;
 const APP_VERSION = "v16";
 const BUILD_LABEL = "2026-05-14 21:45";
-const COMMIT_LABEL = "multi-kline-schema";
+const COMMIT_LABEL = "chip-card-ui";
 
 const STOCKS = [
   { code: "2330", name: "台積電", market: "上市", industry: "半導體" },
@@ -107,6 +107,22 @@ function Card({ title, children }) {
 function Row({ label, value }) {
   return <div style={{ display: "flex", justifyContent: "space-between", gap: 12, borderBottom: "1px solid rgba(148,163,184,.16)", padding: "6px 0" }}><span style={{ color: "#94a3b8" }}>{label}</span><b>{value}</b></div>;
 }
+function levelColor(level) {
+  if (["strong_bullish", "bullish"].includes(level)) return "#22c55e";
+  if (["bearish", "warning"].includes(level)) return "#f59e0b";
+  if (["strong_bearish"].includes(level)) return "#ef4444";
+  return "#94a3b8";
+}
+function MiniCard({ card }) {
+  return <div style={{ border: `1px solid ${levelColor(card?.level)}66`, background: "#020617", borderRadius: 12, padding: 12 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+      <b>{card?.title || card?.category || "Card"}</b>
+      <span style={{ color: levelColor(card?.level), fontWeight: 800 }}>{card?.status || card?.level || "--"}</span>
+    </div>
+    <p style={{ color: "#cbd5e1", margin: "8px 0 0", lineHeight: 1.45 }}>{card?.meaning || "--"}</p>
+    {card?.logic && <div style={{ color: "#64748b", fontSize: 12, marginTop: 8 }}>{card.logic}</div>}
+  </div>;
+}
 
 export default function App() {
   const priceRef = useRef(null);
@@ -121,6 +137,7 @@ export default function App() {
   const [payload, setPayload] = useState(null);
   const [rows, setRows] = useState([]);
   const [analysis, setAnalysis] = useState(null);
+  const [chip, setChip] = useState(null);
   const [status, setStatus] = useState("初始化中");
   const [showMA, setShowMA] = useState(true);
   const [showBB, setShowBB] = useState(true);
@@ -178,6 +195,8 @@ export default function App() {
       setStatus(`讀取 ${code} K線中... API=${API}`);
       setRows([]);
       setPayload(null);
+      setAnalysis(null);
+      setChip(null);
       try {
         const kUrl = `${API}/api/kline/${code}`;
         const kRes = await fetch(kUrl, { cache: "no-store" });
@@ -192,6 +211,10 @@ export default function App() {
         fetch(`${API}/api/analysis/${code}`, { cache: "no-store" })
           .then((r) => r.ok ? r.json() : null)
           .then((j) => { if (alive) setAnalysis(j); })
+          .catch(() => {});
+        fetch(`${API}/api/chip/${code}?auto_init=false`, { cache: "no-store" })
+          .then((r) => r.ok ? r.json() : null)
+          .then((j) => { if (alive) setChip(j); })
           .catch(() => {});
       } catch (e) {
         if (alive) setStatus(`讀取失敗：${e.message}（${APP_VERSION}）`);
@@ -212,6 +235,11 @@ export default function App() {
   const latest = rows.at(-1) || {};
   const rawRows = pickRows(payload).length;
   const pc = Number(meta.change || 0) >= 0 ? "#22c55e" : "#ef4444";
+  const perspectiveCards = Array.isArray(analysis?.perspective_cards) ? analysis.perspective_cards : [];
+  const chipPerspective = perspectiveCards.find((x) => x.category === "chip");
+  const chipAnalysis = chip?.analysis || {};
+  const chipLatest = chip?.latest_chip || {};
+  const chipMetrics = chipAnalysis.metrics || {};
 
   return <div style={{ minHeight: "100vh", background: "#020617", color: "white", fontFamily: "Arial, sans-serif" }}>
     <header style={{ padding: 24, borderBottom: "1px solid #1e293b", background: "#0f172a" }}>
@@ -244,6 +272,32 @@ export default function App() {
       <aside style={{ display: "grid", gap: 12, alignContent: "start" }}>
         <Card title="資料狀態"><Row label="版本" value={APP_VERSION} /><Row label="API" value={API} /><Row label="Raw筆數" value={rawRows} /><Row label="K線筆數" value={rows.length} /><Row label="API狀態" value={payload?.status || "--"} /><Row label="資料日期" value={meta.data_date || latest.date || "--"} /></Card>
         <Card title="Decision Score"><div style={{ fontSize: 46, color: Number(analysis?.score || 0) <= -15 ? "#ef4444" : "#22c55e", fontWeight: 900 }}>{analysis?.score ?? "--"}</div><b>{analysis?.trend || "等待分析"}</b><p style={{ color: "#94a3b8" }}>{analysis?.summary || "K線資料載入後會顯示分析結果。"}</p></Card>
+        <Card title="籌碼卡片">
+          {chipPerspective ? <MiniCard card={chipPerspective} /> : <p style={{ color: "#94a3b8" }}>尚未取得籌碼觀點卡。</p>}
+          <div style={{ marginTop: 12 }}>
+            <Row label="籌碼分數" value={chipAnalysis.score ?? "--"} />
+            <Row label="籌碼狀態" value={chipAnalysis.status || "--"} />
+            <Row label="資料日期" value={chipLatest.date || chipLatest.chip_date || chipLatest.margin_date || "--"} />
+            <Row label="來源" value={chipLatest.source || chipLatest.source_t86 || chipLatest.source_margin || chipLatest._collection || "--"} />
+            <Row label="筆數" value={chip?.row_count ?? "--"} />
+          </div>
+          {Array.isArray(chipAnalysis.reasons) && chipAnalysis.reasons.length > 0 && <div style={{ marginTop: 10, color: "#cbd5e1", fontSize: 13 }}>
+            {chipAnalysis.reasons.slice(0, 3).map((reason, index) => <div key={index} style={{ padding: "3px 0" }}>• {reason}</div>)}
+          </div>}
+        </Card>
+        <Card title="法人 / 信用">
+          <Row label="外資近5日" value={fmt(chipMetrics.foreign_5d_sum, 0)} />
+          <Row label="投信近5日" value={fmt(chipMetrics.investment_trust_5d_sum, 0)} />
+          <Row label="自營商近5日" value={fmt(chipMetrics.dealer_5d_sum, 0)} />
+          <Row label="融資餘額" value={fmt(chipMetrics.margin_balance ?? chipLatest.margin_balance, 0)} />
+          <Row label="融券餘額" value={fmt(chipMetrics.short_balance ?? chipLatest.short_balance, 0)} />
+          <Row label="券資比" value={`${fmt(chipMetrics.short_margin_ratio, 2)}%`} />
+        </Card>
+        {perspectiveCards.length > 0 && <Card title="五面向觀點">
+          <div style={{ display: "grid", gap: 10 }}>
+            {perspectiveCards.filter((x) => x.category !== "chip").map((card, index) => <MiniCard key={`${card.category}-${index}`} card={card} />)}
+          </div>
+        </Card>}
         <Card title="技術指標"><Row label="MA5" value={fmt(latest.ma5)} /><Row label="MA20" value={fmt(latest.ma20)} /><Row label="MA60" value={fmt(latest.ma60)} /><Row label="RSI14" value={fmt(latest.rsi14)} /><Row label="MACD" value={fmt(latest.macd)} /></Card>
       </aside>
     </main>

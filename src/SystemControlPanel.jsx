@@ -14,16 +14,16 @@ export default function SystemControlPanel() {
 
   async function call(path, label) {
     setBusy(true);
-    addLog(`Start: ${label}`);
+    addLog(`開始：${label}`);
     try {
       const res = await fetch(API + path);
       const json = await res.json();
       setResult(json);
-      addLog(`Done: ${label}`);
+      addLog(`完成：${label}`);
     } catch (e) {
       const message = String(e.message || e);
       setResult({ error: message });
-      addLog(`Failed: ${label} - ${message}`);
+      addLog(`失敗：${label} - ${message}`);
     } finally {
       setBusy(false);
     }
@@ -32,39 +32,39 @@ export default function SystemControlPanel() {
   return (
     <section style={pageStyle}>
       <div style={boxStyle}>
-        <div style={eyebrowStyle}>SYSTEM CONTROL</div>
-        <h2 style={titleStyle}>Read-Only Operations</h2>
-        <p style={mutedStyle}>Destructive database reset and rebuild workflows were moved to the Database Maintenance tab.</p>
+        <div style={eyebrowStyle}>系統控制</div>
+        <h2 style={titleStyle}>唯讀系統檢查</h2>
+        <p style={mutedStyle}>會清除或重建資料庫的功能已移到「資料庫維護」頁籤。</p>
 
         <div style={buttonRowStyle}>
-          <button disabled={busy} onClick={() => call("/", "API health")} style={primaryButtonStyle}>API Health</button>
-          <button disabled={busy} onClick={() => call("/api/firebase/test", "Firebase health")} style={primaryButtonStyle}>Firebase Health</button>
-          <button disabled={busy} onClick={() => call(`/api/cache/status/${encodeURIComponent(stock)}`, `Cache status ${stock}`)} style={primaryButtonStyle}>Cache Status</button>
-          <button disabled={busy} onClick={() => call(`/api/firebase/audit_all?limit_stocks=${auditStocks}&limit_per_stock=${auditRows}`, "Audit stock_daily")} style={primaryButtonStyle}>Audit stock_daily</button>
+          <button disabled={busy} onClick={() => call("/", "API 健康檢查")} style={primaryButtonStyle}>API 健康檢查</button>
+          <button disabled={busy} onClick={() => call("/api/firebase/test", "Firebase 連線檢查")} style={primaryButtonStyle}>Firebase 連線檢查</button>
+          <button disabled={busy} onClick={() => call(`/api/cache/status/${encodeURIComponent(stock)}`, `${stock} 快取狀態`)} style={primaryButtonStyle}>快取狀態</button>
+          <button disabled={busy} onClick={() => call(`/api/firebase/audit_all?limit_stocks=${auditStocks}&limit_per_stock=${auditRows}`, "stock_daily 資料稽核")} style={primaryButtonStyle}>stock_daily 資料稽核</button>
         </div>
 
         <div style={controlRowStyle}>
           <label style={labelStyle}>
-            Stock
+            股票代號
             <input value={stock} onChange={(e) => setStock(e.target.value)} style={inputStyle} />
           </label>
           <label style={labelStyle}>
-            Audit stocks
+            稽核股票數
             <input type="number" value={auditStocks} onChange={(e) => setAuditStocks(Number(e.target.value || 500))} style={inputStyle} />
           </label>
           <label style={labelStyle}>
-            Rows per stock
+            每檔檢查筆數
             <input type="number" value={auditRows} onChange={(e) => setAuditRows(Number(e.target.value || 30))} style={inputStyle} />
           </label>
         </div>
 
         <div style={gridStyle}>
           <div style={panelStyle}>
-            <h3 style={panelTitleStyle}>API Response</h3>
+            <h3 style={panelTitleStyle}>API 回應</h3>
             <pre style={preStyle}>{JSON.stringify(result || {}, null, 2)}</pre>
           </div>
           <div style={panelStyle}>
-            <h3 style={panelTitleStyle}>Log</h3>
+            <h3 style={panelTitleStyle}>操作紀錄</h3>
             {log.map((x, i) => (
               <div key={i} style={logLineStyle}>{x}</div>
             ))}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 const API = "https://stock-analysis-api-ihun.onrender.com";
-const PAGE_VERSION = "batch-v3-chip-only";
+const PAGE_VERSION = "batch-v4-zh-tw";
 
 export default function BatchPage() {
   const [chipOffset, setChipOffset] = useState(0);
@@ -24,7 +24,7 @@ export default function BatchPage() {
     const path = `/api/chip/backfill_all?product_type=${encodeURIComponent(chipType)}&market=${encodeURIComponent(chipMarket)}&offset=${chipOffset}&limit=${chipLimit}`;
 
     try {
-      addChipLog(`Starting chip backfill offset=${chipOffset}, limit=${chipLimit}`);
+      addChipLog(`開始籌碼批次回補，起始=${chipOffset}，批次=${chipLimit}`);
       const res = await fetch(API + path);
       const json = await res.json();
       setChipResult(json);
@@ -34,17 +34,17 @@ export default function BatchPage() {
       if (json.next_offset === null) {
         setChipDone(true);
         setChipOffset(Number(json.universe_count || chipOffset));
-        addChipLog(`Chip backfill complete. processed=${json.processed}, written=${json.written_stocks}`);
+        addChipLog(`籌碼回補完成，處理=${json.processed}，寫入=${json.written_stocks}`);
       } else if (json.next_offset !== undefined) {
         setChipOffset(Number(json.next_offset));
-        addChipLog(`Batch complete. processed=${json.processed}, written=${json.written_stocks}, next=${json.next_offset}`);
+        addChipLog(`本批完成，處理=${json.processed}，寫入=${json.written_stocks}，下一批=${json.next_offset}`);
       } else {
-        addChipLog("Batch returned without next_offset.");
+        addChipLog("後端未回傳下一批位置，請檢查 API 回應。");
       }
     } catch (e) {
       const msg = String(e.message || e);
       setChipResult({ error: msg });
-      addChipLog(`Failed: ${msg}`);
+      addChipLog(`執行失敗：${msg}`);
     } finally {
       setChipBusy(false);
     }
@@ -61,64 +61,64 @@ export default function BatchPage() {
   return (
     <div style={pageStyle}>
       <div style={headerStyle}>
-        <div style={eyebrowStyle}>BATCH TOOL</div>
-        <h2 style={titleStyle}>Chip Data Backfill</h2>
+        <div style={eyebrowStyle}>批次工具</div>
+        <h2 style={titleStyle}>籌碼資料回補</h2>
         <div style={mutedStyle}>{PAGE_VERSION}</div>
       </div>
 
       <section style={boxStyle}>
-        <h3 style={sectionTitleStyle}>chip_daily Backfill</h3>
+        <h3 style={sectionTitleStyle}>chip_daily 批次回補</h3>
         <p style={mutedStyle}>
-          Current: {chipOffset} / {chipTotal || "?"} {chipDone ? "done" : ""}
+          目前進度：{chipOffset} / {chipTotal || "?"} {chipDone ? "已完成" : ""}
         </p>
 
         <div style={controlRowStyle}>
           <label style={labelStyle}>
-            Market
+            市場
             <select value={chipMarket} onChange={(e) => setChipMarket(e.target.value)} style={fieldStyle}>
               <option value="上市">上市</option>
               <option value="上櫃">上櫃</option>
-              <option value="all">all</option>
+              <option value="all">全部</option>
             </select>
           </label>
 
           <label style={labelStyle}>
-            Type
+            商品類型
             <select value={chipType} onChange={(e) => setChipType(e.target.value)} style={fieldStyle}>
-              <option value="all">all</option>
+              <option value="all">全部</option>
               <option value="股票">股票</option>
               <option value="ETF">ETF</option>
-              <option value="高股息ETF">高股息ETF</option>
+              <option value="高股息ETF">高股息 ETF</option>
             </select>
           </label>
 
           <label style={labelStyle}>
-            Offset
+            起始位置
             <input value={chipOffset} onChange={(e) => setChipOffset(Number(e.target.value || 0))} style={inputStyle} />
           </label>
 
           <label style={labelStyle}>
-            Limit
+            批次筆數
             <input value={chipLimit} onChange={(e) => setChipLimit(Number(e.target.value || 100))} style={inputStyle} />
           </label>
         </div>
 
         <div style={buttonRowStyle}>
           <button disabled={chipBusy || chipDone} onClick={runChipCurrent} style={primaryButtonStyle}>
-            {chipBusy ? "Running..." : chipDone ? "Done" : `Run chip offset=${chipOffset}`}
+            {chipBusy ? "執行中..." : chipDone ? "已完成" : `執行本批：${chipOffset}`}
           </button>
           <button disabled={chipBusy} onClick={resetChip} style={secondaryButtonStyle}>
-            Reset
+            重設狀態
           </button>
         </div>
 
         <div style={gridStyle}>
           <div style={panelStyle}>
-            <h3 style={panelTitleStyle}>API Response</h3>
+            <h3 style={panelTitleStyle}>API 回應</h3>
             <pre style={preStyle}>{JSON.stringify(chipResult || {}, null, 2)}</pre>
           </div>
           <div style={panelStyle}>
-            <h3 style={panelTitleStyle}>Log</h3>
+            <h3 style={panelTitleStyle}>操作紀錄</h3>
             {chipLogs.map((x, i) => (
               <div key={i} style={logLineStyle}>{x}</div>
             ))}

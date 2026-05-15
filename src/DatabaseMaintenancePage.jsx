@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 const API = "https://stock-analysis-api-ihun.onrender.com";
-const PAGE_VERSION = "db-maintenance-v1";
+const PAGE_VERSION = "db-maintenance-v2-zh-tw";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function DatabaseMaintenancePage() {
@@ -14,7 +14,7 @@ export default function DatabaseMaintenancePage() {
 
   const [job, setJob] = useState(null);
   const [log, setLog] = useState([]);
-  const [progress, setProgress] = useState({ running: false, phase: "idle", done: 0, total: 0 });
+  const [progress, setProgress] = useState({ running: false, phase: "待命", done: 0, total: 0 });
   const [batchSize, setBatchSize] = useState(20);
   const [delaySeconds, setDelaySeconds] = useState(30);
   const [retrySeconds, setRetrySeconds] = useState(30);
@@ -41,15 +41,15 @@ export default function DatabaseMaintenancePage() {
   }
 
   async function call(path, label, timeoutMs = 25000) {
-    addLog(`Start: ${label}`);
+    addLog(`開始：${label}`);
     try {
       const data = await api(path, timeoutMs);
-      addLog(`Done: ${label}`);
+      addLog(`完成：${label}`);
       return data;
     } catch (e) {
-      const message = e.name === "AbortError" ? "Request timed out" : e.message;
+      const message = e.name === "AbortError" ? "請求逾時" : e.message;
       setJob({ error: message });
-      addLog(`Failed: ${label} - ${message}`);
+      addLog(`失敗：${label} - ${message}`);
       return null;
     }
   }
@@ -76,122 +76,122 @@ export default function DatabaseMaintenancePage() {
   }
 
   async function getProductTotal() {
-    const productResult = await call(`/api/products?${query}&limit=5000`, "Load product universe", 120000);
+    const productResult = await call(`/api/products?${query}&limit=5000`, "讀取商品清單", 120000);
     return Number(productResult?.count || 0);
   }
 
   async function safeResetLoop() {
     if (progress.running) return;
-    if (!window.confirm("This will clear stock_daily and analysis_cache for the selected universe. Continue?")) return;
+    if (!window.confirm("這會清除所選商品的 stock_daily 與 analysis_cache。確定繼續？")) return;
 
-    setProgress({ running: true, phase: "loading universe", done: 0, total: 0 });
+    setProgress({ running: true, phase: "讀取商品清單", done: 0, total: 0 });
     const total = await getProductTotal();
     if (!total) {
-      setProgress({ running: false, phase: "failed: no products", done: 0, total: 0 });
+      setProgress({ running: false, phase: "失敗：沒有商品資料", done: 0, total: 0 });
       return;
     }
 
-    setProgress({ running: true, phase: "clearing database", done: 0, total });
-    addLog(`Clearing ${total} products with batch=${batchSize}, delay=${delaySeconds}s, retry=${retrySeconds}s`);
+    setProgress({ running: true, phase: "清除資料庫快取", done: 0, total });
+    addLog(`開始清除 ${total} 檔商品，批次=${batchSize}，間隔=${delaySeconds}秒，重試=${retrySeconds}秒`);
 
     for (let offset = 0; offset < total; offset += batchSize) {
-      const label = `Clear offset=${offset} to ${Math.min(offset + batchSize, total)}`;
+      const label = `清除 ${offset} 到 ${Math.min(offset + batchSize, total)}`;
       let ok = false;
       while (!ok) {
         const data = await call(`/api/firebase/reset_all?${query}&offset=${offset}&limit=${batchSize}`, label);
         if (data) {
           ok = true;
           const done = Math.min(offset + batchSize, total);
-          setProgress({ running: true, phase: "clearing database", done, total });
+          setProgress({ running: true, phase: "清除資料庫快取", done, total });
           if (data.next_offset === null) {
-            setProgress({ running: false, phase: "clear complete", done, total });
-            addLog("Backend returned next_offset=null. Clear complete.");
+            setProgress({ running: false, phase: "清除完成", done, total });
+            addLog("後端回傳 next_offset=null，清除完成。");
             return;
           }
           await sleep(delaySeconds * 1000);
         } else {
-          addLog(`Retry in ${retrySeconds}s`);
+          addLog(`${retrySeconds} 秒後重試`);
           await sleep(retrySeconds * 1000);
         }
       }
     }
 
-    setProgress({ running: false, phase: "clear complete", done: total, total });
-    addLog("Clear complete.");
+    setProgress({ running: false, phase: "清除完成", done: total, total });
+    addLog("清除完成。");
   }
 
   async function rebuildAll() {
     if (progress.running) return;
-    if (!window.confirm("This will clear selected data, then backfill stock_daily. Continue?")) return;
+    if (!window.confirm("這會先清除所選資料，再回補 stock_daily。確定繼續？")) return;
 
-    setProgress({ running: true, phase: "loading universe", done: 0, total: 0 });
-    addLog("Starting clear-and-rebuild workflow.");
+    setProgress({ running: true, phase: "讀取商品清單", done: 0, total: 0 });
+    addLog("開始清除並重建流程。");
 
     const total = await getProductTotal();
     if (!total) {
-      setProgress({ running: false, phase: "failed: no products", done: 0, total: 0 });
+      setProgress({ running: false, phase: "失敗：沒有商品資料", done: 0, total: 0 });
       return;
     }
 
-    setProgress({ running: true, phase: "clearing database", done: 0, total });
+    setProgress({ running: true, phase: "清除資料庫快取", done: 0, total });
     for (let offset = 0; offset < total; offset += batchSize) {
       let ok = false;
       while (!ok) {
-        const data = await call(`/api/firebase/reset_all?${query}&offset=${offset}&limit=${batchSize}`, `Clear ${offset}-${Math.min(offset + batchSize, total)}`);
+        const data = await call(`/api/firebase/reset_all?${query}&offset=${offset}&limit=${batchSize}`, `清除 ${offset}-${Math.min(offset + batchSize, total)}`);
         if (data) {
           ok = true;
-          setProgress({ running: true, phase: "clearing database", done: Math.min(offset + batchSize, total), total });
+          setProgress({ running: true, phase: "清除資料庫快取", done: Math.min(offset + batchSize, total), total });
           await sleep(delaySeconds * 1000);
         } else {
-          addLog(`Clear failed. Retry in ${retrySeconds}s`);
+          addLog(`清除失敗，${retrySeconds} 秒後重試`);
           await sleep(retrySeconds * 1000);
         }
       }
     }
 
-    setProgress({ running: true, phase: "backfilling stock data", done: 0, total });
+    setProgress({ running: true, phase: "回補股價日線", done: 0, total });
     for (let offset = 0; offset < total; offset += batchSize) {
       let ok = false;
       while (!ok) {
-        const data = await call(`/api/job/backfill_all?${query}&offset=${offset}&limit=${batchSize}&months=${months}`, `Backfill ${offset}-${Math.min(offset + batchSize, total)}`);
+        const data = await call(`/api/job/backfill_all?${query}&offset=${offset}&limit=${batchSize}&months=${months}`, `回補 ${offset}-${Math.min(offset + batchSize, total)}`);
         if (data) {
           ok = true;
-          setProgress({ running: true, phase: "backfilling stock data", done: Math.min(offset + batchSize, total), total });
+          setProgress({ running: true, phase: "回補股價日線", done: Math.min(offset + batchSize, total), total });
           await sleep(delaySeconds * 1000);
         } else {
-          addLog(`Backfill failed. Retry in ${retrySeconds}s`);
+          addLog(`回補失敗，${retrySeconds} 秒後重試`);
           await sleep(retrySeconds * 1000);
         }
       }
     }
 
-    setProgress({ running: true, phase: "running daily update", done: total, total });
-    await call("/api/job/daily", "Daily update");
-    setProgress({ running: false, phase: "rebuild complete", done: total, total });
-    addLog("Clear-and-rebuild workflow complete.");
+    setProgress({ running: true, phase: "執行每日更新", done: total, total });
+    await call("/api/job/daily", "每日資料更新");
+    setProgress({ running: false, phase: "重建完成", done: total, total });
+    addLog("清除並重建流程完成。");
   }
 
   async function runDailyUpdate() {
     if (progress.running) return;
-    setProgress({ running: true, phase: "starting daily update", done: 0, total: 1 });
-    await call("/api/job/daily", "Daily stock and chip update");
-    setProgress({ running: false, phase: "daily update queued", done: 1, total: 1 });
+    setProgress({ running: true, phase: "啟動每日更新", done: 0, total: 1 });
+    await call("/api/job/daily", "每日股價與籌碼更新");
+    setProgress({ running: false, phase: "每日更新已排入背景", done: 1, total: 1 });
   }
 
   async function runChipHistoryBackfill() {
     if (progress.running) return;
-    if (!window.confirm("This will start a background TWSE chip history backfill for about one year. Continue?")) return;
-    setProgress({ running: true, phase: "starting chip history backfill", done: 0, total: 1 });
-    await call("/api/chip/backfill_history_all?months=12", "Backfill one year chip history");
-    setProgress({ running: false, phase: "chip history backfill queued", done: 1, total: 1 });
+    if (!window.confirm("這會啟動約一年的籌碼歷史資料背景回補。確定繼續？")) return;
+    setProgress({ running: true, phase: "啟動籌碼歷史回補", done: 0, total: 1 });
+    await call("/api/chip/backfill_history_all?months=12", "回補一年籌碼歷史");
+    setProgress({ running: false, phase: "籌碼歷史回補已排入背景", done: 1, total: 1 });
   }
 
   async function runStockYearlyBackfill() {
     if (progress.running) return;
-    if (!window.confirm("This will start a background one-year stock history backfill for the selected universe. Continue?")) return;
-    setProgress({ running: true, phase: "starting yearly stock backfill", done: 0, total: 1 });
-    await call(`/api/job/backfill_all_yearly?${query}&months=12`, "Backfill one year stock history");
-    setProgress({ running: false, phase: "yearly stock backfill queued", done: 1, total: 1 });
+    if (!window.confirm("這會啟動所選商品約一年的股價歷史背景回補。確定繼續？")) return;
+    setProgress({ running: true, phase: "啟動一年股價回補", done: 0, total: 1 });
+    await call(`/api/job/backfill_all_yearly?${query}&months=12`, "回補一年股價歷史");
+    setProgress({ running: false, phase: "一年股價回補已排入背景", done: 1, total: 1 });
   }
 
   function resetUniverseState() {
@@ -204,96 +204,96 @@ export default function DatabaseMaintenancePage() {
   return (
     <div style={pageStyle}>
       <div style={headerStyle}>
-        <div style={eyebrowStyle}>DATABASE MAINTENANCE</div>
-        <h2 style={titleStyle}>Stock Sync And Database Reset</h2>
+        <div style={eyebrowStyle}>資料庫維護</div>
+        <h2 style={titleStyle}>股票同步與資料庫重建</h2>
         <div style={mutedStyle}>{PAGE_VERSION}</div>
       </div>
 
       <section style={boxStyle}>
-        <h3 style={sectionTitleStyle}>Product Universe Sync</h3>
-        <p style={mutedStyle}>Current: {universeOffset} / {universeTotal || "?"} {universeDone ? "done" : ""}</p>
+        <h3 style={sectionTitleStyle}>商品清單同步</h3>
+        <p style={mutedStyle}>目前進度：{universeOffset} / {universeTotal || "?"} {universeDone ? "已完成" : ""}</p>
 
         <div style={controlRowStyle}>
           <label style={labelStyle}>
-            Offset
+            起始位置
             <input value={universeOffset} onChange={(e) => setUniverseOffset(Number(e.target.value || 0))} style={inputStyle} />
           </label>
           <label style={labelStyle}>
-            Limit
+            批次筆數
             <input value={universeLimit} onChange={(e) => setUniverseLimit(Number(e.target.value || 10))} style={inputStyle} />
           </label>
         </div>
 
         <div style={buttonRowStyle}>
-          <button disabled={universeBusy} onClick={() => runUniverse("/api/init_universe")} style={primaryButtonStyle}>Check Universe</button>
+          <button disabled={universeBusy} onClick={() => runUniverse("/api/init_universe")} style={primaryButtonStyle}>檢查商品清單</button>
           <button disabled={universeBusy || universeDone} onClick={() => runUniverse(`/api/init_universe_batch?offset=${universeOffset}&limit=${universeLimit}`)} style={primaryButtonStyle}>
-            {universeDone ? "Done" : "Run Current Batch"}
+            {universeDone ? "已完成" : "執行本批同步"}
           </button>
-          <button disabled={universeBusy} onClick={resetUniverseState} style={secondaryButtonStyle}>Reset</button>
+          <button disabled={universeBusy} onClick={resetUniverseState} style={secondaryButtonStyle}>重設狀態</button>
         </div>
 
         <pre style={preStyle}>{JSON.stringify(universeResult || {}, null, 2)}</pre>
       </section>
 
       <section style={boxStyle}>
-        <h3 style={sectionTitleStyle}>Clear / Rebuild Stock Cache</h3>
+        <h3 style={sectionTitleStyle}>清除 / 重建股票快取</h3>
         <div style={controlRowStyle}>
           <label style={labelStyle}>
-            Product Type
+            商品類型
             <select value={productType} onChange={(e) => setProductType(e.target.value)} style={fieldStyle}>
-              <option value="all">all</option>
+              <option value="all">全部</option>
               <option value="股票">股票</option>
               <option value="ETF">ETF</option>
-              <option value="高股息ETF">高股息ETF</option>
+              <option value="高股息ETF">高股息 ETF</option>
             </select>
           </label>
           <label style={labelStyle}>
-            Market
+            市場
             <select value={market} onChange={(e) => setMarket(e.target.value)} style={fieldStyle}>
-              <option value="all">all</option>
+              <option value="all">全部</option>
               <option value="上市">上市</option>
               <option value="上櫃">上櫃</option>
             </select>
           </label>
           <label style={labelStyle}>
-            Batch
+            批次筆數
             <input type="number" value={batchSize} onChange={(e) => setBatchSize(Number(e.target.value || 20))} style={inputStyle} />
           </label>
           <label style={labelStyle}>
-            Delay sec
+            間隔秒數
             <input type="number" value={delaySeconds} onChange={(e) => setDelaySeconds(Number(e.target.value || 30))} style={inputStyle} />
           </label>
           <label style={labelStyle}>
-            Retry sec
+            重試秒數
             <input type="number" value={retrySeconds} onChange={(e) => setRetrySeconds(Number(e.target.value || 30))} style={inputStyle} />
           </label>
           <label style={labelStyle}>
-            Months
+            回補月數
             <input type="number" value={months} onChange={(e) => setMonths(Number(e.target.value || 12))} style={inputStyle} />
           </label>
         </div>
 
         <div style={buttonRowStyle}>
-          <button style={dangerButtonStyle} disabled={progress.running} onClick={safeResetLoop}>Clear Selected Cache</button>
-          <button style={successButtonStyle} disabled={progress.running} onClick={rebuildAll}>Clear And Rebuild</button>
-          <button style={primaryButtonStyle} disabled={progress.running} onClick={runDailyUpdate}>Daily Update Now</button>
-          <button style={primaryButtonStyle} disabled={progress.running} onClick={runStockYearlyBackfill}>Backfill 1Y Stock History</button>
-          <button style={primaryButtonStyle} disabled={progress.running} onClick={runChipHistoryBackfill}>Backfill 1Y Chip History</button>
-          <button style={secondaryButtonStyle} onClick={() => call("/api/kline/2330", "Kline smoke test 2330")}>Smoke Test 2330</button>
+          <button style={dangerButtonStyle} disabled={progress.running} onClick={safeResetLoop}>清除所選快取</button>
+          <button style={successButtonStyle} disabled={progress.running} onClick={rebuildAll}>清除並重建</button>
+          <button style={primaryButtonStyle} disabled={progress.running} onClick={runDailyUpdate}>立即每日更新</button>
+          <button style={primaryButtonStyle} disabled={progress.running} onClick={runStockYearlyBackfill}>回補一年股價</button>
+          <button style={primaryButtonStyle} disabled={progress.running} onClick={runChipHistoryBackfill}>回補一年籌碼</button>
+          <button style={secondaryButtonStyle} onClick={() => call("/api/kline/2330", "2330 K 線測試")}>測試 2330</button>
         </div>
 
         <div style={progressTrackStyle}>
           <div style={{ ...progressBarStyle, width: `${pct}%` }} />
         </div>
-        <div style={mutedStyle}>Phase: {progress.phase} | Progress: {progress.done}/{progress.total} | {pct}%</div>
+        <div style={mutedStyle}>階段：{progress.phase} | 進度：{progress.done}/{progress.total} | {pct}%</div>
 
         <div style={gridStyle}>
           <div style={panelStyle}>
-            <h3 style={panelTitleStyle}>API Response</h3>
+            <h3 style={panelTitleStyle}>API 回應</h3>
             <pre style={preStyle}>{JSON.stringify(job || {}, null, 2)}</pre>
           </div>
           <div style={panelStyle}>
-            <h3 style={panelTitleStyle}>Log</h3>
+            <h3 style={panelTitleStyle}>操作紀錄</h3>
             {log.map((x, i) => (
               <div key={i} style={logLineStyle}>{x}</div>
             ))}
