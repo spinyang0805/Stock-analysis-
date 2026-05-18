@@ -7,6 +7,11 @@ import time
 
 from fastapi.responses import JSONResponse
 
+try:
+    from jobs import today_str, write_margin_chips, write_t86_chips
+except Exception:
+    today_str = write_margin_chips = write_t86_chips = None
+
 _INSTALLED = False
 _CHIP_RESPONSE_CACHE = {}
 CHIP_RESPONSE_CACHE_TTL_SECONDS = 60
@@ -26,6 +31,29 @@ def _cache_get(key):
 def _cache_set(key, payload):
     _CHIP_RESPONSE_CACHE[key] = (time.time() + CHIP_RESPONSE_CACHE_TTL_SECONDS, payload)
     return payload
+
+
+def _has_institutional_row(row):
+    if not isinstance(row, dict):
+        return False
+    return any(row.get(key) is not None for key in ["foreign_buy", "investment_trust_buy", "dealer_buy", "foreign", "investment_trust", "dealer"])
+
+
+def _has_real_institutional_rows(rows):
+    return any(_has_institutional_row(row) and row.get("source") != "generated_seed_v1" for row in rows or [])
+
+
+def _try_live_chip_backfill(code):
+    if write_t86_chips is None or write_margin_chips is None or today_str is None:
+        return {"attempted": False, "reason": "jobs_not_available"}
+    result = {"chips": 0, "margin_rows": 0, "errors": []}
+    date_text = today_str()
+    try:
+        write_t86_chips(date_text, result)
+        write_margin_chips(date_text, result)
+        return {"attempted": True, "date": date_text, "chips": result.get("chips", 0), "margin_rows": result.get("margin_rows", 0), "errors": result.get("errors", [])[-5:]}
+    except Exception as exc:
+        return {"attempted": True, "date": date_text, "error": str(exc)}
 
 
 def _main():
@@ -310,11 +338,16 @@ def _install(app):
         if m.db is None:
             return _json({"status": "failed", "message": "Firebase not initialized"})
         rows = _read_chip_rows(m.db, code, limit=20)
+        live_backfill = None
+        if not _has_real_institutional_rows(rows):
+            live_backfill = _try_live_chip_backfill(code)
+            rows = _read_chip_rows(m.db, code, limit=20)
         if not rows and auto_init:
             rows = _mock_chip_rows(code, days=20)
             _write_chip_rows(m.db, code, rows)
         analysis = _analyze_rows(rows)
         latest = rows[-1] if rows else {}
+        has_institutional_data = _has_real_institutional_rows(rows)
         payload = {
             "status": "ok",
             "route": "/api/chip/{stock}",
@@ -324,10 +357,13 @@ def _install(app):
             "latest_chip": latest,
             "rows": rows,
             "row_count": len(rows),
+            "has_institutional_data": has_institutional_data,
+            "live_backfill": live_backfill,
             "analysis": analysis,
             "updated_at": datetime.now().isoformat(),
         }
-        _cache_set(cache_key, payload)
+        if has_institutional_data:
+            _cache_set(cache_key, payload)
         return _json(payload)
 
     _INSTALLED = True

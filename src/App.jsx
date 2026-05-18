@@ -96,7 +96,7 @@ function line(rows, key) {
   return rows.filter((r) => Number.isFinite(Number(r[key]))).map((r) => ({ time: r.time, value: Number(r[key]) }));
 }
 function volumeRows(rows) {
-  return rows.map((r) => ({ time: r.time, value: Number(r.volume || 0), color: r.close >= r.open ? "rgba(34,197,94,.55)" : "rgba(239,68,68,.55)" }));
+  return rows.map((r) => ({ time: r.time, value: Number(r.volume || 0), color: r.close >= r.open ? "rgba(239,68,68,.55)" : "rgba(34,197,94,.55)" }));
 }
 function addSeries(chart, Type, options, fallback) {
   return typeof chart.addSeries === "function" && Type ? chart.addSeries(Type, options) : chart[fallback](options);
@@ -158,7 +158,7 @@ export default function App() {
     const c4 = makeChart(macdRef.current, 150);
     charts.current = [c1, c2, c3, c4];
     series.current = {
-      candle: addSeries(c1, CandlestickSeries, { upColor: "#22c55e", downColor: "#ef4444", borderUpColor: "#22c55e", borderDownColor: "#ef4444", wickUpColor: "#22c55e", wickDownColor: "#ef4444" }, "addCandlestickSeries"),
+      candle: addSeries(c1, CandlestickSeries, { upColor: "#ef4444", downColor: "#22c55e", borderUpColor: "#ef4444", borderDownColor: "#22c55e", wickUpColor: "#ef4444", wickDownColor: "#22c55e" }, "addCandlestickSeries"),
       ma5: addSeries(c1, LineSeries, { color: "#facc15", lineWidth: 1 }, "addLineSeries"),
       ma20: addSeries(c1, LineSeries, { color: "#38bdf8", lineWidth: 1 }, "addLineSeries"),
       ma60: addSeries(c1, LineSeries, { color: "#a78bfa", lineWidth: 1 }, "addLineSeries"),
@@ -234,7 +234,7 @@ export default function App() {
   const meta = { ...stock, ...(payload?.meta || {}), ...(analysis?.meta || {}) };
   const latest = rows.at(-1) || {};
   const rawRows = pickRows(payload).length;
-  const pc = Number(meta.change || 0) >= 0 ? "#22c55e" : "#ef4444";
+  const pc = Number(meta.change || 0) >= 0 ? "#ef4444" : "#22c55e";
   const perspectiveCards = Array.isArray(analysis?.perspective_cards) ? analysis.perspective_cards : [];
   const chipPerspective = perspectiveCards.find((x) => x.category === "chip");
   const chipAnalysis = chip?.analysis || {};
@@ -286,6 +286,9 @@ export default function App() {
           </div>}
         </Card>
         <Card title="法人 / 信用">
+          <Row label="外資當日" value={fmt(chipLatest.foreign_buy ?? chipLatest.foreign, 0)} />
+          <Row label="投信當日" value={fmt(chipLatest.investment_trust_buy ?? chipLatest.investment_trust, 0)} />
+          <Row label="自營商當日" value={fmt(chipLatest.dealer_buy ?? chipLatest.dealer, 0)} />
           <Row label="外資近5日" value={fmt(chipMetrics.foreign_5d_sum, 0)} />
           <Row label="投信近5日" value={fmt(chipMetrics.investment_trust_5d_sum, 0)} />
           <Row label="自營商近5日" value={fmt(chipMetrics.dealer_5d_sum, 0)} />

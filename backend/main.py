@@ -5,6 +5,7 @@ import threading
 import time
 
 import pandas as pd
+import pytz
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -41,6 +42,7 @@ app.add_middleware(
 MIN_ANALYSIS_ROWS = 90
 RESPONSE_CACHE_TTL_SECONDS = 60
 BACKFILL_COOLDOWN_SECONDS = 20 * 60
+TW_TZ = pytz.timezone("Asia/Taipei")
 _RESPONSE_CACHE = {}
 _BACKFILL_LAST_STARTED = {}
 
@@ -203,6 +205,53 @@ def build_meta(code: str, data, source: str):
         "volume": latest.get("volume"),
         "data_date": latest.get("date"),
     }
+
+
+def is_tw_trading_session():
+    now = datetime.now(TW_TZ)
+    if now.weekday() >= 5:
+        return False
+    minutes = now.hour * 60 + now.minute
+    return (9 * 60) <= minutes <= (13 * 60 + 35)
+
+
+def merge_realtime_into_df(code: str, df: pd.DataFrame):
+    if not is_tw_trading_session() or fetch_realtime_board is None:
+        return df, None
+    realtime = fetch_realtime_board(code)
+    if not realtime or realtime.get("source") != "TWSE MIS":
+        return df, realtime
+
+    price = safe_float(realtime.get("price") or realtime.get("close"))
+    open_price = safe_float(realtime.get("open")) or price
+    high = safe_float(realtime.get("high")) or price
+    low = safe_float(realtime.get("low")) or price
+    if not all(v is not None for v in [price, open_price, high, low]):
+        return df, realtime
+
+    today = datetime.now(TW_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+    date_key = pd.Timestamp(today.replace(tzinfo=None))
+    volume_lot = safe_float(realtime.get("volume_lot"))
+    volume = volume_lot * 1000 if volume_lot is not None else 0
+    next_df = df.copy()
+
+    if date_key in next_df.index:
+        existing = next_df.loc[date_key]
+        next_df.loc[date_key, "Open"] = open_price or existing.get("Open")
+        next_df.loc[date_key, "High"] = max(high, safe_float(existing.get("High")) or high)
+        next_df.loc[date_key, "Low"] = min(low, safe_float(existing.get("Low")) or low)
+        next_df.loc[date_key, "Close"] = price
+        if volume:
+            next_df.loc[date_key, "Volume"] = volume
+    else:
+        next_df.loc[date_key] = {
+            "Open": open_price,
+            "High": high,
+            "Low": low,
+            "Close": price,
+            "Volume": volume,
+        }
+    return next_df.sort_index(), realtime
 
 
 def start_thread(name: str, target, *args, **kwargs):
@@ -444,8 +493,9 @@ def cache_status(stock: str):
 def kline(stock: str):
     code = normalize_stock(stock)
     cache_key = f"kline:{code}"
+    trading_session = is_tw_trading_session()
     cached = _cache_get(cache_key)
-    if cached is not None:
+    if cached is not None and not trading_session:
         return JSONResponse({**cached, "cache_hit": True}, media_type="application/json; charset=utf-8")
     df, rows = get_firebase_history(code)
     if df.empty:
@@ -460,12 +510,16 @@ def kline(stock: str):
             "data": [],
             "backfill_started": started,
         }, media_type="application/json; charset=utf-8")
+    df, realtime = merge_realtime_into_df(code, df)
     data = to_kline_payload(df)
-    meta = build_meta(code, data, "Firebase stock_daily")
+    source = "Firebase stock_daily + TWSE MIS realtime" if realtime and realtime.get("source") == "TWSE MIS" else "Firebase stock_daily"
+    meta = build_meta(code, data, source)
+    if realtime and realtime.get("source") == "TWSE MIS":
+        meta.update({k: realtime.get(k) for k in ["price", "previous_close", "change", "change_pct", "open", "high", "low", "close", "volume_lot", "time"] if realtime.get(k) is not None})
     if len(data) < MIN_ANALYSIS_ROWS:
         start_backfill_if_needed(code)
-    payload = {"status": "ok", "message": "ok", "stock": stock, "normalized_stock": code, "meta": meta, "source": "Firebase stock_daily", "last_close": meta.get("close"), "last_date": data[-1]["time"] if data else None, "data": data, "cache_rows": len(rows), "data_requirement": {"minimum_rows": MIN_ANALYSIS_ROWS, "has_enough_rows": len(data) >= MIN_ANALYSIS_ROWS}}
-    _cache_set(cache_key, payload)
+    payload = {"status": "ok", "message": "ok", "stock": stock, "normalized_stock": code, "meta": meta, "source": source, "realtime": realtime, "last_close": meta.get("close"), "last_date": data[-1]["time"] if data else None, "data": data, "cache_rows": len(rows), "data_requirement": {"minimum_rows": MIN_ANALYSIS_ROWS, "has_enough_rows": len(data) >= MIN_ANALYSIS_ROWS}}
+    _cache_set(cache_key, payload, ttl=5 if trading_session else RESPONSE_CACHE_TTL_SECONDS)
     return JSONResponse(payload, media_type="application/json; charset=utf-8")
 
 
