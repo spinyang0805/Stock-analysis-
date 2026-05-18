@@ -199,6 +199,12 @@ export default function App() {
       setChip(null);
       try {
         const kUrl = `${API}/api/kline/${code}`;
+        const analysisPromise = fetch(`${API}/api/analysis/${code}`, { cache: "no-store" })
+          .then((r) => r.ok ? r.json() : null)
+          .catch(() => null);
+        const chipPromise = fetch(`${API}/api/chip/${code}?auto_init=false`, { cache: "no-store" })
+          .then((r) => r.ok ? r.json() : null)
+          .catch(() => null);
         const kRes = await fetch(kUrl, { cache: "no-store" });
         const kJson = await kRes.json();
         if (!kRes.ok) throw new Error(`${kJson?.detail || kJson?.error || `HTTP ${kRes.status}`} @ ${kUrl}`);
@@ -208,14 +214,8 @@ export default function App() {
         setRows(nextRows);
         const rawCount = pickRows(kJson).length;
         setStatus(nextRows.length ? `已載入 ${nextRows.length} 筆K線資料（raw:${rawCount} / ${APP_VERSION}）` : `API回傳0筆可畫K線（raw:${rawCount} / status:${kJson?.status || "--"} / ${APP_VERSION}）`);
-        fetch(`${API}/api/analysis/${code}`, { cache: "no-store" })
-          .then((r) => r.ok ? r.json() : null)
-          .then((j) => { if (alive) setAnalysis(j); })
-          .catch(() => {});
-        fetch(`${API}/api/chip/${code}?auto_init=false`, { cache: "no-store" })
-          .then((r) => r.ok ? r.json() : null)
-          .then((j) => { if (alive) setChip(j); })
-          .catch(() => {});
+        analysisPromise.then((j) => { if (alive) setAnalysis(j); });
+        chipPromise.then((j) => { if (alive) setChip(j); });
       } catch (e) {
         if (alive) setStatus(`讀取失敗：${e.message}（${APP_VERSION}）`);
       }

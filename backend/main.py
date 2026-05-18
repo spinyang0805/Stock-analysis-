@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import math
 import random
 import threading
+import time
 
 import pandas as pd
 from fastapi import FastAPI
@@ -38,6 +39,26 @@ app.add_middleware(
 )
 
 MIN_ANALYSIS_ROWS = 90
+RESPONSE_CACHE_TTL_SECONDS = 60
+BACKFILL_COOLDOWN_SECONDS = 20 * 60
+_RESPONSE_CACHE = {}
+_BACKFILL_LAST_STARTED = {}
+
+
+def _cache_get(key: str):
+    item = _RESPONSE_CACHE.get(key)
+    if not item:
+        return None
+    expires_at, payload = item
+    if expires_at < time.time():
+        _RESPONSE_CACHE.pop(key, None)
+        return None
+    return payload
+
+
+def _cache_set(key: str, payload, ttl: int = RESPONSE_CACHE_TTL_SECONDS):
+    _RESPONSE_CACHE[key] = (time.time() + ttl, payload)
+    return payload
 
 STOCK_NAME_MAP = {
     "台積電": "2330", "鴻海": "2317", "聯發科": "2454", "聯發": "2454", "大聯大": "3702",
@@ -121,8 +142,7 @@ def ensure_analysis_history(code: str):
     source = "Firebase stock_daily"
     backfill_started = False
     if len(df) < MIN_ANALYSIS_ROWS:
-        backfill_started = True
-        start_thread(f"backfill-{code}-90d", run_on_demand_backfill, code, 12)
+        backfill_started = start_backfill_if_needed(code)
         if df.empty:
             df = fallback_history(code, 120)
             source = "fallback-demo-data; Firebase backfill started"
@@ -197,8 +217,13 @@ def start_thread(name: str, target, *args, **kwargs):
 
 
 def start_backfill_if_needed(code: str):
+    now = time.time()
+    last_started = _BACKFILL_LAST_STARTED.get(code, 0)
+    if now - last_started < BACKFILL_COOLDOWN_SECONDS:
+        return False
     cache = get_cache_status(code)
     if cache.get("firebase_enabled") and cache.get("stock_daily_count", 0) < MIN_ANALYSIS_ROWS:
+        _BACKFILL_LAST_STARTED[code] = now
         start_thread(f"backfill-{code}", run_on_demand_backfill, code, 12)
         return True
     return False
@@ -418,6 +443,10 @@ def cache_status(stock: str):
 @app.get("/api/kline/{stock}")
 def kline(stock: str):
     code = normalize_stock(stock)
+    cache_key = f"kline:{code}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return JSONResponse({**cached, "cache_hit": True}, media_type="application/json; charset=utf-8")
     df, rows = get_firebase_history(code)
     if df.empty:
         started = start_backfill_if_needed(code)
@@ -435,16 +464,23 @@ def kline(stock: str):
     meta = build_meta(code, data, "Firebase stock_daily")
     if len(data) < MIN_ANALYSIS_ROWS:
         start_backfill_if_needed(code)
-    return JSONResponse({"status": "ok", "message": "ok", "stock": stock, "normalized_stock": code, "meta": meta, "source": "Firebase stock_daily", "last_close": meta.get("close"), "last_date": data[-1]["time"] if data else None, "data": data, "cache_rows": len(rows), "data_requirement": {"minimum_rows": MIN_ANALYSIS_ROWS, "has_enough_rows": len(data) >= MIN_ANALYSIS_ROWS}}, media_type="application/json; charset=utf-8")
+    payload = {"status": "ok", "message": "ok", "stock": stock, "normalized_stock": code, "meta": meta, "source": "Firebase stock_daily", "last_close": meta.get("close"), "last_date": data[-1]["time"] if data else None, "data": data, "cache_rows": len(rows), "data_requirement": {"minimum_rows": MIN_ANALYSIS_ROWS, "has_enough_rows": len(data) >= MIN_ANALYSIS_ROWS}}
+    _cache_set(cache_key, payload)
+    return JSONResponse(payload, media_type="application/json; charset=utf-8")
 
 
 @app.get("/api/analysis/{stock}")
 def analysis(stock: str):
     code = normalize_stock(stock)
+    cache_key = f"analysis:{code}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return JSONResponse({**cached, "cache_hit": True}, media_type="application/json; charset=utf-8")
     df, _, source, backfill_started = ensure_analysis_history(code)
     _, _, chip = get_chip_context(code)
     result = build_rule_based_analysis(df, code)
     result, _ = enrich_analysis_payload(result, code, df, source, chip, backfill_started)
+    _cache_set(cache_key, result)
     return JSONResponse(result, media_type="application/json; charset=utf-8")
 
 

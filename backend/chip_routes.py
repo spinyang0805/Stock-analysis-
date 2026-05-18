@@ -8,6 +8,24 @@ import time
 from fastapi.responses import JSONResponse
 
 _INSTALLED = False
+_CHIP_RESPONSE_CACHE = {}
+CHIP_RESPONSE_CACHE_TTL_SECONDS = 60
+
+
+def _cache_get(key):
+    item = _CHIP_RESPONSE_CACHE.get(key)
+    if not item:
+        return None
+    expires_at, payload = item
+    if expires_at < time.time():
+        _CHIP_RESPONSE_CACHE.pop(key, None)
+        return None
+    return payload
+
+
+def _cache_set(key, payload):
+    _CHIP_RESPONSE_CACHE[key] = (time.time() + CHIP_RESPONSE_CACHE_TTL_SECONDS, payload)
+    return payload
 
 
 def _main():
@@ -285,6 +303,10 @@ def _install(app):
     def chip_analysis(stock: str, auto_init: bool = True):
         m = _main()
         code = m.normalize_stock(stock) if hasattr(m, "normalize_stock") else str(stock).strip().upper()
+        cache_key = f"chip:{code}:{auto_init}"
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return _json({**cached, "cache_hit": True})
         if m.db is None:
             return _json({"status": "failed", "message": "Firebase not initialized"})
         rows = _read_chip_rows(m.db, code, limit=20)
@@ -293,7 +315,7 @@ def _install(app):
             _write_chip_rows(m.db, code, rows)
         analysis = _analyze_rows(rows)
         latest = rows[-1] if rows else {}
-        return _json({
+        payload = {
             "status": "ok",
             "route": "/api/chip/{stock}",
             "stock": stock,
@@ -304,7 +326,9 @@ def _install(app):
             "row_count": len(rows),
             "analysis": analysis,
             "updated_at": datetime.now().isoformat(),
-        })
+        }
+        _cache_set(cache_key, payload)
+        return _json(payload)
 
     _INSTALLED = True
 
