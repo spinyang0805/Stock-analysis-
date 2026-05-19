@@ -19,7 +19,15 @@ from firebase_cache import (
     get_valid_stock_daily_series,
     get_latest_chip_daily,
 )
-from jobs import run_daily_update, run_on_demand_backfill, preload_hot_stocks, run_chip_history_backfill
+from jobs import (
+    run_daily_update,
+    run_on_demand_backfill,
+    preload_hot_stocks,
+    run_chip_history_backfill,
+    today_str,
+    write_margin_chips,
+    write_t86_chips,
+)
 from stock_list import get_all_products, search_products
 from perspective_engine import generate_perspective_cards
 from rule_engine import build_ai_rule_context
@@ -321,6 +329,56 @@ def get_chip_context(code: str, limit: int = 60):
     return rows, analysis, chip_for_rules
 
 
+def has_institutional_values(row):
+    if not isinstance(row, dict):
+        return False
+    return any(row.get(key) is not None for key in ["foreign_buy", "investment_trust_buy", "dealer_buy", "foreign", "investment_trust", "dealer"])
+
+
+def is_real_chip_row(row):
+    return has_institutional_values(row) and row.get("source") != "generated_seed_v1"
+
+
+def try_refresh_twse_chips():
+    result = {"chips": 0, "margin_rows": 0, "errors": []}
+    date_text = today_str()
+    try:
+        write_t86_chips(date_text, result)
+        write_margin_chips(date_text, result)
+    except Exception as exc:
+        result["errors"].append(str(exc))
+    return result
+
+
+def read_chip_payload(code: str, limit: int = 60):
+    if db is None:
+        return {"status": "failed", "message": "Firebase not initialized"}
+    rows = read_chip_rows(db, code, limit=limit)
+    live_refresh = None
+    if not any(is_real_chip_row(row) for row in rows):
+        live_refresh = try_refresh_twse_chips()
+        rows = read_chip_rows(db, code, limit=limit)
+    real_rows = [row for row in rows if is_real_chip_row(row)]
+    analysis_rows = real_rows or rows
+    analysis = analyze_chip_rows(analysis_rows)
+    latest = analysis_rows[-1] if analysis_rows else (get_latest_chip_daily(code) or {})
+    return {
+        "status": "ok",
+        "route": "/api/chip/{stock}",
+        "stock": code,
+        "normalized_stock": code,
+        "source": "Firebase chip_daily",
+        "latest_chip": latest,
+        "rows": analysis_rows[-20:],
+        "row_count": len(analysis_rows),
+        "raw_row_count": len(rows),
+        "has_institutional_data": any(is_real_chip_row(row) for row in rows),
+        "live_refresh": live_refresh,
+        "analysis": analysis,
+        "updated_at": datetime.now().isoformat(),
+    }
+
+
 def product_universe(product_type: str = "股票", market: str = "all"):
     items = []
     for item in get_all_products():
@@ -482,6 +540,12 @@ def trigger_backfill_all_yearly(product_type: str = "all", market: str = "all", 
 def trigger_chip_history_backfill(months: int = 12, max_days: int = None):
     days = int(max_days or max(20, months * 22))
     return start_thread(f"chip-history-{days}d", run_chip_history_backfill, months, days)
+
+
+@app.get("/api/chip/{stock}")
+def chip(stock: str):
+    code = normalize_stock(stock)
+    return JSONResponse(read_chip_payload(code), media_type="application/json; charset=utf-8")
 
 
 @app.get("/api/cache/status/{stock}")
