@@ -1,11 +1,11 @@
-import React from 'react'
+import React, { Suspense, lazy, useState } from 'react'
 import ReactDOM from 'react-dom/client'
-import { useState } from 'react'
-import App from './App.jsx'
-import SystemControlPanel from './SystemControlPanel.jsx'
-import BatchPage from './BatchPage.jsx'
-import DatabaseMaintenancePage from './DatabaseMaintenancePage.jsx'
 import DataTablesPage from './DataTablesPage.jsx'
+
+const DashboardPage = lazy(() => import('./App.jsx'))
+const BatchPage = lazy(() => import('./BatchPage.jsx'))
+const DatabaseMaintenancePage = lazy(() => import('./DatabaseMaintenancePage.jsx'))
+const SystemControlPanel = lazy(() => import('./SystemControlPanel.jsx'))
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -26,17 +26,16 @@ class ErrorBoundary extends React.Component {
     return (
       <section style={errorPanelStyle}>
         <h2 style={{ marginTop: 0 }}>頁面載入失敗</h2>
-        <p style={{ color: '#cbd5e1' }}>這個頁籤發生前端錯誤，請先切換到其他頁籤確認資料。</p>
+        <p style={{ color: '#cbd5e1' }}>這個頁籤發生前端錯誤，其他頁籤仍可使用。</p>
         <pre style={errorPreStyle}>{String(this.state.error?.message || this.state.error)}</pre>
-        <button type="button" style={tabStyle} onClick={() => this.setState({ error: null })}>重新載入此頁籤</button>
       </section>
     )
   }
 }
 
 const tabs = [
-  { id: 'dashboard', label: '個股儀表板', component: App },
   { id: 'data-tables', label: '資料表檢查', component: DataTablesPage },
+  { id: 'dashboard', label: '個股儀表板', component: DashboardPage },
   { id: 'chip-batch', label: '籌碼批次', component: BatchPage },
   { id: 'database', label: '資料庫維護', component: DatabaseMaintenancePage },
   { id: 'system', label: '系統控制', component: SystemControlPanel },
@@ -44,7 +43,7 @@ const tabs = [
 
 function RootShell() {
   const [activeTab, setActiveTab] = useState('data-tables')
-  const ActiveComponent = tabs.find((tab) => tab.id === activeTab)?.component || App
+  const ActiveComponent = tabs.find((tab) => tab.id === activeTab)?.component || DataTablesPage
 
   return (
     <div style={shellStyle}>
@@ -64,17 +63,22 @@ function RootShell() {
         })}
       </nav>
       <ErrorBoundary key={activeTab}>
-        <ActiveComponent />
+        <Suspense fallback={<div style={loadingStyle}>頁面載入中...</div>}>
+          <ActiveComponent />
+        </Suspense>
       </ErrorBoundary>
     </div>
   )
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <RootShell />
-  </React.StrictMode>
-)
+const root = document.getElementById('root')
+if (root) {
+  ReactDOM.createRoot(root).render(
+    <React.StrictMode>
+      <RootShell />
+    </React.StrictMode>,
+  )
+}
 
 const shellStyle = { minHeight: '100vh', background: '#020617' }
 const navStyle = {
@@ -102,6 +106,12 @@ const activeTabStyle = {
   background: '#2563eb',
   borderColor: '#60a5fa',
   color: 'white',
+}
+const loadingStyle = {
+  padding: 18,
+  color: '#cbd5e1',
+  background: '#020617',
+  fontFamily: 'Arial, sans-serif',
 }
 const errorPanelStyle = {
   margin: 18,
