@@ -7,6 +7,33 @@ import BatchPage from './BatchPage.jsx'
 import DatabaseMaintenancePage from './DatabaseMaintenancePage.jsx'
 import DataTablesPage from './DataTablesPage.jsx'
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { error: null }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error }
+  }
+
+  componentDidCatch(error, info) {
+    console.error('Tab render error', error, info)
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children
+    return (
+      <section style={errorPanelStyle}>
+        <h2 style={{ marginTop: 0 }}>頁面載入失敗</h2>
+        <p style={{ color: '#cbd5e1' }}>這個頁籤發生前端錯誤，請先切換到其他頁籤確認資料。</p>
+        <pre style={errorPreStyle}>{String(this.state.error?.message || this.state.error)}</pre>
+        <button type="button" style={tabStyle} onClick={() => this.setState({ error: null })}>重新載入此頁籤</button>
+      </section>
+    )
+  }
+}
+
 const tabs = [
   { id: 'dashboard', label: '個股儀表板', component: App },
   { id: 'data-tables', label: '資料表檢查', component: DataTablesPage },
@@ -16,7 +43,7 @@ const tabs = [
 ]
 
 function RootShell() {
-  const [activeTab, setActiveTab] = useState('dashboard')
+  const [activeTab, setActiveTab] = useState('data-tables')
   const ActiveComponent = tabs.find((tab) => tab.id === activeTab)?.component || App
 
   return (
@@ -36,7 +63,9 @@ function RootShell() {
           )
         })}
       </nav>
-      <ActiveComponent />
+      <ErrorBoundary key={activeTab}>
+        <ActiveComponent />
+      </ErrorBoundary>
     </div>
   )
 }
@@ -73,4 +102,21 @@ const activeTabStyle = {
   background: '#2563eb',
   borderColor: '#60a5fa',
   color: 'white',
+}
+const errorPanelStyle = {
+  margin: 18,
+  padding: 18,
+  borderRadius: 8,
+  border: '1px solid #7f1d1d',
+  background: '#0f172a',
+  color: 'white',
+  fontFamily: 'Arial, sans-serif',
+}
+const errorPreStyle = {
+  whiteSpace: 'pre-wrap',
+  background: '#020617',
+  color: '#fecaca',
+  padding: 12,
+  borderRadius: 8,
+  overflow: 'auto',
 }
