@@ -2,16 +2,47 @@ import React, { useState } from "react";
 
 const DEFAULT_API = "https://stock-analysis-api-ihun.onrender.com";
 const RAW_API = import.meta.env.VITE_API_BASE_URL || DEFAULT_API;
-const API = String(RAW_API).includes("stock-analysis-api-ihun") ? String(RAW_API).replace(/\/$/, "") : DEFAULT_API;
+const API = String(RAW_API).includes("stock-analysis-api-ihun")
+  ? String(RAW_API).replace(/\/$/, "")
+  : DEFAULT_API;
 
 function cleanCode(value) {
-  return String(value || "2330").trim().replace(".TW", "").replace(".TWO", "").split(/\s+/)[0].toUpperCase();
+  return String(value || "2330")
+    .trim()
+    .replace(".TW", "")
+    .replace(".TWO", "")
+    .split(/\s+/)[0]
+    .toUpperCase();
 }
 
 function fmt(value) {
   if (value === null || value === undefined || value === "") return "--";
   if (typeof value === "number") return Number.isFinite(value) ? value.toLocaleString() : "--";
   return String(value);
+}
+
+async function fetchJson(path, label) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 90000);
+  try {
+    const res = await fetch(`${API}${path}`, { cache: "no-store", signal: controller.signal });
+    const text = await res.text();
+    let json = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      json = { raw: text };
+    }
+    if (!res.ok) {
+      throw new Error(`${label} API ${res.status}: ${json?.detail || json?.error || text || "request failed"}`);
+    }
+    return json;
+  } catch (error) {
+    if (error?.name === "AbortError") throw new Error(`${label} API 逾時，後端回應超過 90 秒`);
+    throw new Error(`${label} fetch failed: ${error?.message || error}`);
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 function pickKlineRows(payload) {
@@ -65,22 +96,21 @@ export default function DataTablesPage() {
     setError("");
     setKlinePayload(null);
     setChipPayload(null);
-    try {
-      const [klineRes, chipRes] = await Promise.all([
-        fetch(`${API}/api/kline/${encodeURIComponent(code)}`, { cache: "no-store" }),
-        fetch(`${API}/api/chip/${encodeURIComponent(code)}?auto_init=false`, { cache: "no-store" }),
-      ]);
-      const klineJson = await klineRes.json().catch(() => ({}));
-      const chipJson = await chipRes.json().catch(() => ({}));
-      if (!klineRes.ok) throw new Error(`股價 API ${klineRes.status}: ${klineJson?.detail || klineJson?.error || "failed"}`);
-      if (!chipRes.ok) throw new Error(`籌碼 API ${chipRes.status}: ${chipJson?.detail || chipJson?.error || "failed"}`);
-      setKlinePayload(klineJson);
-      setChipPayload(chipJson);
-    } catch (exc) {
-      setError(String(exc.message || exc));
-    } finally {
-      setLoading(false);
-    }
+
+    const [klineResult, chipResult] = await Promise.allSettled([
+      fetchJson(`/api/kline/${encodeURIComponent(code)}`, "股價歷史"),
+      fetchJson(`/api/chip/${encodeURIComponent(code)}?auto_init=false`, "籌碼"),
+    ]);
+
+    const errors = [];
+    if (klineResult.status === "fulfilled") setKlinePayload(klineResult.value);
+    else errors.push(klineResult.reason?.message || String(klineResult.reason));
+
+    if (chipResult.status === "fulfilled") setChipPayload(chipResult.value);
+    else errors.push(chipResult.reason?.message || String(chipResult.reason));
+
+    setError(errors.join("\n"));
+    setLoading(false);
   }
 
   const klineRows = pickKlineRows(klinePayload).slice().reverse();
@@ -91,15 +121,15 @@ export default function DataTablesPage() {
       <div style={headerStyle}>
         <div>
           <div style={eyebrowStyle}>DATA CHECK</div>
-          <h1 style={titleStyle}>資料庫資料檢查</h1>
-          <div style={mutedStyle}>只顯示 API 回傳表格，用來確認單一股票是否有股價歷史與籌碼資料。</div>
+          <h1 style={titleStyle}>資料表檢查</h1>
+          <div style={mutedStyle}>直接查詢後端 API，確認資料庫是否已有股價歷史與三大法人籌碼資料。</div>
         </div>
         <div style={controlStyle}>
           <input
             value={stock}
             onChange={(event) => setStock(event.target.value)}
             onKeyDown={(event) => { if (event.key === "Enter") load(); }}
-            placeholder="輸入股票代號，例如 2330"
+            placeholder="輸入股票代號，例如 1402"
             style={inputStyle}
           />
           <button type="button" onClick={load} disabled={loading} style={buttonStyle}>
@@ -108,13 +138,13 @@ export default function DataTablesPage() {
         </div>
       </div>
 
-      {error && <div style={errorStyle}>{error}</div>}
+      {error && <pre style={errorStyle}>{error}</pre>}
 
       <div style={summaryGridStyle}>
         <div style={summaryStyle}>
           <b>股價資料</b>
           <span>狀態：{klinePayload?.status || "--"}</span>
-          <span>筆數：{klineRows.length}</span>
+          <span>顯示筆數：{klineRows.length}</span>
           <span>來源：{klinePayload?.source || "--"}</span>
         </div>
         <div style={summaryStyle}>
@@ -136,11 +166,11 @@ export default function DataTablesPage() {
             { key: "low", label: "最低" },
             { key: "close", label: "收盤" },
             { key: "volume", label: "成交量" },
-            { key: "change_pct", label: "漲跌幅%" },
+            { key: "change_pct", label: "漲跌幅" },
             { key: "source", label: "來源", render: () => klinePayload?.source || "--" },
           ]}
           rows={klineRows}
-          emptyText="尚未查詢或 API 沒有回傳股價資料。"
+          emptyText="尚未查詢，或 API 沒有回傳股價資料。"
         />
       </section>
 
@@ -157,12 +187,12 @@ export default function DataTablesPage() {
             { key: "source", label: "來源", render: (row) => row.source_t86 || row.source_margin || row.source || "--" },
           ]}
           rows={chipRows}
-          emptyText="尚未查詢或 API 沒有回傳籌碼資料。"
+          emptyText="尚未查詢，或 API 沒有回傳籌碼資料。"
         />
       </section>
 
       <section style={sectionStyle}>
-        <h2 style={sectionTitleStyle}>原始回應摘要</h2>
+        <h2 style={sectionTitleStyle}>原始摘要</h2>
         <pre style={preStyle}>{JSON.stringify({
           kline: {
             status: klinePayload?.status,
@@ -178,6 +208,7 @@ export default function DataTablesPage() {
             has_institutional_data: chipPayload?.has_institutional_data,
             latest_chip: chipPayload?.latest_chip,
             live_refresh: chipPayload?.live_refresh,
+            live_backfill: chipPayload?.live_backfill,
           },
         }, null, 2)}</pre>
       </section>
@@ -193,7 +224,7 @@ const mutedStyle = { color: "#94a3b8" };
 const controlStyle = { display: "flex", gap: 10, flexWrap: "wrap" };
 const inputStyle = { padding: "12px 14px", borderRadius: 8, border: "1px solid #334155", background: "#020617", color: "white", minWidth: 240 };
 const buttonStyle = { padding: "12px 18px", borderRadius: 8, border: 0, background: "#2563eb", color: "white", fontWeight: 800, cursor: "pointer" };
-const errorStyle = { marginTop: 12, padding: 12, borderRadius: 8, background: "#7f1d1d", color: "white" };
+const errorStyle = { marginTop: 12, padding: 12, borderRadius: 8, background: "#7f1d1d", color: "white", whiteSpace: "pre-wrap" };
 const summaryGridStyle = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 12, marginTop: 12 };
 const summaryStyle = { display: "grid", gap: 6, border: "1px solid #1e293b", background: "#0f172a", padding: 14, borderRadius: 8, color: "#cbd5e1" };
 const sectionStyle = { marginTop: 14, border: "1px solid #1e293b", background: "#0f172a", padding: 14, borderRadius: 8 };

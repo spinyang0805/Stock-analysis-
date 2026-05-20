@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 
 const API = "https://stock-analysis-api-ihun.onrender.com";
 
