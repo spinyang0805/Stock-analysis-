@@ -7,6 +7,7 @@ import time
 import pandas as pd
 import pytz
 from fastapi import FastAPI
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -545,7 +546,7 @@ def trigger_chip_history_backfill(months: int = 12, max_days: int = None):
 @app.get("/api/chip/{stock}")
 def chip(stock: str):
     code = normalize_stock(stock)
-    return JSONResponse(read_chip_payload(code), media_type="application/json; charset=utf-8")
+    return JSONResponse(jsonable_encoder(read_chip_payload(code)), media_type="application/json; charset=utf-8")
 
 
 @app.get("/api/cache/status/{stock}")

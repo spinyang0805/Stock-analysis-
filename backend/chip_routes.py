@@ -6,6 +6,7 @@ import threading
 import time
 
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 
 try:
     from jobs import today_str, write_margin_chips, write_t86_chips
@@ -61,7 +62,7 @@ def _main():
 
 
 def _json(payload):
-    return JSONResponse(payload, media_type="application/json; charset=utf-8")
+    return JSONResponse(jsonable_encoder(payload), media_type="application/json; charset=utf-8")
 
 
 def _num(value, default=0):
