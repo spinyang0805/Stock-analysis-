@@ -318,6 +318,22 @@ def _install(app):
             "next_offset": next_offset,
         })
 
+    @app.get("/api/chip/backfill_history_all")
+    def chip_backfill_history_all(months: int = 12, max_days: int = None):
+        m = _main()
+        if not hasattr(m, "run_chip_history_backfill"):
+            return _json({"status": "failed", "message": "chip history backfill is not available"})
+        days = int(max_days or max(20, months * 22))
+        if hasattr(m, "start_thread"):
+            return _json({
+                **m.start_thread(f"chip-history-{days}d", m.run_chip_history_backfill, months, days),
+                "route": "/api/chip/backfill_history_all",
+                "months": months,
+                "target_days": days,
+            })
+        threading.Thread(target=m.run_chip_history_backfill, args=(months, days), daemon=True).start()
+        return _json({"status": "started", "route": "/api/chip/backfill_history_all", "months": months, "target_days": days})
+
     @app.get("/api/chip/init/{stock}")
     def chip_init(stock: str, days: int = 20):
         m = _main()
