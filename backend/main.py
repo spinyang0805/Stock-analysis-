@@ -480,6 +480,59 @@ def run_backfill_universe(products, months: int = 12):
     return result
 
 
+def run_backfill_missing(product_type: str = "all", market: str = "all", months: int = 24, min_rows: int = 30, limit: int = 5000):
+    result = {
+        "status": "running",
+        "mode": "missing_stock_daily",
+        "product_type": product_type,
+        "market": market,
+        "months": months,
+        "min_rows": min_rows,
+        "limit": limit,
+        "universe_count": 0,
+        "missing_count": 0,
+        "processed": 0,
+        "written_days": 0,
+        "errors": [],
+        "started_at": datetime.now().isoformat(),
+    }
+    if db is not None:
+        db.collection("job_logs").document("backfill_missing_latest").set(result, merge=True)
+
+    refresh_products_cache()
+    universe = product_universe(product_type=product_type, market=market)[:limit]
+    result["universe_count"] = len(universe)
+    missing = []
+    for item in universe:
+        try:
+            rows = get_valid_stock_daily_series(item["code"], limit=min_rows)
+            if len(rows) < min_rows:
+                missing.append(item)
+        except Exception as exc:
+            result["errors"].append({"stock_id": item.get("code"), "phase": "scan", "error": str(exc)})
+    result["missing_count"] = len(missing)
+
+    for item in missing:
+        code = item["code"]
+        try:
+            r = run_on_demand_backfill(code, months, item.get("market"), item.get("type"))
+            result["processed"] += 1
+            result["written_days"] += int(r.get("written_days", 0))
+            if r.get("errors"):
+                result["errors"].append({"stock_id": code, "phase": "backfill", "errors": r.get("errors", [])[:3]})
+        except Exception as exc:
+            result["processed"] += 1
+            result["errors"].append({"stock_id": code, "phase": "backfill", "error": str(exc)})
+        if db is not None and result["processed"] % 10 == 0:
+            db.collection("job_logs").document("backfill_missing_latest").set({**result, "updated_at": datetime.now().isoformat()}, merge=True)
+
+    result["status"] = "done"
+    result["finished_at"] = datetime.now().isoformat()
+    if db is not None:
+        db.collection("job_logs").document("backfill_missing_latest").set({**result, "updated_at": datetime.now().isoformat()}, merge=True)
+    return result
+
+
 @app.get("/")
 def root():
     return JSONResponse({"status": "ok", "service": "TW Stock Decision API"}, media_type="application/json; charset=utf-8")
@@ -578,30 +631,16 @@ def trigger_backfill_all(product_type: str = "股票", market: str = "上市", o
 
 
 @app.get("/api/job/backfill_missing")
-def trigger_backfill_missing(product_type: str = "all", market: str = "all", offset: int = 0, limit: int = 50, months: int = 24, min_rows: int = 30):
-    refresh_products_cache()
-    universe = product_universe(product_type=product_type, market=market)
-    missing = []
-    for item in universe:
-        code = item["code"]
-        rows = get_valid_stock_daily_series(code, limit=min_rows)
-        if len(rows) < min_rows:
-            missing.append(item)
-    batch = missing[offset:offset + limit]
+def trigger_backfill_missing(product_type: str = "all", market: str = "all", limit: int = 5000, months: int = 24, min_rows: int = 30):
     return {
-        **start_thread(f"backfill-missing-{offset}-{offset + len(batch)}", run_backfill_universe, batch, months),
+        **start_thread(f"backfill-missing-{product_type}-{market}", run_backfill_missing, product_type, market, months, min_rows, limit),
         "mode": "missing_stock_daily",
         "product_type": product_type,
         "market": market,
         "months": months,
         "min_rows": min_rows,
-        "universe_count": len(universe),
-        "missing_count": len(missing),
-        "processed_count": len(batch),
-        "offset": offset,
         "limit": limit,
-        "next_offset": offset + len(batch) if offset + len(batch) < len(missing) else None,
-        "sample": batch[:10],
+        "job_log": "job_logs/backfill_missing_latest",
     }
 
 
