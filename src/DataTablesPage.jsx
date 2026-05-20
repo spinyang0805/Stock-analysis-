@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 
 const DEFAULT_API = "https://stock-analysis-api-ihun.onrender.com";
 const RAW_API = import.meta.env.VITE_API_BASE_URL || DEFAULT_API;
