@@ -29,7 +29,7 @@ from jobs import (
     write_margin_chips,
     write_t86_chips,
 )
-from stock_list import get_all_products, search_products
+from stock_list import get_all_products, refresh_products_cache, search_products
 from perspective_engine import generate_perspective_cards
 from rule_engine import build_ai_rule_context
 from signal_engine import generate_signals, generate_trade_plan, backtest_strategy
@@ -401,6 +401,52 @@ def product_universe(product_type: str = "股票", market: str = "all"):
     return result
 
 
+def product_universe(product_type: str = "股票", market: str = "all"):
+    items = []
+    type_filter = str(product_type or "all").strip()
+    market_filter = str(market or "all").strip()
+    for item in get_all_products():
+        if type_filter != "all" and item.get("type") != type_filter:
+            continue
+        if market_filter != "all" and item.get("market") != market_filter:
+            continue
+        code = normalize_stock(item.get("code"))
+        if not code:
+            continue
+        items.append({**item, "code": code})
+    seen = set()
+    result = []
+    for item in items:
+        if item["code"] in seen:
+            continue
+        seen.add(item["code"])
+        result.append(item)
+    return result
+
+
+def product_universe(product_type: str = "股票", market: str = "all"):
+    items = []
+    type_filter = str(product_type or "all").strip()
+    market_filter = str(market or "all").strip()
+    for item in get_all_products():
+        if type_filter != "all" and item.get("type") != type_filter:
+            continue
+        if market_filter != "all" and item.get("market") != market_filter:
+            continue
+        code = normalize_stock(item.get("code"))
+        if not code:
+            continue
+        items.append({**item, "code": code})
+    seen = set()
+    result = []
+    for item in items:
+        if item["code"] in seen:
+            continue
+        seen.add(item["code"])
+        result.append(item)
+    return result
+
+
 def delete_doc_with_data_subcollection(doc_ref):
     deleted_children = 0
     for sub in doc_ref.collection("data").stream():
@@ -417,7 +463,7 @@ def run_backfill_universe(products, months: int = 12):
     for item in products:
         code = item["code"]
         try:
-            r = run_on_demand_backfill(code, months)
+            r = run_on_demand_backfill(code, months, item.get("market"), item.get("type"))
             result["processed"] += 1
             result["written_days"] += int(r.get("written_days", 0))
             if r.get("errors"):
@@ -529,6 +575,34 @@ def trigger_backfill_all(product_type: str = "股票", market: str = "上市", o
     universe = product_universe(product_type=product_type, market=market)
     batch = universe[offset:offset + limit]
     return start_thread(f"backfill-all-{offset}-{offset + len(batch)}", run_backfill_universe, batch, months)
+
+
+@app.get("/api/job/backfill_missing")
+def trigger_backfill_missing(product_type: str = "all", market: str = "all", offset: int = 0, limit: int = 50, months: int = 24, min_rows: int = 30):
+    refresh_products_cache()
+    universe = product_universe(product_type=product_type, market=market)
+    missing = []
+    for item in universe:
+        code = item["code"]
+        rows = get_valid_stock_daily_series(code, limit=min_rows)
+        if len(rows) < min_rows:
+            missing.append(item)
+    batch = missing[offset:offset + limit]
+    return {
+        **start_thread(f"backfill-missing-{offset}-{offset + len(batch)}", run_backfill_universe, batch, months),
+        "mode": "missing_stock_daily",
+        "product_type": product_type,
+        "market": market,
+        "months": months,
+        "min_rows": min_rows,
+        "universe_count": len(universe),
+        "missing_count": len(missing),
+        "processed_count": len(batch),
+        "offset": offset,
+        "limit": limit,
+        "next_offset": offset + len(batch) if offset + len(batch) < len(missing) else None,
+        "sample": batch[:10],
+    }
 
 
 @app.get("/api/job/backfill_all_yearly")

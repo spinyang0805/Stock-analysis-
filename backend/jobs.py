@@ -269,6 +269,9 @@ def fetch_tpex_stock_month(stock_id: str, year: int, month: int, product_type: s
 def run_on_demand_backfill(stock_id: str, months: int = 12, market: str = "TWSE", product_type: str = "股票"):
     stock_id = str(stock_id).strip()
     market_key = "TPEx" if str(market).upper() in ("TPEX", "上櫃") else "TWSE"
+    market_text = str(market or "").strip().upper()
+    if market_text in ("TPEX", "上櫃", "OTC"):
+        market_key = "TPEx"
     result = {"stock_id": stock_id, "market": market_key, "product_type": product_type, "months": months, "written_days": 0, "errors": [], "status": "running"}
     for year, month in month_iter(months):
         if market_key == "TPEx":
