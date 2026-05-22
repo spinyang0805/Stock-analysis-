@@ -215,8 +215,32 @@ function OrderBook({ bids = [], asks = [] }) {
 }
 
 /* ── AI Card ─────────────────────────────────────────────────────── */
-function AiCard({ rows, chipData }) {
+function AiCard({ rows, chipData, stockCode }) {
   const ai = useMemo(() => analyzeStock(rows, chipData), [rows, chipData]);
+  const [groqText, setGroqText] = useState("");
+  const [groqLoading, setGroqLoading] = useState(false);
+  const [groqError, setGroqError] = useState("");
+  const [groqMeta, setGroqMeta] = useState(null);
+
+  async function runGroqAnalysis() {
+    if (!stockCode || groqLoading) return;
+    setGroqLoading(true);
+    setGroqText("");
+    setGroqError("");
+    setGroqMeta(null);
+    try {
+      const res = await fetch(`${API}/api/ai/groq/${encodeURIComponent(stockCode)}`, { cache: "no-store" });
+      const json = await res.json();
+      if (json.error) { setGroqError(json.error); return; }
+      setGroqText(json.analysis || "");
+      setGroqMeta({ model: json.model, tokens: json.tokens_used, rows: json.data_rows });
+    } catch (e) {
+      setGroqError(e.message || "連線失敗");
+    } finally {
+      setGroqLoading(false);
+    }
+  }
+
   if (!ai) return <Card title="🤖 AI 趨勢分析"><p style={{ color: "#64748b" }}>資料載入中...</p></Card>;
   const scoreColor = ai.score >= 65 ? "#ef4444" : ai.score >= 45 ? "#f59e0b" : "#22c55e";
   const sigColor = { bull: "#ef4444", bear: "#22c55e", special: "#f59e0b", neutral: "#94a3b8" };
@@ -242,7 +266,7 @@ function AiCard({ rows, chipData }) {
         </div>
       )}
 
-      <div style={{ fontSize: 13, display: "grid", gap: 6 }}>
+      <div style={{ fontSize: 13, display: "grid", gap: 6, marginBottom: 14 }}>
         {[
           ["均線", ai.maStatus],
           ["量價矩陣", `${ai.volPrice}（量比 ${ai.volRatio.toFixed(1)}x）`],
@@ -260,8 +284,36 @@ function AiCard({ rows, chipData }) {
         ))}
       </div>
 
-      <div style={{ marginTop: 10, padding: 8, borderRadius: 4, background: "rgba(148,163,184,.06)", color: "#94a3b8", fontSize: 11, lineHeight: 1.6 }}>
-        ⚠️ 本分析為量化指標參考，不構成投資建議。操作前請自行研判風險。
+      {/* Groq deep analysis */}
+      <button
+        type="button"
+        onClick={runGroqAnalysis}
+        disabled={groqLoading}
+        style={{ width: "100%", padding: "10px 0", borderRadius: 6, border: 0, background: groqLoading ? "#1e293b" : "linear-gradient(90deg,#7c3aed,#2563eb)", color: "white", fontWeight: 700, cursor: groqLoading ? "default" : "pointer", fontSize: 14, marginBottom: 10 }}
+      >
+        {groqLoading ? "⏳ Groq 分析中..." : "⚡ Groq 深度分析（llama-3.3-70b）"}
+      </button>
+
+      {groqError && (
+        <div style={{ padding: 10, borderRadius: 6, background: "rgba(239,68,68,.1)", color: "#fca5a5", fontSize: 13, marginBottom: 10 }}>
+          ❌ {groqError}
+        </div>
+      )}
+
+      {groqText && (
+        <div style={{ padding: 12, borderRadius: 6, background: "rgba(124,58,237,.08)", border: "1px solid rgba(124,58,237,.25)", fontSize: 13, lineHeight: 1.8, whiteSpace: "pre-wrap", marginBottom: 8 }}>
+          {groqText}
+        </div>
+      )}
+
+      {groqMeta && (
+        <div style={{ color: "#475569", fontSize: 11 }}>
+          模型：{groqMeta.model}・Token：{groqMeta.tokens}・資料筆數：{groqMeta.rows}
+        </div>
+      )}
+
+      <div style={{ marginTop: 10, padding: 8, borderRadius: 4, background: "rgba(148,163,184,.06)", color: "#64748b", fontSize: 11, lineHeight: 1.6 }}>
+        ⚠️ 本分析為量化指標與 AI 參考，不構成投資建議。操作前請自行研判風險。
       </div>
     </Card>
   );
@@ -541,7 +593,7 @@ export default function App() {
 
         {/* Sidebar */}
         <aside style={asideStyle}>
-          <AiCard rows={rows} chipData={chip} />
+          <AiCard rows={rows} chipData={chip} stockCode={stock.code} />
 
           {isLive && (
             <Card title={<>即時委買委賣 <LiveBadge /></>}>

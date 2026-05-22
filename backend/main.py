@@ -697,3 +697,98 @@ def backtest(stock: str):
     result = backtest_strategy(kline_data) if len(kline_data) >= 60 else {"final_capital": 100000, "return_pct": 0, "trades": [], "message": "資料不足，已啟動背景補資料"}
     result.update({"stock": stock, "normalized_stock": code, "source": source, "data_rows": len(kline_data), "backfill_started": backfill_started})
     return JSONResponse(result, media_type="application/json; charset=utf-8")
+
+
+def _build_groq_prompt(code: str, name: str, kline: list, chip_analysis: dict) -> str:
+    latest = kline[-1] if kline else {}
+    recent10 = kline[-10:] if len(kline) >= 10 else kline
+    metrics = (chip_analysis or {}).get("metrics") or {}
+
+    lines = [f"  {r.get('date','?')}: 開{r.get('open','?')} 高{r.get('high','?')} 低{r.get('low','?')} 收{r.get('close','?')} 量{int((r.get('volume') or 0)/1000)}千張" for r in recent10]
+
+    def f(v, d=1): return f"{float(v):.{d}f}" if v is not None else "N/A"
+
+    ma5, ma20, ma60 = latest.get("ma5"), latest.get("ma20"), latest.get("ma60")
+    if ma5 and ma20 and ma60:
+        trend = "四線多排（最強多頭）" if ma5 > ma20 > ma60 else "多頭排列" if ma5 > ma20 else "空頭排列" if ma5 < ma20 < ma60 else "均線糾結"
+    else:
+        trend = "均線資料不足"
+
+    chip_status = (chip_analysis or {}).get("status", "無資料")
+    chip_score = (chip_analysis or {}).get("score", "N/A")
+
+    return f"""你是專業台股技術與籌碼分析師。請依據分析框架與以下數據，用繁體中文做深度分析。
+
+【股票】{code} {name}
+
+【近10日K線】
+{chr(10).join(lines)}
+
+【最新技術指標】
+均線排列：{trend}（MA5={f(ma5)} MA20={f(ma20)} MA60={f(ma60)}）
+RSI14：{f(latest.get('rsi14'))}（>70過熱 <30超賣）
+MACD柱：{f(latest.get('macd_hist'), 3)}（正值偏多 負值偏空）
+布林寬度：{f(latest.get('bb_width'), 4)}（<0.02極度收縮蓄勢 >0.08大幅開口）
+
+【籌碼資料】
+外資近5日：{metrics.get('foreign_5d_sum', 0):+.0f}張，連買{metrics.get('foreign_buy_streak', 0)}天
+投信近5日：{metrics.get('investment_trust_5d_sum', 0):+.0f}張，連買{metrics.get('investment_trust_buy_streak', 0)}天
+自營商近5日：{metrics.get('dealer_5d_sum', 0):+.0f}張
+融資餘額：{metrics.get('margin_balance', 'N/A')}　融券餘額：{metrics.get('short_balance', 'N/A')}
+券資比：{f(metrics.get('short_margin_ratio'), 1) if metrics.get('short_margin_ratio') else 'N/A'}%
+籌碼狀態：{chip_status}（評分 {chip_score}/100）
+
+【分析框架】請依以下五個維度分析：
+1. 趨勢研判（均線排列、黃金/死亡交叉、盤整/突破）
+2. 量價矩陣（量增價漲=積極買盤、量縮價漲=謹慎、量增價跌=賣壓、量縮價跌=洗盤）
+3. 技術指標（RSI超買超賣、MACD動能方向、布林帶開口收縮）
+4. 籌碼分析（外資投信方向、信用交易風險、軋空潛力）
+5. 綜合結論（多/空/中性判斷 + 關鍵支撐壓力區 + 具體操作建議）
+
+請用繁體中文、約300字，結構分點，給出專業且可操作的分析。"""
+
+
+@app.get("/api/ai/groq/{stock}")
+def groq_analyze(stock: str):
+    import os
+    import requests as req
+
+    groq_key = os.getenv("GROQ_API_KEY")
+    if not groq_key:
+        return JSONResponse({"error": "GROQ_API_KEY 未設定，請在 Fly.io secrets 加入"}, status_code=503, media_type="application/json; charset=utf-8")
+
+    code = normalize_stock(stock)
+    df, _, source, _ = ensure_analysis_history(code)
+    kline_data = to_kline_payload(df)
+    _, chip_analysis, _ = get_chip_context(code, limit=20)
+
+    info = STOCK_INFO_MAP.get(code, {})
+    name = info.get("name", code)
+    prompt = _build_groq_prompt(code, name, kline_data, chip_analysis)
+
+    try:
+        resp = req.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 1024,
+                "temperature": 0.3,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        text = data["choices"][0]["message"]["content"]
+        usage = data.get("usage", {})
+        return JSONResponse({
+            "stock": code, "name": name,
+            "analysis": text,
+            "model": data.get("model"),
+            "tokens_used": usage.get("total_tokens"),
+            "data_rows": len(kline_data),
+            "source": source,
+        }, media_type="application/json; charset=utf-8")
+    except Exception as exc:
+        return JSONResponse({"error": str(exc), "stock": code}, status_code=500, media_type="application/json; charset=utf-8")
