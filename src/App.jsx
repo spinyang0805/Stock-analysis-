@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import * as LightweightCharts from "lightweight-charts";
 
 const { createChart, CandlestickSeries, LineSeries, HistogramSeries } = LightweightCharts;
-const API = (import.meta.env.VITE_API_BASE_URL || "https://stock-analysis-tw.fly.dev").replace(/\/$/, "");
+const API = "https://stock-analysis-tw.fly.dev";
 const APP_VERSION = "v20-stable";
 const POLL_MS = 10_000;
 
