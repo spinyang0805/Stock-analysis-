@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-const API = "https://stock-analysis-api-ihun.onrender.com";
+const API = (import.meta.env.VITE_API_BASE_URL || "https://stock-analysis-tw.fly.dev").replace(/\/$/, "");
 
 export default function SystemControlPanel() {
   const [result, setResult] = useState(null);

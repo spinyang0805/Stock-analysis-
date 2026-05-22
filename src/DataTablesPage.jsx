@@ -1,10 +1,6 @@
 import React, { useState } from "react";
 
-const DEFAULT_API = "https://stock-analysis-api-ihun.onrender.com";
-const RAW_API = import.meta.env.VITE_API_BASE_URL || DEFAULT_API;
-const API = String(RAW_API).includes("stock-analysis-api-ihun")
-  ? String(RAW_API).replace(/\/$/, "")
-  : DEFAULT_API;
+const API = (import.meta.env.VITE_API_BASE_URL || "https://stock-analysis-tw.fly.dev").replace(/\/$/, "");
 
 function cleanCode(value) {
   return String(value || "2330")

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-const API = "https://stock-analysis-api-ihun.onrender.com";
+const API = (import.meta.env.VITE_API_BASE_URL || "https://stock-analysis-tw.fly.dev").replace(/\/$/, "");
 const PAGE_VERSION = "db-maintenance-v2-zh-tw";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

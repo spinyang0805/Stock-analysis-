@@ -42,7 +42,7 @@ const tabs = [
 ]
 
 function RootShell() {
-  const [activeTab, setActiveTab] = useState('data-tables')
+  const [activeTab, setActiveTab] = useState('dashboard')
   const ActiveComponent = tabs.find((tab) => tab.id === activeTab)?.component || DataTablesPage
 
   return (
