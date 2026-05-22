@@ -3,9 +3,10 @@ import * as LightweightCharts from "lightweight-charts";
 
 const { createChart, CandlestickSeries, LineSeries, HistogramSeries } = LightweightCharts;
 const API = (import.meta.env.VITE_API_BASE_URL || "https://stock-analysis-tw.fly.dev").replace(/\/$/, "");
-const APP_VERSION = "v18-realtime";
-const POLL_INTERVAL_MS = 10_000;
+const APP_VERSION = "v19-realtime-ai";
+const POLL_MS = 10_000;
 
+/* ── Stock list ──────────────────────────────────────────────────── */
 const STOCKS = [
   { code: "2330", name: "台積電", market: "上市", industry: "半導體" },
   { code: "1402", name: "遠東新", market: "上市", industry: "紡織" },
@@ -20,86 +21,160 @@ const STOCKS = [
   { code: "00679B", name: "元大美債20年", market: "上市", industry: "債券ETF" },
 ];
 
+/* ── Helpers ─────────────────────────────────────────────────────── */
 function isTradingSession() {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
   const day = now.getDay();
   if (day === 0 || day === 6) return false;
-  const mins = now.getHours() * 60 + now.getMinutes();
-  return mins >= 9 * 60 && mins <= 13 * 60 + 30;
+  const m = now.getHours() * 60 + now.getMinutes();
+  return m >= 540 && m <= 810;
 }
-
-function cleanCode(value) {
-  return String(value || "2330").trim().replace(".TW", "").replace(".TWO", "").split(/\s+/)[0].toUpperCase();
-}
+function cleanCode(v) { return String(v || "2330").trim().replace(/\.(TW|TWO)$/i, "").split(/\s+/)[0].toUpperCase(); }
 function findStock(q) {
   const s = String(q || "").trim().toLowerCase();
   if (!s) return [];
-  return STOCKS.filter((x) => x.code.toLowerCase().includes(s) || x.name.toLowerCase().includes(s)).slice(0, 8);
+  return STOCKS.filter(x => x.code.toLowerCase().includes(s) || x.name.toLowerCase().includes(s)).slice(0, 8);
 }
 function resolveStock(q) {
   const raw = String(q || "2330").trim();
-  const found = STOCKS.find((x) => x.code === raw.toUpperCase() || x.name === raw);
-  return found || { code: cleanCode(raw), name: cleanCode(raw), market: "--", industry: "--" };
+  return STOCKS.find(x => x.code === raw.toUpperCase() || x.name === raw) || { code: cleanCode(raw), name: cleanCode(raw), market: "--", industry: "--" };
 }
-function fmt(value, digits = 2) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: digits }) : "--";
-}
-function pickRows(payload) {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.rows)) return payload.rows;
-  if (Array.isArray(payload?.items)) return payload.items;
-  return [];
-}
+function fmt(v, d = 2) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: d }) : "--"; }
+function num(...vs) { for (const v of vs) { const n = Number(v); if (Number.isFinite(n)) return n; } return NaN; }
+
 function toChartTime(row) {
-  const date = String(row?.date || row?.Date || row?.data_date || "").trim();
-  if (/^\d{8}$/.test(date)) return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  const d = String(row?.date || row?.Date || "").trim();
+  if (/^\d{8}$/.test(d)) return `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
   if (typeof row?.time === "number" && Number.isFinite(row.time)) return Math.floor(row.time);
   return null;
 }
-function num(...values) {
-  for (const value of values) {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return NaN;
-}
 function normalizeRows(payload) {
+  const src = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
   const used = new Set();
-  return pickRows(payload)
-    .map((row) => ({
-      ...row,
-      time: toChartTime(row),
-      open: num(row.open, row.Open, row.o),
-      high: num(row.high, row.High, row.h),
-      low: num(row.low, row.Low, row.l),
-      close: num(row.close, row.Close, row.c),
-      volume: num(row.volume, row.Volume, row.vol, 0),
-      ma5: num(row.ma5, row.MA5),
-      ma20: num(row.ma20, row.MA20),
-      ma60: num(row.ma60, row.MA60),
-      rsi14: num(row.rsi14, row.RSI14),
-      macd_hist: num(row.macd_hist, row.MACD_HIST),
+  return src
+    .map(r => ({
+      ...r,
+      time: toChartTime(r),
+      open: num(r.open, r.Open), high: num(r.high, r.High),
+      low: num(r.low, r.Low),   close: num(r.close, r.Close),
+      volume: num(r.volume, r.Volume, 0),
+      ma5: num(r.ma5, r.MA5),   ma10: num(r.ma10, r.MA10),
+      ma20: num(r.ma20, r.MA20), ma60: num(r.ma60, r.MA60),
+      bb_upper: num(r.bb_upper), bb_lower: num(r.bb_lower),
+      rsi14: num(r.rsi14), macd_hist: num(r.macd_hist),
+      bb_width: num(r.bb_width),
     }))
-    .filter((row) => row.time && [row.open, row.high, row.low, row.close].every(Number.isFinite))
+    .filter(r => r.time && [r.open, r.high, r.low, r.close].every(Number.isFinite))
     .sort((a, b) => String(a.time).localeCompare(String(b.time)))
-    .filter((row) => { if (used.has(row.time)) return false; used.add(row.time); return true; });
+    .filter(r => { if (used.has(r.time)) return false; used.add(r.time); return true; });
 }
-function addSeries(chart, SeriesType, options, fallback) {
-  return typeof chart.addSeries === "function" && SeriesType ? chart.addSeries(SeriesType, options) : chart[fallback](options);
-}
-function line(rows, key) {
-  return rows.filter((row) => Number.isFinite(Number(row[key]))).map((row) => ({ time: row.time, value: Number(row[key]) }));
-}
-function volumeRows(rows) {
-  return rows.map((row) => ({
-    time: row.time, value: Number(row.volume || 0),
-    color: row.close >= row.open ? "rgba(239,68,68,.55)" : "rgba(34,197,94,.55)",
-  }));
+function pickLine(rows, key) {
+  return rows.filter(r => Number.isFinite(r[key])).map(r => ({ time: r.time, value: r[key] }));
 }
 
+/* ── AI Analysis Engine (based on 📈 股票技術與籌碼分析.docx) ───── */
+function analyzeStock(rows, chipData) {
+  if (!rows || rows.length < 10) return null;
+  const latest = rows.at(-1);
+  const prev = rows.at(-2) || {};
+  const recent5 = rows.slice(-5);
+
+  // 1. MA arrangement
+  const { ma5, ma10, ma20, ma60 } = latest;
+  const maStatus = (ma5 && ma20 && ma60)
+    ? (ma5 > ma20 && ma20 > ma60 ? "四線多排" : ma5 > ma20 ? "多頭排列" : ma5 < ma20 && ma20 < ma60 ? "空頭排列" : "均線糾結")
+    : "均線資料不足";
+  const goldenCross = prev.ma5 && prev.ma20 && prev.ma5 < prev.ma20 && ma5 > ma20;
+  const deathCross = prev.ma5 && prev.ma20 && prev.ma5 > prev.ma20 && ma5 < ma20;
+
+  // 2. Volume-price matrix
+  const avgVol5 = recent5.reduce((s, r) => s + (r.volume || 0), 0) / recent5.length;
+  const volRatio = avgVol5 > 0 ? (latest.volume || 0) / avgVol5 : 1;
+  const isUp = latest.close >= latest.open;
+  const volPrice = volRatio > 1.3 && isUp ? "量增價漲"
+    : volRatio > 1.3 && !isUp ? "量增價跌"
+    : volRatio < 0.7 && isUp ? "量縮價漲"
+    : volRatio < 0.7 && !isUp ? "量縮價跌"
+    : "量能正常";
+
+  // 3. RSI
+  const rsi = latest.rsi14;
+  const rsiStatus = !rsi ? "N/A"
+    : rsi >= 80 ? "超買警戒（過熱）"
+    : rsi >= 70 ? "偏強偏熱"
+    : rsi <= 20 ? "深度超賣（底部機會）"
+    : rsi <= 30 ? "超賣"
+    : rsi <= 40 ? "偏弱"
+    : "正常區間";
+
+  // 4. MACD
+  const hist = latest.macd_hist, prevHist = prev.macd_hist;
+  const macdStatus = !Number.isFinite(hist) ? "N/A"
+    : hist > 0 && prevHist <= 0 ? "MACD 翻多（金叉）"
+    : hist < 0 && prevHist >= 0 ? "MACD 翻空（死叉）"
+    : hist > 0 && hist > prevHist ? "多頭動能擴張"
+    : hist > 0 ? "多頭動能收斂"
+    : hist < 0 && hist < prevHist ? "空頭動能擴張"
+    : "空頭動能收斂";
+
+  // 5. Bollinger
+  const bbW = latest.bb_width;
+  const bbStatus = !bbW ? "N/A"
+    : bbW > 0.08 ? "大幅開口（高波動）"
+    : bbW < 0.02 ? "極度收縮（蓄勢待發）"
+    : bbW < 0.04 ? "收縮（蓄勢中）"
+    : "正常";
+
+  // 6. Chip analysis
+  const metrics = chipData?.analysis?.metrics || {};
+  const chipScore = chipData?.analysis?.score ?? 50;
+  const chipStatus = chipData?.analysis?.status || "無籌碼資料";
+  const foreign5d = metrics.foreign_5d_sum || 0;
+  const trust5d = metrics.investment_trust_5d_sum || 0;
+  const shortRatio = metrics.short_margin_ratio;
+  const foreignStreak = metrics.foreign_buy_streak || 0;
+  const trustStreak = metrics.investment_trust_buy_streak || 0;
+
+  // 7. Signals
+  const signals = [];
+  if (maStatus === "四線多排") signals.push({ t: "bull", icon: "🔥", text: "四線多排 — 最強波段多頭格局" });
+  if (goldenCross) signals.push({ t: "bull", icon: "✅", text: "MA5 穿越 MA20 黃金交叉（中線買訊）" });
+  if (volPrice === "量增價漲") signals.push({ t: "bull", icon: "📈", text: `量增價漲（量比 ${volRatio.toFixed(1)}x）— 買盤積極` });
+  if (rsi <= 30) signals.push({ t: "bull", icon: "💡", text: `RSI ${fmt(rsi, 1)} 超賣 — 底部反彈機會` });
+  if (hist > 0 && prevHist <= 0) signals.push({ t: "bull", icon: "⚡", text: "MACD 金叉翻多" });
+  if (foreign5d > 0 && trust5d > 0) signals.push({ t: "bull", icon: "🏦", text: `外資投信雙買（外資近5日 ${(foreign5d / 1000).toFixed(0)}千張）` });
+  if (foreignStreak >= 3) signals.push({ t: "bull", icon: "🏦", text: `外資連買 ${foreignStreak} 天（持續買超）` });
+  if (trustStreak >= 3) signals.push({ t: "bull", icon: "🏦", text: `投信連買 ${trustStreak} 天（中期支撐）` });
+  if (shortRatio > 30) signals.push({ t: "special", icon: "🎯", text: `券資比 ${shortRatio.toFixed(1)}% 偏高 — 潛在軋空行情` });
+  if (bbW < 0.02) signals.push({ t: "neutral", icon: "🗜️", text: "布林極度收縮 — 即將大波動，方向待確認" });
+  if (maStatus === "空頭排列") signals.push({ t: "bear", icon: "⚠️", text: "空頭排列 — 趨勢偏弱，建議觀望" });
+  if (deathCross) signals.push({ t: "bear", icon: "❌", text: "MA5 跌破 MA20 死亡交叉（轉弱訊號）" });
+  if (volPrice === "量增價跌") signals.push({ t: "bear", icon: "📉", text: `量增價跌（量比 ${volRatio.toFixed(1)}x）— 賣壓沉重` });
+  if (rsi >= 80) signals.push({ t: "bear", icon: "🔴", text: `RSI ${fmt(rsi, 1)} 超買 — 短線注意過熱回測` });
+  if (hist < 0 && prevHist >= 0) signals.push({ t: "bear", icon: "⚡", text: "MACD 死叉翻空" });
+  if (foreign5d < 0 && trust5d < 0) signals.push({ t: "bear", icon: "🏦", text: "外資投信雙賣 — 法人出場，籌碼轉弱" });
+
+  // 8. Score
+  let score = 50;
+  if (maStatus === "四線多排") score += 20;
+  else if (maStatus === "多頭排列") score += 10;
+  else if (maStatus === "空頭排列") score -= 15;
+  if (volPrice === "量增價漲") score += 8;
+  if (volPrice === "量增價跌") score -= 10;
+  if (rsi && rsi > 70) score -= 5;
+  if (rsi && rsi < 30) score += 5;
+  if (Number.isFinite(hist)) score += hist > 0 ? 5 : -5;
+  score += foreign5d > 0 ? 8 : foreign5d < 0 ? -8 : 0;
+  score += trust5d > 0 ? 5 : trust5d < 0 ? -5 : 0;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  const trend = score >= 75 ? "強勢多頭" : score >= 60 ? "偏多觀察" : score >= 45 ? "中性盤整" : score >= 30 ? "偏空觀望" : "強勢空頭";
+
+  return { score, trend, maStatus, volPrice, volRatio, rsiStatus, rsi, macdStatus, bbStatus, bbW, chipStatus, chipScore, foreign5d, trust5d, shortRatio, foreignStreak, trustStreak, signals };
+}
+
+/* ── Small UI components ─────────────────────────────────────────── */
 function Row({ label, value, color }) {
   return (
     <div style={rowStyle}>
@@ -108,133 +183,215 @@ function Row({ label, value, color }) {
     </div>
   );
 }
-function Card({ title, badge, children }) {
-  return (
-    <section style={cardStyle}>
-      <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
-        {title}
-        {badge}
-      </h3>
-      {children}
-    </section>
-  );
+function Card({ title, children, style: extraStyle }) {
+  return <section style={{ ...cardStyle, ...extraStyle }}><h3 style={{ marginTop: 0 }}>{title}</h3>{children}</section>;
 }
-
 function LiveBadge() {
-  return (
-    <span style={{ background: "#ef4444", color: "white", borderRadius: 4, padding: "2px 7px", fontSize: 11, fontWeight: 800, letterSpacing: 1, animation: "pulse 1.5s infinite" }}>
-      ● LIVE
-    </span>
-  );
+  return <span style={{ background: "#ef4444", color: "#fff", borderRadius: 4, padding: "2px 7px", fontSize: 11, fontWeight: 800, animation: "pulse 1.5s infinite" }}>● LIVE</span>;
 }
-
 function OrderBook({ bids = [], asks = [] }) {
-  const rows = Math.max(bids.length, asks.length, 1);
+  const n = Math.max(bids.length, asks.length, 1);
   return (
     <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-      <thead>
-        <tr>
-          <th style={{ color: "#22c55e", textAlign: "right", paddingRight: 8 }}>委買量</th>
-          <th style={{ color: "#22c55e", textAlign: "right", paddingRight: 8 }}>買價</th>
-          <th style={{ color: "#ef4444", textAlign: "left", paddingLeft: 8 }}>賣價</th>
-          <th style={{ color: "#ef4444", textAlign: "left", paddingLeft: 8 }}>委賣量</th>
-        </tr>
-      </thead>
-      <tbody>
-        {Array.from({ length: rows }).map((_, i) => {
-          const bid = bids[i] || {};
-          const ask = asks[i] || {};
-          return (
-            <tr key={i} style={{ borderBottom: "1px solid rgba(148,163,184,.1)" }}>
-              <td style={{ textAlign: "right", paddingRight: 8, color: "#22c55e", padding: "4px 8px 4px 0" }}>
-                {bid.qty != null ? bid.qty.toLocaleString() : ""}
-              </td>
-              <td style={{ textAlign: "right", paddingRight: 8, color: "#22c55e", fontWeight: 700 }}>
-                {bid.price != null ? fmt(bid.price) : ""}
-              </td>
-              <td style={{ textAlign: "left", paddingLeft: 8, color: "#ef4444", fontWeight: 700 }}>
-                {ask.price != null ? fmt(ask.price) : ""}
-              </td>
-              <td style={{ textAlign: "left", paddingLeft: 8, color: "#ef4444" }}>
-                {ask.qty != null ? ask.qty.toLocaleString() : ""}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
+      <thead><tr>
+        <th style={{ color: "#22c55e", textAlign: "right", paddingRight: 6 }}>委買量</th>
+        <th style={{ color: "#22c55e", textAlign: "right", paddingRight: 6 }}>買價</th>
+        <th style={{ color: "#ef4444", textAlign: "left", paddingLeft: 6 }}>賣價</th>
+        <th style={{ color: "#ef4444", textAlign: "left", paddingLeft: 6 }}>委賣量</th>
+      </tr></thead>
+      <tbody>{Array.from({ length: n }).map((_, i) => {
+        const b = bids[i] || {}, a = asks[i] || {};
+        return (
+          <tr key={i} style={{ borderBottom: "1px solid rgba(148,163,184,.08)" }}>
+            <td style={{ textAlign: "right", padding: "3px 6px 3px 0", color: "#22c55e" }}>{b.qty != null ? b.qty.toLocaleString() : ""}</td>
+            <td style={{ textAlign: "right", paddingRight: 6, color: "#22c55e", fontWeight: 700 }}>{b.price != null ? fmt(b.price) : ""}</td>
+            <td style={{ textAlign: "left", paddingLeft: 6, color: "#ef4444", fontWeight: 700 }}>{a.price != null ? fmt(a.price) : ""}</td>
+            <td style={{ textAlign: "left", paddingLeft: 6, color: "#ef4444" }}>{a.qty != null ? a.qty.toLocaleString() : ""}</td>
+          </tr>
+        );
+      })}</tbody>
     </table>
   );
 }
 
+/* ── AI Card ─────────────────────────────────────────────────────── */
+function AiCard({ rows, chipData }) {
+  const ai = useMemo(() => analyzeStock(rows, chipData), [rows, chipData]);
+  if (!ai) return <Card title="🤖 AI 趨勢分析"><p style={{ color: "#64748b" }}>資料載入中...</p></Card>;
+  const scoreColor = ai.score >= 65 ? "#ef4444" : ai.score >= 45 ? "#f59e0b" : "#22c55e";
+  const sigColor = { bull: "#ef4444", bear: "#22c55e", special: "#f59e0b", neutral: "#94a3b8" };
+  const sigBg = { bull: "rgba(239,68,68,.08)", bear: "rgba(34,197,94,.08)", special: "rgba(251,191,36,.1)", neutral: "rgba(148,163,184,.08)" };
+
+  return (
+    <Card title="🤖 AI 趨勢分析">
+      <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 12 }}>
+        <div style={{ fontSize: 54, fontWeight: 900, color: scoreColor, lineHeight: 1 }}>{ai.score}</div>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: scoreColor }}>{ai.trend}</div>
+          <div style={{ color: "#64748b", fontSize: 12 }}>技術 + 籌碼綜合評分</div>
+        </div>
+      </div>
+
+      {ai.signals.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          {ai.signals.map((sig, i) => (
+            <div key={i} style={{ padding: "5px 10px", marginBottom: 4, borderRadius: 4, fontSize: 13, background: sigBg[sig.t], borderLeft: `3px solid ${sigColor[sig.t]}` }}>
+              {sig.icon} {sig.text}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ fontSize: 13, display: "grid", gap: 6 }}>
+        {[
+          ["均線", ai.maStatus],
+          ["量價矩陣", `${ai.volPrice}（量比 ${ai.volRatio.toFixed(1)}x）`],
+          ["RSI14", `${ai.rsiStatus}（${fmt(ai.rsi, 1)}）`],
+          ["MACD", ai.macdStatus],
+          ["布林通道", ai.bbStatus],
+          ["籌碼狀態", `${ai.chipStatus}（籌碼分 ${ai.chipScore}）`],
+          ai.shortRatio != null ? ["券資比", `${ai.shortRatio.toFixed(1)}%${ai.shortRatio > 30 ? " ⚠️ 偏高" : ""}`] : null,
+          ai.foreignStreak > 0 ? ["外資", `連買 ${ai.foreignStreak} 天`] : ai.foreign5d !== 0 ? ["外資近5日", `${ai.foreign5d > 0 ? "+" : ""}${(ai.foreign5d / 1000).toFixed(0)} 千張`] : null,
+        ].filter(Boolean).map(([label, value]) => (
+          <div key={label} style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(148,163,184,.12)", paddingBottom: 5 }}>
+            <span style={{ color: "#94a3b8" }}>{label}</span>
+            <span style={{ textAlign: "right", maxWidth: "60%" }}>{value}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 10, padding: 8, borderRadius: 4, background: "rgba(148,163,184,.06)", color: "#94a3b8", fontSize: 11, lineHeight: 1.6 }}>
+        ⚠️ 本分析為量化指標參考，不構成投資建議。操作前請自行研判風險。
+      </div>
+    </Card>
+  );
+}
+
+/* ── Main App ────────────────────────────────────────────────────── */
+function addSeries(chart, Type, opts, fallback) {
+  return typeof chart.addSeries === "function" && Type ? chart.addSeries(Type, opts) : chart[fallback](opts);
+}
+
 export default function App() {
-  const priceRef = useRef(null);
-  const volRef = useRef(null);
+  const mainRef = useRef(null);
   const rsiRef = useRef(null);
   const macdRef = useRef(null);
-  const charts = useRef([]);
-  const series = useRef({});
+  const chartsRef = useRef({});
+  const seriesRef = useRef({});
+  const syncingRef = useRef(false);
 
   const [input, setInput] = useState("2330");
   const [stock, setStock] = useState(resolveStock("2330"));
   const [openSuggest, setOpenSuggest] = useState(false);
   const [payload, setPayload] = useState(null);
   const [rows, setRows] = useState([]);
-  const [realtime, setRealtime] = useState(null);
   const [chip, setChip] = useState(null);
   const [analysis, setAnalysis] = useState(null);
+  const [realtime, setRealtime] = useState(null);
   const [status, setStatus] = useState("尚未查詢");
   const [lastRefresh, setLastRefresh] = useState(null);
-  const [isLive, setIsLive] = useState(isTradingSession());
+  const [isLive, setIsLive] = useState(isTradingSession);
+  const [hovered, setHovered] = useState(null);
   const suggestions = useMemo(() => findStock(input), [input]);
 
-  // Chart setup
+  /* ── Chart init ──────────────────────────────────────────────── */
   useEffect(() => {
-    if (!priceRef.current || !volRef.current || !rsiRef.current || !macdRef.current) return undefined;
-    const makeChart = (el, height) => createChart(el, {
-      width: el.clientWidth || 900, height,
+    if (!mainRef.current || !rsiRef.current || !macdRef.current) return;
+    const commonOpts = (el, h) => ({
+      width: el.clientWidth || 900, height: h,
       layout: { background: { color: "#0f172a" }, textColor: "#dbeafe" },
       grid: { vertLines: { color: "#1e293b" }, horzLines: { color: "#1e293b" } },
       timeScale: { timeVisible: true, secondsVisible: false, borderColor: "#334155" },
       rightPriceScale: { borderColor: "#334155" },
+      crosshair: { mode: 1 },
     });
-    const c1 = makeChart(priceRef.current, 420);
-    const c2 = makeChart(volRef.current, 130);
-    const c3 = makeChart(rsiRef.current, 130);
-    const c4 = makeChart(macdRef.current, 150);
-    charts.current = [c1, c2, c3, c4];
-    series.current = {
-      candle: addSeries(c1, CandlestickSeries, { upColor: "#ef4444", downColor: "#22c55e", borderUpColor: "#ef4444", borderDownColor: "#22c55e", wickUpColor: "#ef4444", wickDownColor: "#22c55e" }, "addCandlestickSeries"),
-      ma5: addSeries(c1, LineSeries, { color: "#facc15", lineWidth: 1 }, "addLineSeries"),
-      ma20: addSeries(c1, LineSeries, { color: "#38bdf8", lineWidth: 1 }, "addLineSeries"),
-      ma60: addSeries(c1, LineSeries, { color: "#a78bfa", lineWidth: 1 }, "addLineSeries"),
-      volume: addSeries(c2, HistogramSeries, { priceFormat: { type: "volume" } }, "addHistogramSeries"),
-      rsi: addSeries(c3, LineSeries, { color: "#f59e0b", lineWidth: 2 }, "addLineSeries"),
-      macd: addSeries(c4, HistogramSeries, {}, "addHistogramSeries"),
+
+    const main = createChart(mainRef.current, commonOpts(mainRef.current, 520));
+    const rsi  = createChart(rsiRef.current,  { ...commonOpts(rsiRef.current, 130), crosshair: { mode: 1 } });
+    const macd = createChart(macdRef.current, { ...commonOpts(macdRef.current, 150), crosshair: { mode: 1 } });
+    chartsRef.current = { main, rsi, macd };
+
+    // Main chart series
+    const candle = addSeries(main, CandlestickSeries, {
+      upColor: "#ef4444", downColor: "#22c55e",
+      borderUpColor: "#ef4444", borderDownColor: "#22c55e",
+      wickUpColor: "#ef4444", wickDownColor: "#22c55e",
+    }, "addCandlestickSeries");
+
+    // Volume in same chart, bottom 22%
+    const volume = addSeries(main, HistogramSeries, {
+      priceFormat: { type: "volume" }, priceScaleId: "vol",
+    }, "addHistogramSeries");
+    main.priceScale("vol").applyOptions({ scaleMargins: { top: 0.78, bottom: 0 }, visible: false });
+
+    const ma5s   = addSeries(main, LineSeries, { color: "#facc15", lineWidth: 1, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
+    const ma10s  = addSeries(main, LineSeries, { color: "#fb923c", lineWidth: 1, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
+    const ma20s  = addSeries(main, LineSeries, { color: "#38bdf8", lineWidth: 1, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
+    const ma60s  = addSeries(main, LineSeries, { color: "#a78bfa", lineWidth: 1, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
+    const bbUs   = addSeries(main, LineSeries, { color: "rgba(148,163,184,.35)", lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
+    const bbLs   = addSeries(main, LineSeries, { color: "rgba(148,163,184,.35)", lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
+
+    // RSI + MACD
+    const rsiS  = addSeries(rsi, LineSeries, { color: "#f59e0b", lineWidth: 2 }, "addLineSeries");
+    const macdS = addSeries(macd, HistogramSeries, {}, "addHistogramSeries");
+
+    seriesRef.current = { candle, volume, ma5s, ma10s, ma20s, ma60s, bbUs, bbLs, rsiS, macdS };
+
+    // Crosshair hover → update hovered state
+    main.subscribeCrosshairMove(param => {
+      if (!param.point || !param.time) { setHovered(null); return; }
+      const c = param.seriesData?.get(candle);
+      const v = param.seriesData?.get(volume);
+      if (c) setHovered({ time: param.time, open: c.open, high: c.high, low: c.low, close: c.close, volume: v?.value });
+    });
+
+    // Sync visible time range across all 3 charts
+    const syncRange = (src, targets) => {
+      src.timeScale().subscribeVisibleLogicalRangeChange(range => {
+        if (syncingRef.current || !range) return;
+        syncingRef.current = true;
+        targets.forEach(t => { try { t.timeScale().setVisibleLogicalRange(range); } catch (_) {} });
+        syncingRef.current = false;
+      });
     };
-    const resize = () => charts.current.forEach((c) => c.applyOptions({ width: priceRef.current?.clientWidth || 900 }));
+    syncRange(main, [rsi, macd]);
+    syncRange(rsi,  [main, macd]);
+    syncRange(macd, [main, rsi]);
+
+    const resize = () => {
+      main.applyOptions({ width: mainRef.current?.clientWidth || 900 });
+      rsi.applyOptions({ width: rsiRef.current?.clientWidth || 900 });
+      macd.applyOptions({ width: macdRef.current?.clientWidth || 900 });
+    };
     window.addEventListener("resize", resize);
     return () => {
       window.removeEventListener("resize", resize);
-      charts.current.forEach((c) => c.remove());
-      charts.current = [];
+      Object.values(chartsRef.current).forEach(c => c.remove());
+      chartsRef.current = {};
     };
   }, []);
 
-  // Chart data update
+  /* ── Feed chart data ─────────────────────────────────────────── */
   useEffect(() => {
-    const s = series.current;
-    if (!s.candle) return;
-    s.candle.setData(rows.map((r) => ({ time: r.time, open: r.open, high: r.high, low: r.low, close: r.close })));
-    s.volume.setData(volumeRows(rows));
-    s.rsi.setData(line(rows, "rsi14"));
-    s.macd.setData(line(rows, "macd_hist"));
-    s.ma5.setData(line(rows, "ma5"));
-    s.ma20.setData(line(rows, "ma20"));
-    s.ma60.setData(line(rows, "ma60"));
-    charts.current.forEach((c) => c.timeScale().fitContent());
+    const s = seriesRef.current;
+    if (!s.candle || !rows.length) return;
+    s.candle.setData(rows.map(r => ({ time: r.time, open: r.open, high: r.high, low: r.low, close: r.close })));
+    s.volume.setData(rows.map(r => ({ time: r.time, value: r.volume || 0, color: r.close >= r.open ? "rgba(239,68,68,.5)" : "rgba(34,197,94,.5)" })));
+    s.ma5s.setData(pickLine(rows, "ma5"));
+    s.ma10s.setData(pickLine(rows, "ma10"));
+    s.ma20s.setData(pickLine(rows, "ma20"));
+    s.ma60s.setData(pickLine(rows, "ma60"));
+    s.bbUs.setData(pickLine(rows, "bb_upper"));
+    s.bbLs.setData(pickLine(rows, "bb_lower"));
+    s.rsiS.setData(pickLine(rows, "rsi14"));
+    s.macdS.setData(rows.filter(r => Number.isFinite(r.macd_hist)).map(r => ({
+      time: r.time, value: r.macd_hist,
+      color: r.macd_hist >= 0 ? "rgba(239,68,68,.8)" : "rgba(34,197,94,.8)",
+    })));
+    Object.values(chartsRef.current).forEach(c => c.timeScale().fitContent());
   }, [rows]);
 
-  // Fetch kline (called on load + polling)
+  /* ── Fetch kline ─────────────────────────────────────────────── */
   const fetchKline = useCallback(async (code, isRefresh = false) => {
     try {
       const res = await fetch(`${API}/api/kline/${encodeURIComponent(code)}`, { cache: "no-store" });
@@ -245,176 +402,178 @@ export default function App() {
       setRows(nextRows);
       setRealtime(json.realtime || null);
       setLastRefresh(new Date());
-      if (!isRefresh) {
-        setStatus(nextRows.length ? `已載入 ${nextRows.length} 筆股價資料` : "API 已回應，但沒有股價資料");
-      }
+      if (!isRefresh) setStatus(nextRows.length ? `已載入 ${nextRows.length} 筆資料` : "API 正常，尚無股價資料");
     } catch (e) {
-      if (!isRefresh) setStatus(`查詢失敗：${e?.message || e}`);
+      if (!isRefresh) setStatus(`查詢失敗：${e?.message}`);
     }
   }, []);
 
-  // Initial full load (kline + chip + analysis)
+  /* ── Initial full load ───────────────────────────────────────── */
   useEffect(() => {
     let alive = true;
-    const code = stock.code;
-    setStatus(`查詢 ${code} 中...`);
-    setRows([]);
-    setPayload(null);
-    setChip(null);
-    setAnalysis(null);
-    setRealtime(null);
-
-    fetchKline(code);
-
+    setStatus(`查詢 ${stock.code} 中...`);
+    setRows([]); setPayload(null); setChip(null); setAnalysis(null); setRealtime(null); setHovered(null);
+    fetchKline(stock.code);
     Promise.allSettled([
-      fetch(`${API}/api/chip/${encodeURIComponent(code)}?auto_init=false`, { cache: "no-store" }),
-      fetch(`${API}/api/analysis/${encodeURIComponent(code)}`, { cache: "no-store" }),
-    ]).then(([chipRes, analysisRes]) => {
+      fetch(`${API}/api/chip/${encodeURIComponent(stock.code)}?auto_init=false`, { cache: "no-store" }),
+      fetch(`${API}/api/analysis/${encodeURIComponent(stock.code)}`, { cache: "no-store" }),
+    ]).then(([chipRes, anaRes]) => {
       if (!alive) return;
-      if (chipRes.status === "fulfilled" && chipRes.value.ok)
-        chipRes.value.json().then((j) => { if (alive) setChip(j); }).catch(() => {});
-      if (analysisRes.status === "fulfilled" && analysisRes.value.ok)
-        analysisRes.value.json().then((j) => { if (alive) setAnalysis(j); }).catch(() => {});
+      if (chipRes.status === "fulfilled" && chipRes.value.ok) chipRes.value.json().then(j => { if (alive) setChip(j); }).catch(() => {});
+      if (anaRes.status === "fulfilled" && anaRes.value.ok) anaRes.value.json().then(j => { if (alive) setAnalysis(j); }).catch(() => {});
     });
-
     return () => { alive = false; };
   }, [stock.code, fetchKline]);
 
-  // Polling during trading hours
+  /* ── Live polling ────────────────────────────────────────────── */
   useEffect(() => {
-    const tick = () => {
+    const id = setInterval(() => {
       const live = isTradingSession();
       setIsLive(live);
       if (live) fetchKline(stock.code, true);
-    };
-    const id = setInterval(tick, POLL_INTERVAL_MS);
+    }, POLL_MS);
     return () => clearInterval(id);
   }, [stock.code, fetchKline]);
 
   function submit() {
-    const target = suggestions[0] || resolveStock(input);
-    setStock(target);
-    setInput(target.code);
-    setOpenSuggest(false);
+    const t = suggestions[0] || resolveStock(input);
+    setStock(t); setInput(t.code); setOpenSuggest(false);
   }
 
   const meta = { ...stock, ...(payload?.meta || {}), ...(analysis?.meta || {}) };
-  const latest = rows.at(-1) || {};
-  const chipLatest = chip?.latest_chip || {};
-  const chipAnalysis = chip?.analysis || {};
-  const chipMetrics = chipAnalysis.metrics || {};
-  const change = Number(meta.change ?? (latest.close - latest.open));
+  const displayBar = hovered || rows.at(-1) || {};
+  const change = Number(meta.change ?? (displayBar.close - displayBar.open));
   const priceColor = change >= 0 ? "#ef4444" : "#22c55e";
-  const livePrice = realtime?.price ?? meta.price ?? latest.close;
-  const bids = realtime?.bids || [];
-  const asks = realtime?.asks || [];
+  const livePrice = (hovered ? hovered.close : null) ?? realtime?.price ?? meta.price ?? displayBar.close;
 
   return (
     <div style={pageStyle}>
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }`}</style>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}} * { box-sizing: border-box; }`}</style>
+
+      {/* Header */}
       <header style={headerStyle}>
-        <div style={eyebrowStyle}>TW STOCK DECISION SYSTEM {APP_VERSION}</div>
-        <div style={subtleStyle}>API: {API}</div>
-        <h1 style={titleStyle}>個股儀表板</h1>
-        <div style={stockTitleStyle}>
-          <span style={{ color: "#facc15" }}>{meta.code || stock.code}</span>{" "}
-          {meta.name || stock.name}
-          <span style={metaStyle}>{meta.market || stock.market} / {meta.industry || stock.industry}</span>
-          {isLive && <LiveBadge />}
-        </div>
-        <div style={{ fontSize: 44, fontWeight: 900, color: priceColor }}>{fmt(livePrice)}</div>
-        <div style={{ color: priceColor }}>
-          漲跌 {fmt(meta.change ?? change)} ({fmt(meta.change_pct, 2)}%)&nbsp;&nbsp;
-          開 {fmt(meta.open ?? latest.open)} / 高 {fmt(meta.high ?? latest.high)} / 低 {fmt(meta.low ?? latest.low)}
-        </div>
-        {isLive && realtime?.time && (
-          <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>
-            即時報價時間 {realtime.time}・每 {POLL_INTERVAL_MS / 1000} 秒更新・成交量 {realtime.volume_lot ? realtime.volume_lot.toLocaleString() : "--"} 張
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <div style={eyebrowStyle}>TW STOCK DECISION SYSTEM {APP_VERSION}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
+              <span style={{ fontSize: 28, fontWeight: 900, color: "#facc15" }}>{meta.code || stock.code}</span>
+              <span style={{ fontSize: 22, fontWeight: 700 }}>{meta.name || stock.name}</span>
+              <span style={{ color: "#64748b", fontSize: 14 }}>{meta.market} / {meta.industry}</span>
+              {isLive && <LiveBadge />}
+            </div>
           </div>
-        )}
-        {lastRefresh && (
-          <div style={{ color: "#475569", fontSize: 12, marginTop: 2 }}>
-            最後更新 {lastRefresh.toLocaleTimeString("zh-TW")}
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 42, fontWeight: 900, color: priceColor }}>{fmt(livePrice)}</div>
+            <div style={{ color: priceColor, fontSize: 14 }}>
+              漲跌 {fmt(meta.change ?? change)}（{fmt(meta.change_pct, 2)}%）
+            </div>
           </div>
-        )}
+        </div>
+
+        {/* OHLCV bar — updates with crosshair */}
+        <div style={{ marginTop: 8, display: "flex", gap: 20, fontSize: 14, flexWrap: "wrap" }}>
+          {[
+            ["開盤", displayBar.open],
+            ["最高", displayBar.high, "#ef4444"],
+            ["最低", displayBar.low, "#22c55e"],
+            ["收盤", displayBar.close, priceColor],
+            ["成交量", displayBar.volume ? (displayBar.volume / 1000).toFixed(0) + "千張" : "--"],
+          ].map(([label, val, color]) => (
+            <span key={label}>
+              <span style={{ color: "#64748b" }}>{label} </span>
+              <b style={color ? { color } : undefined}>{typeof val === "string" ? val : fmt(val)}</b>
+            </span>
+          ))}
+          {hovered && <span style={{ color: "#475569", fontSize: 12 }}>📅 {String(hovered.time)}</span>}
+          {!hovered && lastRefresh && <span style={{ color: "#475569", fontSize: 12 }}>更新 {lastRefresh.toLocaleTimeString("zh-TW")}</span>}
+        </div>
+
+        {/* Toolbar */}
         <div style={toolbarStyle}>
           <div style={{ position: "relative" }}>
-            <input
-              value={input}
-              onFocus={() => setOpenSuggest(true)}
-              onChange={(e) => { setInput(e.target.value); setOpenSuggest(true); }}
-              onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-              placeholder="輸入股票代號，例如 1402"
-              style={inputStyle}
-            />
+            <input value={input} onFocus={() => setOpenSuggest(true)}
+              onChange={e => { setInput(e.target.value); setOpenSuggest(true); }}
+              onKeyDown={e => { if (e.key === "Enter") submit(); }}
+              placeholder="輸入股票代號或名稱" style={inputStyle} />
             {openSuggest && suggestions.length > 0 && (
               <div style={suggestStyle}>
-                {suggestions.map((item) => (
+                {suggestions.map(item => (
                   <div key={item.code} onMouseDown={() => { setStock(item); setInput(item.code); setOpenSuggest(false); }} style={suggestItemStyle}>
                     <b style={{ color: "#facc15" }}>{item.code}</b> {item.name}
-                    <span style={{ color: "#94a3b8", marginLeft: 8 }}>{item.market} / {item.industry}</span>
+                    <span style={{ color: "#94a3b8", marginLeft: 8 }}>{item.market}</span>
                   </div>
                 ))}
               </div>
             )}
           </div>
           <button type="button" onClick={submit} style={buttonStyle}>查詢</button>
-          <span style={{ color: rows.length ? "#22c55e" : "#f59e0b" }}>{status}</span>
+          <span style={{ color: rows.length ? "#22c55e" : "#f59e0b", fontSize: 13 }}>{status}</span>
+          {isLive && <span style={{ color: "#94a3b8", fontSize: 12 }}>每 {POLL_MS / 1000}s 自動更新</span>}
         </div>
       </header>
 
+      {/* Main layout */}
       <main style={mainStyle}>
-        <section style={cardStyle}>
-          <h2 style={{ marginTop: 0 }}>{meta.code || stock.code} 股價走勢</h2>
-          <div ref={priceRef} />
-          <h3>成交量</h3><div ref={volRef} />
-          <h3>RSI14</h3><div ref={rsiRef} />
-          <h3>MACD</h3><div ref={macdRef} />
-        </section>
+        {/* Chart column */}
+        <div>
+          <div style={cardStyle}>
+            <div style={{ display: "flex", gap: 14, marginBottom: 6, fontSize: 12, flexWrap: "wrap" }}>
+              {[["■", "#facc15", "MA5"], ["■", "#fb923c", "MA10"], ["■", "#38bdf8", "MA20"], ["■", "#a78bfa", "MA60"], ["╌", "rgba(148,163,184,.6)", "布林帶"]].map(([sym, color, label]) => (
+                <span key={label}><span style={{ color }}>{sym}</span> {label}</span>
+              ))}
+              <span style={{ color: "#94a3b8" }}>│ 下方柱狀為成交量</span>
+            </div>
+            <div ref={mainRef} />
+          </div>
+          <div style={{ ...cardStyle, marginTop: 8 }}>
+            <div style={{ color: "#f59e0b", fontSize: 12, marginBottom: 4 }}>RSI14 &nbsp;
+              {Number.isFinite(displayBar.rsi14) && <span style={{ color: displayBar.rsi14 > 70 ? "#ef4444" : displayBar.rsi14 < 30 ? "#22c55e" : "#f59e0b", fontWeight: 700 }}>{fmt(displayBar.rsi14, 1)}</span>}
+            </div>
+            <div ref={rsiRef} />
+          </div>
+          <div style={{ ...cardStyle, marginTop: 8 }}>
+            <div style={{ color: "#94a3b8", fontSize: 12, marginBottom: 4 }}>MACD Histogram &nbsp;
+              {Number.isFinite(displayBar.macd_hist) && <span style={{ color: displayBar.macd_hist >= 0 ? "#ef4444" : "#22c55e", fontWeight: 700 }}>{fmt(displayBar.macd_hist, 3)}</span>}
+            </div>
+            <div ref={macdRef} />
+          </div>
+        </div>
 
+        {/* Sidebar */}
         <aside style={asideStyle}>
+          <AiCard rows={rows} chipData={chip} />
+
           {isLive && (
-            <Card title="即時委買委賣" badge={<LiveBadge />}>
-              {bids.length > 0 || asks.length > 0
-                ? <OrderBook bids={bids} asks={asks} />
-                : <div style={{ color: "#64748b", fontSize: 13 }}>等待揭示資料中...</div>
-              }
-              <div style={{ color: "#475569", fontSize: 11, marginTop: 8 }}>
-                來源：TWSE MIS・每 {POLL_INTERVAL_MS / 1000} 秒更新
-              </div>
+            <Card title={<>即時委買委賣 <LiveBadge /></>}>
+              {realtime?.bids?.length ? <OrderBook bids={realtime.bids} asks={realtime.asks} /> : <div style={{ color: "#64748b", fontSize: 13 }}>等待揭示...</div>}
+              {realtime?.time && <div style={{ color: "#475569", fontSize: 11, marginTop: 6 }}>成交時間 {realtime.time}・量 {realtime.volume_lot?.toLocaleString() || "--"} 張</div>}
             </Card>
           )}
 
-          <Card title="資料狀態">
-            <Row label="版本" value={APP_VERSION} />
-            <Row label="資料來源" value={isLive ? "歷史 + 即時" : "歷史"} color={isLive ? "#22c55e" : undefined} />
-            <Row label="股價筆數" value={rows.length} />
-            <Row label="股價 API" value={payload?.status || "--"} />
-            <Row label="籌碼筆數" value={chip?.row_count ?? "--"} />
-            <Row label="三大法人" value={chip?.has_institutional_data === true ? "有" : chip ? "無" : "--"} />
-          </Card>
-
           <Card title="籌碼摘要">
-            <Row label="日期" value={chipLatest.date || chipLatest.chip_date || "--"} />
-            <Row label="外資買賣超" value={fmt(chipLatest.foreign_buy ?? chipLatest.foreign, 0)} />
-            <Row label="投信買賣超" value={fmt(chipLatest.investment_trust_buy ?? chipLatest.investment_trust, 0)} />
-            <Row label="自營商買賣超" value={fmt(chipLatest.dealer_buy ?? chipLatest.dealer, 0)} />
-            <Row label="融資餘額" value={fmt(chipMetrics.margin_balance ?? chipLatest.margin_balance, 0)} />
-            <Row label="融券餘額" value={fmt(chipMetrics.short_balance ?? chipLatest.short_balance, 0)} />
+            {(() => {
+              const cl = chip?.latest_chip || {};
+              const cm = chip?.analysis?.metrics || {};
+              return <>
+                <Row label="資料日期" value={cl.date || "--"} />
+                <Row label="外資買賣超" value={fmt(cl.foreign_buy, 0)} color={Number(cl.foreign_buy) > 0 ? "#ef4444" : "#22c55e"} />
+                <Row label="投信買賣超" value={fmt(cl.investment_trust_buy, 0)} color={Number(cl.investment_trust_buy) > 0 ? "#ef4444" : "#22c55e"} />
+                <Row label="自營商買賣超" value={fmt(cl.dealer_buy, 0)} color={Number(cl.dealer_buy) > 0 ? "#ef4444" : "#22c55e"} />
+                <Row label="融資餘額" value={fmt(cm.margin_balance || cl.margin_balance, 0)} />
+                <Row label="融券餘額" value={fmt(cm.short_balance || cl.short_balance, 0)} />
+                <Row label="籌碼評分" value={`${chip?.analysis?.score ?? "--"} / 100`} />
+                <Row label="籌碼狀態" value={chip?.analysis?.status || "--"} />
+              </>;
+            })()}
           </Card>
 
-          <Card title="技術指標">
-            <Row label="MA5" value={fmt(latest.ma5)} />
-            <Row label="MA20" value={fmt(latest.ma20)} />
-            <Row label="MA60" value={fmt(latest.ma60)} />
-            <Row label="RSI14" value={fmt(latest.rsi14)} />
-            <Row label="MACD Hist" value={fmt(latest.macd_hist)} />
-          </Card>
-
-          <Card title="決策摘要">
-            <div style={{ fontSize: 42, color: Number(analysis?.score || 0) < 0 ? "#22c55e" : "#ef4444", fontWeight: 900 }}>{analysis?.score ?? "--"}</div>
-            <b>{analysis?.trend || "尚無分析資料"}</b>
-            <p style={{ color: "#94a3b8", lineHeight: 1.5 }}>{analysis?.summary || "股價與籌碼資料會分開載入。"}</p>
+          <Card title="技術指標（最新 / 游標）">
+            <Row label="MA5" value={fmt(displayBar.ma5)} />
+            <Row label="MA20" value={fmt(displayBar.ma20)} />
+            <Row label="MA60" value={fmt(displayBar.ma60)} />
+            <Row label="RSI14" value={fmt(displayBar.rsi14, 1)} />
+            <Row label="MACD Hist" value={fmt(displayBar.macd_hist, 3)} />
+            <Row label="布林寬度" value={fmt(displayBar.bb_width, 4)} />
           </Card>
         </aside>
       </main>
@@ -422,19 +581,16 @@ export default function App() {
   );
 }
 
-const pageStyle = { minHeight: "100vh", background: "#020617", color: "white", fontFamily: "Arial, sans-serif" };
-const headerStyle = { padding: 24, borderBottom: "1px solid #1e293b", background: "#0f172a" };
-const eyebrowStyle = { color: "#38bdf8", letterSpacing: 1, fontWeight: 800 };
-const subtleStyle = { color: "#64748b", fontSize: 12, marginTop: 4 };
-const titleStyle = { marginBottom: 8 };
-const stockTitleStyle = { fontSize: 26, fontWeight: 800, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" };
-const metaStyle = { color: "#94a3b8", fontSize: 15 };
-const toolbarStyle = { marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" };
-const inputStyle = { padding: "12px 14px", borderRadius: 8, border: "1px solid #334155", background: "#020617", color: "white", minWidth: 300 };
-const buttonStyle = { padding: "12px 18px", borderRadius: 8, border: 0, background: "#2563eb", color: "white", fontWeight: 700, cursor: "pointer" };
-const mainStyle = { padding: 18, display: "grid", gridTemplateColumns: "minmax(0,2fr) minmax(320px,.9fr)", gap: 18 };
+/* ── Styles ──────────────────────────────────────────────────────── */
+const pageStyle = { minHeight: "100vh", background: "#020617", color: "#f1f5f9", fontFamily: "Arial, sans-serif" };
+const headerStyle = { padding: "20px 24px 16px", borderBottom: "1px solid #1e293b", background: "#0f172a" };
+const eyebrowStyle = { color: "#38bdf8", letterSpacing: 1, fontWeight: 800, fontSize: 12 };
+const toolbarStyle = { marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" };
+const inputStyle = { padding: "10px 14px", borderRadius: 8, border: "1px solid #334155", background: "#020617", color: "white", minWidth: 260, fontSize: 14 };
+const buttonStyle = { padding: "10px 18px", borderRadius: 8, border: 0, background: "#2563eb", color: "white", fontWeight: 700, cursor: "pointer" };
+const mainStyle = { padding: 16, display: "grid", gridTemplateColumns: "minmax(0,2.2fr) minmax(300px,.8fr)", gap: 16 };
 const asideStyle = { display: "grid", gap: 12, alignContent: "start" };
-const cardStyle = { background: "#0f172a", border: "1px solid #1e293b", borderRadius: 8, padding: 18 };
-const rowStyle = { display: "flex", justifyContent: "space-between", gap: 12, borderBottom: "1px solid rgba(148,163,184,.16)", padding: "6px 0" };
-const suggestStyle = { position: "absolute", top: 48, left: 0, right: 0, background: "#0f172a", border: "1px solid #334155", borderRadius: 8, zIndex: 10, overflow: "hidden" };
-const suggestItemStyle = { padding: "10px 12px", cursor: "pointer", borderBottom: "1px solid rgba(148,163,184,.15)" };
+const cardStyle = { background: "#0f172a", border: "1px solid #1e293b", borderRadius: 8, padding: 16 };
+const rowStyle = { display: "flex", justifyContent: "space-between", gap: 8, borderBottom: "1px solid rgba(148,163,184,.12)", padding: "5px 0", fontSize: 13 };
+const suggestStyle = { position: "absolute", top: 44, left: 0, right: 0, background: "#0f172a", border: "1px solid #334155", borderRadius: 8, zIndex: 10, overflow: "hidden" };
+const suggestItemStyle = { padding: "9px 12px", cursor: "pointer", borderBottom: "1px solid rgba(148,163,184,.1)", fontSize: 14 };
