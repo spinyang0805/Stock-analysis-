@@ -500,6 +500,7 @@ export default function App() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={eyebrowStyle}>TW STOCK DECISION SYSTEM {APP_VERSION}</div>
+        <div style={{ color: "#475569", fontSize: 11, marginTop: 2 }}>API: {API}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
               <span style={{ fontSize: 28, fontWeight: 900, color: "#facc15" }}>{meta.code || stock.code}</span>
               <span style={{ fontSize: 22, fontWeight: 700 }}>{meta.name || stock.name}</span>
