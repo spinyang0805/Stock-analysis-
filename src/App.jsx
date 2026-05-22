@@ -1,13 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as LightweightCharts from "lightweight-charts";
 
 const { createChart, CandlestickSeries, LineSeries, HistogramSeries } = LightweightCharts;
-const DEFAULT_API = "https://stock-analysis-api-ihun.onrender.com";
-const RAW_API = import.meta.env.VITE_API_BASE_URL || DEFAULT_API;
-const API = String(RAW_API).includes("stock-analysis-api-ihun")
-  ? String(RAW_API).replace(/\/$/, "")
-  : DEFAULT_API;
-const APP_VERSION = "v17-dashboard-repair";
+const API = (import.meta.env.VITE_API_BASE_URL || "https://stock-analysis-tw.fly.dev").replace(/\/$/, "");
+const APP_VERSION = "v18-realtime";
+const POLL_INTERVAL_MS = 10_000;
 
 const STOCKS = [
   { code: "2330", name: "台積電", market: "上市", industry: "半導體" },
@@ -23,27 +20,31 @@ const STOCKS = [
   { code: "00679B", name: "元大美債20年", market: "上市", industry: "債券ETF" },
 ];
 
+function isTradingSession() {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+  const day = now.getDay();
+  if (day === 0 || day === 6) return false;
+  const mins = now.getHours() * 60 + now.getMinutes();
+  return mins >= 9 * 60 && mins <= 13 * 60 + 30;
+}
+
 function cleanCode(value) {
   return String(value || "2330").trim().replace(".TW", "").replace(".TWO", "").split(/\s+/)[0].toUpperCase();
 }
-
 function findStock(q) {
   const s = String(q || "").trim().toLowerCase();
   if (!s) return [];
   return STOCKS.filter((x) => x.code.toLowerCase().includes(s) || x.name.toLowerCase().includes(s)).slice(0, 8);
 }
-
 function resolveStock(q) {
   const raw = String(q || "2330").trim();
   const found = STOCKS.find((x) => x.code === raw.toUpperCase() || x.name === raw);
   return found || { code: cleanCode(raw), name: cleanCode(raw), market: "--", industry: "--" };
 }
-
 function fmt(value, digits = 2) {
   const n = Number(value);
   return Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: digits }) : "--";
 }
-
 function pickRows(payload) {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.data)) return payload.data;
@@ -51,7 +52,6 @@ function pickRows(payload) {
   if (Array.isArray(payload?.items)) return payload.items;
   return [];
 }
-
 function toChartTime(row) {
   const date = String(row?.date || row?.Date || row?.data_date || "").trim();
   if (/^\d{8}$/.test(date)) return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
@@ -59,7 +59,6 @@ function toChartTime(row) {
   if (typeof row?.time === "number" && Number.isFinite(row.time)) return Math.floor(row.time);
   return null;
 }
-
 function num(...values) {
   for (const value of values) {
     const n = Number(value);
@@ -67,7 +66,6 @@ function num(...values) {
   }
   return NaN;
 }
-
 function normalizeRows(payload) {
   const used = new Set();
   return pickRows(payload)
@@ -87,44 +85,84 @@ function normalizeRows(payload) {
     }))
     .filter((row) => row.time && [row.open, row.high, row.low, row.close].every(Number.isFinite))
     .sort((a, b) => String(a.time).localeCompare(String(b.time)))
-    .filter((row) => {
-      if (used.has(row.time)) return false;
-      used.add(row.time);
-      return true;
-    });
+    .filter((row) => { if (used.has(row.time)) return false; used.add(row.time); return true; });
 }
-
 function addSeries(chart, SeriesType, options, fallback) {
   return typeof chart.addSeries === "function" && SeriesType ? chart.addSeries(SeriesType, options) : chart[fallback](options);
 }
-
 function line(rows, key) {
   return rows.filter((row) => Number.isFinite(Number(row[key]))).map((row) => ({ time: row.time, value: Number(row[key]) }));
 }
-
 function volumeRows(rows) {
   return rows.map((row) => ({
-    time: row.time,
-    value: Number(row.volume || 0),
+    time: row.time, value: Number(row.volume || 0),
     color: row.close >= row.open ? "rgba(239,68,68,.55)" : "rgba(34,197,94,.55)",
   }));
 }
 
-function Row({ label, value }) {
+function Row({ label, value, color }) {
   return (
     <div style={rowStyle}>
       <span style={{ color: "#94a3b8" }}>{label}</span>
-      <b>{value}</b>
+      <b style={color ? { color } : undefined}>{value}</b>
     </div>
   );
 }
-
-function Card({ title, children }) {
+function Card({ title, badge, children }) {
   return (
     <section style={cardStyle}>
-      <h3 style={{ marginTop: 0 }}>{title}</h3>
+      <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
+        {title}
+        {badge}
+      </h3>
       {children}
     </section>
+  );
+}
+
+function LiveBadge() {
+  return (
+    <span style={{ background: "#ef4444", color: "white", borderRadius: 4, padding: "2px 7px", fontSize: 11, fontWeight: 800, letterSpacing: 1, animation: "pulse 1.5s infinite" }}>
+      ● LIVE
+    </span>
+  );
+}
+
+function OrderBook({ bids = [], asks = [] }) {
+  const rows = Math.max(bids.length, asks.length, 1);
+  return (
+    <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+      <thead>
+        <tr>
+          <th style={{ color: "#22c55e", textAlign: "right", paddingRight: 8 }}>委買量</th>
+          <th style={{ color: "#22c55e", textAlign: "right", paddingRight: 8 }}>買價</th>
+          <th style={{ color: "#ef4444", textAlign: "left", paddingLeft: 8 }}>賣價</th>
+          <th style={{ color: "#ef4444", textAlign: "left", paddingLeft: 8 }}>委賣量</th>
+        </tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: rows }).map((_, i) => {
+          const bid = bids[i] || {};
+          const ask = asks[i] || {};
+          return (
+            <tr key={i} style={{ borderBottom: "1px solid rgba(148,163,184,.1)" }}>
+              <td style={{ textAlign: "right", paddingRight: 8, color: "#22c55e", padding: "4px 8px 4px 0" }}>
+                {bid.qty != null ? bid.qty.toLocaleString() : ""}
+              </td>
+              <td style={{ textAlign: "right", paddingRight: 8, color: "#22c55e", fontWeight: 700 }}>
+                {bid.price != null ? fmt(bid.price) : ""}
+              </td>
+              <td style={{ textAlign: "left", paddingLeft: 8, color: "#ef4444", fontWeight: 700 }}>
+                {ask.price != null ? fmt(ask.price) : ""}
+              </td>
+              <td style={{ textAlign: "left", paddingLeft: 8, color: "#ef4444" }}>
+                {ask.qty != null ? ask.qty.toLocaleString() : ""}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
 
@@ -135,21 +173,25 @@ export default function App() {
   const macdRef = useRef(null);
   const charts = useRef([]);
   const series = useRef({});
+
   const [input, setInput] = useState("2330");
   const [stock, setStock] = useState(resolveStock("2330"));
   const [openSuggest, setOpenSuggest] = useState(false);
   const [payload, setPayload] = useState(null);
   const [rows, setRows] = useState([]);
+  const [realtime, setRealtime] = useState(null);
   const [chip, setChip] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [status, setStatus] = useState("尚未查詢");
+  const [lastRefresh, setLastRefresh] = useState(null);
+  const [isLive, setIsLive] = useState(isTradingSession());
   const suggestions = useMemo(() => findStock(input), [input]);
 
+  // Chart setup
   useEffect(() => {
     if (!priceRef.current || !volRef.current || !rsiRef.current || !macdRef.current) return undefined;
     const makeChart = (el, height) => createChart(el, {
-      width: el.clientWidth || 900,
-      height,
+      width: el.clientWidth || 900, height,
       layout: { background: { color: "#0f172a" }, textColor: "#dbeafe" },
       grid: { vertLines: { color: "#1e293b" }, horzLines: { color: "#1e293b" } },
       timeScale: { timeVisible: true, secondsVisible: false, borderColor: "#334155" },
@@ -169,67 +211,85 @@ export default function App() {
       rsi: addSeries(c3, LineSeries, { color: "#f59e0b", lineWidth: 2 }, "addLineSeries"),
       macd: addSeries(c4, HistogramSeries, {}, "addHistogramSeries"),
     };
-    const resize = () => charts.current.forEach((chart) => chart.applyOptions({ width: priceRef.current?.clientWidth || 900 }));
+    const resize = () => charts.current.forEach((c) => c.applyOptions({ width: priceRef.current?.clientWidth || 900 }));
     window.addEventListener("resize", resize);
     return () => {
       window.removeEventListener("resize", resize);
-      charts.current.forEach((chart) => chart.remove());
+      charts.current.forEach((c) => c.remove());
       charts.current = [];
     };
   }, []);
 
+  // Chart data update
   useEffect(() => {
     const s = series.current;
     if (!s.candle) return;
-    s.candle.setData(rows.map((row) => ({ time: row.time, open: row.open, high: row.high, low: row.low, close: row.close })));
+    s.candle.setData(rows.map((r) => ({ time: r.time, open: r.open, high: r.high, low: r.low, close: r.close })));
     s.volume.setData(volumeRows(rows));
     s.rsi.setData(line(rows, "rsi14"));
     s.macd.setData(line(rows, "macd_hist"));
     s.ma5.setData(line(rows, "ma5"));
     s.ma20.setData(line(rows, "ma20"));
     s.ma60.setData(line(rows, "ma60"));
-    charts.current.forEach((chart) => chart.timeScale().fitContent());
+    charts.current.forEach((c) => c.timeScale().fitContent());
   }, [rows]);
 
+  // Fetch kline (called on load + polling)
+  const fetchKline = useCallback(async (code, isRefresh = false) => {
+    try {
+      const res = await fetch(`${API}/api/kline/${encodeURIComponent(code)}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const json = await res.json();
+      const nextRows = normalizeRows(json);
+      setPayload(json);
+      setRows(nextRows);
+      setRealtime(json.realtime || null);
+      setLastRefresh(new Date());
+      if (!isRefresh) {
+        setStatus(nextRows.length ? `已載入 ${nextRows.length} 筆股價資料` : "API 已回應，但沒有股價資料");
+      }
+    } catch (e) {
+      if (!isRefresh) setStatus(`查詢失敗：${e?.message || e}`);
+    }
+  }, []);
+
+  // Initial full load (kline + chip + analysis)
   useEffect(() => {
     let alive = true;
-    async function load() {
-      const code = stock.code;
-      setStatus(`查詢 ${code} 中...`);
-      setRows([]);
-      setPayload(null);
-      setChip(null);
-      setAnalysis(null);
-      try {
-        const [klineRes, chipRes, analysisRes] = await Promise.allSettled([
-          fetch(`${API}/api/kline/${encodeURIComponent(code)}`, { cache: "no-store" }),
-          fetch(`${API}/api/chip/${encodeURIComponent(code)}?auto_init=false`, { cache: "no-store" }),
-          fetch(`${API}/api/analysis/${encodeURIComponent(code)}`, { cache: "no-store" }),
-        ]);
+    const code = stock.code;
+    setStatus(`查詢 ${code} 中...`);
+    setRows([]);
+    setPayload(null);
+    setChip(null);
+    setAnalysis(null);
+    setRealtime(null);
 
-        if (klineRes.status !== "fulfilled") throw new Error(klineRes.reason?.message || "股價 API fetch failed");
-        const klineJson = await klineRes.value.json();
-        if (!klineRes.value.ok) throw new Error(klineJson?.detail || klineJson?.error || `股價 API HTTP ${klineRes.value.status}`);
+    fetchKline(code);
 
-        const nextRows = normalizeRows(klineJson);
-        if (!alive) return;
-        setPayload(klineJson);
-        setRows(nextRows);
-        setStatus(nextRows.length ? `已載入 ${nextRows.length} 筆股價資料` : "API 已回應，但沒有可顯示的股價資料");
+    Promise.allSettled([
+      fetch(`${API}/api/chip/${encodeURIComponent(code)}?auto_init=false`, { cache: "no-store" }),
+      fetch(`${API}/api/analysis/${encodeURIComponent(code)}`, { cache: "no-store" }),
+    ]).then(([chipRes, analysisRes]) => {
+      if (!alive) return;
+      if (chipRes.status === "fulfilled" && chipRes.value.ok)
+        chipRes.value.json().then((j) => { if (alive) setChip(j); }).catch(() => {});
+      if (analysisRes.status === "fulfilled" && analysisRes.value.ok)
+        analysisRes.value.json().then((j) => { if (alive) setAnalysis(j); }).catch(() => {});
+    });
 
-        if (chipRes.status === "fulfilled" && chipRes.value.ok) {
-          chipRes.value.json().then((json) => { if (alive) setChip(json); }).catch(() => {});
-        }
-        if (analysisRes.status === "fulfilled" && analysisRes.value.ok) {
-          analysisRes.value.json().then((json) => { if (alive) setAnalysis(json); }).catch(() => {});
-        }
-      } catch (error) {
-        if (alive) setStatus(`查詢失敗：${error?.message || error}`);
-      }
-    }
-    load();
     return () => { alive = false; };
-  }, [stock.code]);
+  }, [stock.code, fetchKline]);
+
+  // Polling during trading hours
+  useEffect(() => {
+    const tick = () => {
+      const live = isTradingSession();
+      setIsLive(live);
+      if (live) fetchKline(stock.code, true);
+    };
+    const id = setInterval(tick, POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [stock.code, fetchKline]);
 
   function submit() {
     const target = suggestions[0] || resolveStock(input);
@@ -245,28 +305,45 @@ export default function App() {
   const chipMetrics = chipAnalysis.metrics || {};
   const change = Number(meta.change ?? (latest.close - latest.open));
   const priceColor = change >= 0 ? "#ef4444" : "#22c55e";
+  const livePrice = realtime?.price ?? meta.price ?? latest.close;
+  const bids = realtime?.bids || [];
+  const asks = realtime?.asks || [];
 
   return (
     <div style={pageStyle}>
+      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }`}</style>
       <header style={headerStyle}>
         <div style={eyebrowStyle}>TW STOCK DECISION SYSTEM {APP_VERSION}</div>
         <div style={subtleStyle}>API: {API}</div>
         <h1 style={titleStyle}>個股儀表板</h1>
         <div style={stockTitleStyle}>
-          <span style={{ color: "#facc15" }}>{meta.code || stock.code}</span> {meta.name || stock.name}
+          <span style={{ color: "#facc15" }}>{meta.code || stock.code}</span>{" "}
+          {meta.name || stock.name}
           <span style={metaStyle}>{meta.market || stock.market} / {meta.industry || stock.industry}</span>
+          {isLive && <LiveBadge />}
         </div>
-        <div style={{ fontSize: 44, fontWeight: 900, color: priceColor }}>{fmt(meta.price ?? latest.close)}</div>
+        <div style={{ fontSize: 44, fontWeight: 900, color: priceColor }}>{fmt(livePrice)}</div>
         <div style={{ color: priceColor }}>
-          漲跌 {fmt(meta.change ?? change)} / 開 {fmt(meta.open ?? latest.open)} / 高 {fmt(meta.high ?? latest.high)} / 低 {fmt(meta.low ?? latest.low)} / 收 {fmt(meta.close ?? latest.close)}
+          漲跌 {fmt(meta.change ?? change)} ({fmt(meta.change_pct, 2)}%)&nbsp;&nbsp;
+          開 {fmt(meta.open ?? latest.open)} / 高 {fmt(meta.high ?? latest.high)} / 低 {fmt(meta.low ?? latest.low)}
         </div>
+        {isLive && realtime?.time && (
+          <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>
+            即時報價時間 {realtime.time}・每 {POLL_INTERVAL_MS / 1000} 秒更新・成交量 {realtime.volume_lot ? realtime.volume_lot.toLocaleString() : "--"} 張
+          </div>
+        )}
+        {lastRefresh && (
+          <div style={{ color: "#475569", fontSize: 12, marginTop: 2 }}>
+            最後更新 {lastRefresh.toLocaleTimeString("zh-TW")}
+          </div>
+        )}
         <div style={toolbarStyle}>
           <div style={{ position: "relative" }}>
             <input
               value={input}
               onFocus={() => setOpenSuggest(true)}
-              onChange={(event) => { setInput(event.target.value); setOpenSuggest(true); }}
-              onKeyDown={(event) => { if (event.key === "Enter") submit(); }}
+              onChange={(e) => { setInput(e.target.value); setOpenSuggest(true); }}
+              onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
               placeholder="輸入股票代號，例如 1402"
               style={inputStyle}
             />
@@ -296,23 +373,34 @@ export default function App() {
         </section>
 
         <aside style={asideStyle}>
+          {isLive && (
+            <Card title="即時委買委賣" badge={<LiveBadge />}>
+              {bids.length > 0 || asks.length > 0
+                ? <OrderBook bids={bids} asks={asks} />
+                : <div style={{ color: "#64748b", fontSize: 13 }}>等待揭示資料中...</div>
+              }
+              <div style={{ color: "#475569", fontSize: 11, marginTop: 8 }}>
+                來源：TWSE MIS・每 {POLL_INTERVAL_MS / 1000} 秒更新
+              </div>
+            </Card>
+          )}
+
           <Card title="資料狀態">
             <Row label="版本" value={APP_VERSION} />
+            <Row label="資料來源" value={isLive ? "歷史 + 即時" : "歷史"} color={isLive ? "#22c55e" : undefined} />
             <Row label="股價筆數" value={rows.length} />
-            <Row label="原始筆數" value={pickRows(payload).length} />
             <Row label="股價 API" value={payload?.status || "--"} />
             <Row label="籌碼筆數" value={chip?.row_count ?? "--"} />
             <Row label="三大法人" value={chip?.has_institutional_data === true ? "有" : chip ? "無" : "--"} />
           </Card>
 
           <Card title="籌碼摘要">
-            <Row label="日期" value={chipLatest.date || chipLatest.chip_date || chipLatest.margin_date || "--"} />
+            <Row label="日期" value={chipLatest.date || chipLatest.chip_date || "--"} />
             <Row label="外資買賣超" value={fmt(chipLatest.foreign_buy ?? chipLatest.foreign, 0)} />
             <Row label="投信買賣超" value={fmt(chipLatest.investment_trust_buy ?? chipLatest.investment_trust, 0)} />
             <Row label="自營商買賣超" value={fmt(chipLatest.dealer_buy ?? chipLatest.dealer, 0)} />
             <Row label="融資餘額" value={fmt(chipMetrics.margin_balance ?? chipLatest.margin_balance, 0)} />
             <Row label="融券餘額" value={fmt(chipMetrics.short_balance ?? chipLatest.short_balance, 0)} />
-            <Row label="來源" value={chipLatest.source || chipLatest.source_t86 || chipLatest.source_margin || "--"} />
           </Card>
 
           <Card title="技術指標">
@@ -326,7 +414,7 @@ export default function App() {
           <Card title="決策摘要">
             <div style={{ fontSize: 42, color: Number(analysis?.score || 0) < 0 ? "#22c55e" : "#ef4444", fontWeight: 900 }}>{analysis?.score ?? "--"}</div>
             <b>{analysis?.trend || "尚無分析資料"}</b>
-            <p style={{ color: "#94a3b8", lineHeight: 1.5 }}>{analysis?.summary || "股價與籌碼資料會分開載入，避免其中一個 API 慢速時造成整個儀表板空白。"}</p>
+            <p style={{ color: "#94a3b8", lineHeight: 1.5 }}>{analysis?.summary || "股價與籌碼資料會分開載入。"}</p>
           </Card>
         </aside>
       </main>
@@ -339,8 +427,8 @@ const headerStyle = { padding: 24, borderBottom: "1px solid #1e293b", background
 const eyebrowStyle = { color: "#38bdf8", letterSpacing: 1, fontWeight: 800 };
 const subtleStyle = { color: "#64748b", fontSize: 12, marginTop: 4 };
 const titleStyle = { marginBottom: 8 };
-const stockTitleStyle = { fontSize: 26, fontWeight: 800 };
-const metaStyle = { color: "#94a3b8", fontSize: 15, marginLeft: 10 };
+const stockTitleStyle = { fontSize: 26, fontWeight: 800, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" };
+const metaStyle = { color: "#94a3b8", fontSize: 15 };
 const toolbarStyle = { marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" };
 const inputStyle = { padding: "12px 14px", borderRadius: 8, border: "1px solid #334155", background: "#020617", color: "white", minWidth: 300 };
 const buttonStyle = { padding: "12px 18px", borderRadius: 8, border: 0, background: "#2563eb", color: "white", fontWeight: 700, cursor: "pointer" };
