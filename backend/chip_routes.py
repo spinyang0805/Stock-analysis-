@@ -8,6 +8,8 @@ import time
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 
+from firebase_cache import get_chip_rows, save_chip_daily
+
 try:
     from jobs import today_str, write_margin_chips, write_t86_chips
 except Exception:
@@ -37,7 +39,7 @@ def _cache_set(key, payload):
 def _has_institutional_row(row):
     if not isinstance(row, dict):
         return False
-    return any(row.get(key) is not None for key in ["foreign_buy", "investment_trust_buy", "dealer_buy", "foreign", "investment_trust", "dealer"])
+    return any(row.get(key) is not None for key in ["foreign_buy", "investment_trust_buy", "dealer_buy"])
 
 
 def _has_real_institutional_rows(rows):
@@ -52,7 +54,8 @@ def _try_live_chip_backfill(code):
     try:
         write_t86_chips(date_text, result)
         write_margin_chips(date_text, result)
-        return {"attempted": True, "date": date_text, "chips": result.get("chips", 0), "margin_rows": result.get("margin_rows", 0), "errors": result.get("errors", [])[-5:]}
+        return {"attempted": True, "date": date_text, "chips": result.get("chips", 0),
+                "margin_rows": result.get("margin_rows", 0), "errors": result.get("errors", [])[-5:]}
     except Exception as exc:
         return {"attempted": True, "date": date_text, "error": str(exc)}
 
@@ -222,48 +225,19 @@ def _analyze_rows(rows):
     }
 
 
-def _read_chip_rows(db, code, limit=20):
-    rows = []
-    try:
-        docs = db.collection("chip_daily").document(code).collection("data").order_by("date", direction="DESCENDING").limit(limit).stream()
-        rows = sorted([d.to_dict() or {} for d in docs], key=lambda x: str(x.get("date", "")))
-    except Exception:
-        try:
-            docs = db.collection("chip_daily").document(code).collection("data").stream()
-            rows = sorted([d.to_dict() or {} for d in docs], key=lambda x: str(x.get("date", "")))[-limit:]
-        except Exception:
-            rows = []
-    return rows
-
-
-def read_chip_rows(db, code, limit=20):
-    return _read_chip_rows(db, code, limit=limit)
+def read_chip_rows(code, limit=20):
+    return get_chip_rows(code, limit=limit)
 
 
 def analyze_chip_rows(rows):
     return _analyze_rows(rows)
 
 
-def _write_chip_rows(db, code, rows):
-    latest = rows[-1] if rows else {}
-    analysis = _analyze_rows(rows)
-    parent = db.collection("chip_daily").document(code)
-    parent.set({
-        "stock_id": code,
-        "latest": latest,
-        "analysis": analysis,
-        "updated_at": datetime.now().isoformat(),
-    }, merge=True)
+def _write_chip_rows(code, rows):
     for row in rows:
         date = str(row.get("date"))
-        parent.collection("data").document(date).set(row, merge=True)
-    db.collection("chip_analysis").document(code).set({
-        "stock_id": code,
-        "analysis": analysis,
-        "latest": latest,
-        "updated_at": datetime.now().isoformat(),
-    }, merge=True)
-    return analysis
+        save_chip_daily(code, date, row)
+    return _analyze_rows(rows)
 
 
 def _universe(m, product_type="all", market="all", limit=5000):
@@ -277,16 +251,14 @@ def _install(app):
     if _INSTALLED:
         return
 
-    # IMPORTANT: Static routes must be declared before /api/chip/{stock},
-    # otherwise FastAPI will treat "backfill_all" as the stock parameter.
     @app.get("/api/chip/backfill_all")
     def chip_backfill_all(product_type: str = "all", market: str = "all", offset: int = 0, limit: int = 20, days: int = 20):
+        from firebase import db
         m = _main()
-        if m.db is None:
-            return _json({"status": "failed", "message": "Firebase not initialized", "next_offset": offset})
+        if db is None:
+            return _json({"status": "failed", "message": "Database not initialized", "next_offset": offset})
         products = _universe(m, product_type=product_type, market=market, limit=5000)
-        requested_limit = max(1, int(limit or 1))
-        effective_limit = min(requested_limit, 5)
+        effective_limit = min(max(1, int(limit or 1)), 5)
         batch = products[offset:offset + effective_limit]
         written = 0
         errors = []
@@ -296,7 +268,7 @@ def _install(app):
                 continue
             try:
                 rows = _mock_chip_rows(code, days=days)
-                _write_chip_rows(m.db, code, rows)
+                _write_chip_rows(code, rows)
                 written += 1
             except Exception as exc:
                 errors.append({"code": code, "error": str(exc)})
@@ -304,13 +276,11 @@ def _install(app):
         return _json({
             "status": "ok",
             "route": "/api/chip/backfill_all",
-            "collection": "chip_daily",
-            "analysis_collection": "chip_analysis",
             "universe_count": len(products),
             "offset": offset,
             "limit": effective_limit,
-            "requested_limit": requested_limit,
-            "message": "Single request is capped at 5 stocks to avoid long browser requests and Firestore quota errors.",
+            "requested_limit": limit,
+            "message": "Capped at 5 stocks per call.",
             "processed": len(batch),
             "written_stocks": written,
             "error_count": len(errors),
@@ -318,50 +288,37 @@ def _install(app):
             "next_offset": next_offset,
         })
 
-    @app.get("/api/chip/backfill_history_all")
-    def chip_backfill_history_all(months: int = 12, max_days: int = None):
-        m = _main()
-        if not hasattr(m, "run_chip_history_backfill"):
-            return _json({"status": "failed", "message": "chip history backfill is not available"})
-        days = int(max_days or max(20, months * 22))
-        if hasattr(m, "start_thread"):
-            return _json({
-                **m.start_thread(f"chip-history-{days}d", m.run_chip_history_backfill, months, days),
-                "route": "/api/chip/backfill_history_all",
-                "months": months,
-                "target_days": days,
-            })
-        threading.Thread(target=m.run_chip_history_backfill, args=(months, days), daemon=True).start()
-        return _json({"status": "started", "route": "/api/chip/backfill_history_all", "months": months, "target_days": days})
-
     @app.get("/api/chip/init/{stock}")
     def chip_init(stock: str, days: int = 20):
+        from firebase import db
         m = _main()
         code = m.normalize_stock(stock) if hasattr(m, "normalize_stock") else str(stock).strip().upper()
-        if m.db is None:
-            return _json({"status": "failed", "message": "Firebase not initialized"})
+        if db is None:
+            return _json({"status": "failed", "message": "Database not initialized"})
         rows = _mock_chip_rows(code, days=days)
-        analysis = _write_chip_rows(m.db, code, rows)
-        return _json({"status": "ok", "stock": stock, "normalized_stock": code, "written_days": len(rows), "analysis": analysis, "collection": "chip_daily"})
+        analysis = _write_chip_rows(code, rows)
+        return _json({"status": "ok", "stock": stock, "normalized_stock": code,
+                      "written_days": len(rows), "analysis": analysis})
 
     @app.get("/api/chip/{stock}")
     def chip_analysis(stock: str, auto_init: bool = True):
+        from firebase import db
         m = _main()
         code = m.normalize_stock(stock) if hasattr(m, "normalize_stock") else str(stock).strip().upper()
         cache_key = f"chip:{code}:{auto_init}"
         cached = _cache_get(cache_key)
         if cached is not None:
             return _json({**cached, "cache_hit": True})
-        if m.db is None:
-            return _json({"status": "failed", "message": "Firebase not initialized"})
-        rows = _read_chip_rows(m.db, code, limit=20)
+        if db is None:
+            return _json({"status": "failed", "message": "Database not initialized"})
+        rows = read_chip_rows(code, limit=20)
         live_backfill = None
         if not _has_real_institutional_rows(rows):
             live_backfill = _try_live_chip_backfill(code)
-            rows = _read_chip_rows(m.db, code, limit=20)
+            rows = read_chip_rows(code, limit=20)
         if not rows and auto_init:
             rows = _mock_chip_rows(code, days=20)
-            _write_chip_rows(m.db, code, rows)
+            _write_chip_rows(code, rows)
         analysis = _analyze_rows(rows)
         latest = rows[-1] if rows else {}
         has_institutional_data = _has_real_institutional_rows(rows)
@@ -370,7 +327,7 @@ def _install(app):
             "route": "/api/chip/{stock}",
             "stock": stock,
             "normalized_stock": code,
-            "source": "Firebase chip_daily",
+            "source": "Supabase chip_daily",
             "latest_chip": latest,
             "rows": rows,
             "row_count": len(rows),
@@ -394,7 +351,7 @@ def boot():
                 _install(m.app)
                 return
             time.sleep(0.1)
-    threading.Thread(target=wait, daemon=True).start()
+    threading.Thread(target=wait, daemon=True, name="chip_routes_boot").start()
 
 
 boot()

@@ -19,6 +19,8 @@ from firebase_cache import (
     get_cache_status,
     get_valid_stock_daily_series,
     get_latest_chip_daily,
+    save_analysis_cache,
+    save_job_log,
 )
 from jobs import (
     run_daily_update,
@@ -305,24 +307,20 @@ def enrich_analysis_payload(result, code, df, source, chip, backfill_started=Fal
     })
     if db is not None:
         try:
-            db.collection("analysis_cache").document(code).set({
-                "stock_id": code,
+            save_analysis_cache(code, {
                 "latest_date": data[-1].get("date") if data else None,
-                "updated_at": datetime.now().isoformat(),
                 "perspective_cards": perspective_cards,
                 "signals": signals,
                 "trade_plan": trade_plan,
                 "data_rows": len(data),
-            }, merge=True)
+            })
         except Exception as exc:
             result["analysis_cache_error"] = str(exc)
     return result, data
 
 
 def get_chip_context(code: str, limit: int = 60):
-    rows = []
-    if db is not None:
-        rows = read_chip_rows(db, code, limit=limit)
+    rows = read_chip_rows(code, limit=limit)
     analysis = analyze_chip_rows(rows)
     latest = rows[-1] if rows else (get_latest_chip_daily(code) or {})
     metrics = analysis.get("metrics") if isinstance(analysis, dict) else {}
@@ -353,8 +351,8 @@ def try_refresh_twse_chips():
 
 def read_chip_payload(code: str, limit: int = 60):
     if db is None:
-        return {"status": "failed", "message": "Firebase not initialized"}
-    rows = read_chip_rows(db, code, limit=limit)
+        return {"status": "failed", "message": "Database not initialized"}
+    rows = read_chip_rows(code, limit=limit)
     live_refresh = None
     if not any(is_real_chip_row(row) for row in rows):
         live_refresh = try_refresh_twse_chips()
@@ -382,27 +380,6 @@ def read_chip_payload(code: str, limit: int = 60):
 
 def product_universe(product_type: str = "股票", market: str = "all"):
     items = []
-    for item in get_all_products():
-        if product_type != "all" and item.get("type") != product_type:
-            continue
-        if market != "all" and item.get("market") != market:
-            continue
-        code = normalize_stock(item.get("code"))
-        if not code:
-            continue
-        items.append({**item, "code": code})
-    seen = set()
-    result = []
-    for item in items:
-        if item["code"] in seen:
-            continue
-        seen.add(item["code"])
-        result.append(item)
-    return result
-
-
-def product_universe(product_type: str = "股票", market: str = "all"):
-    items = []
     type_filter = str(product_type or "all").strip()
     market_filter = str(market or "all").strip()
     for item in get_all_products():
@@ -422,44 +399,11 @@ def product_universe(product_type: str = "股票", market: str = "all"):
         seen.add(item["code"])
         result.append(item)
     return result
-
-
-def product_universe(product_type: str = "股票", market: str = "all"):
-    items = []
-    type_filter = str(product_type or "all").strip()
-    market_filter = str(market or "all").strip()
-    for item in get_all_products():
-        if type_filter != "all" and item.get("type") != type_filter:
-            continue
-        if market_filter != "all" and item.get("market") != market_filter:
-            continue
-        code = normalize_stock(item.get("code"))
-        if not code:
-            continue
-        items.append({**item, "code": code})
-    seen = set()
-    result = []
-    for item in items:
-        if item["code"] in seen:
-            continue
-        seen.add(item["code"])
-        result.append(item)
-    return result
-
-
-def delete_doc_with_data_subcollection(doc_ref):
-    deleted_children = 0
-    for sub in doc_ref.collection("data").stream():
-        sub.reference.delete()
-        deleted_children += 1
-    doc_ref.delete()
-    return deleted_children
 
 
 def run_backfill_universe(products, months: int = 12):
     result = {"status": "running", "months": months, "total": len(products), "processed": 0, "written_days": 0, "errors": [], "started_at": datetime.now().isoformat()}
-    if db is not None:
-        db.collection("job_logs").document("backfill_all_latest").set(result, merge=True)
+    save_job_log("backfill_all_latest", result)
     for item in products:
         code = item["code"]
         try:
@@ -471,12 +415,11 @@ def run_backfill_universe(products, months: int = 12):
         except Exception as exc:
             result["processed"] += 1
             result["errors"].append({"stock_id": code, "error": str(exc)})
-        if db is not None and result["processed"] % 10 == 0:
-            db.collection("job_logs").document("backfill_all_latest").set({**result, "updated_at": datetime.now().isoformat()}, merge=True)
+        if result["processed"] % 10 == 0:
+            save_job_log("backfill_all_latest", {**result, "updated_at": datetime.now().isoformat()})
     result["status"] = "done"
     result["finished_at"] = datetime.now().isoformat()
-    if db is not None:
-        db.collection("job_logs").document("backfill_all_latest").set({**result, "updated_at": datetime.now().isoformat()}, merge=True)
+    save_job_log("backfill_all_latest", result)
     return result
 
 
@@ -496,8 +439,7 @@ def run_backfill_missing(product_type: str = "all", market: str = "all", months:
         "errors": [],
         "started_at": datetime.now().isoformat(),
     }
-    if db is not None:
-        db.collection("job_logs").document("backfill_missing_latest").set(result, merge=True)
+    save_job_log("backfill_missing_latest", result)
 
     refresh_products_cache()
     universe = product_universe(product_type=product_type, market=market)[:limit]
@@ -523,13 +465,12 @@ def run_backfill_missing(product_type: str = "all", market: str = "all", months:
         except Exception as exc:
             result["processed"] += 1
             result["errors"].append({"stock_id": code, "phase": "backfill", "error": str(exc)})
-        if db is not None and result["processed"] % 10 == 0:
-            db.collection("job_logs").document("backfill_missing_latest").set({**result, "updated_at": datetime.now().isoformat()}, merge=True)
+        if result["processed"] % 10 == 0:
+            save_job_log("backfill_missing_latest", {**result, "updated_at": datetime.now().isoformat()})
 
     result["status"] = "done"
     result["finished_at"] = datetime.now().isoformat()
-    if db is not None:
-        db.collection("job_logs").document("backfill_missing_latest").set({**result, "updated_at": datetime.now().isoformat()}, merge=True)
+    save_job_log("backfill_missing_latest", result)
     return result
 
 
@@ -552,13 +493,12 @@ def products(product_type: str = "股票", market: str = "all", limit: int = 500
 @app.get("/api/firebase/test")
 def firebase_test():
     if db is None:
-        return JSONResponse({"status": "failed", "firebase_enabled": False, "message": "Firebase not initialized. Check FIREBASE_KEY in Render Environment."}, media_type="application/json; charset=utf-8")
-    try:
-        payload = {"status": "ok", "message": "Firebase write test succeeded", "created_at": datetime.now().isoformat()}
-        db.collection("system_health").document("test").set(payload)
-        return JSONResponse({"status": "ok", "firebase_enabled": True, "write": "system_health/test", "data": payload}, media_type="application/json; charset=utf-8")
-    except Exception as exc:
-        return JSONResponse({"status": "failed", "firebase_enabled": False, "error": str(exc)}, media_type="application/json; charset=utf-8")
+        return JSONResponse({"status": "failed", "firebase_enabled": False, "message": "DATABASE_URL not set"}, media_type="application/json; charset=utf-8")
+    from firebase_cache import _run
+    _, err = _run("SELECT 1", fetch="one")
+    if err:
+        return JSONResponse({"status": "failed", "firebase_enabled": False, "error": err}, media_type="application/json; charset=utf-8")
+    return JSONResponse({"status": "ok", "firebase_enabled": True, "message": "Supabase connection OK", "checked_at": datetime.now().isoformat()}, media_type="application/json; charset=utf-8")
 
 
 @app.get("/api/firebase/audit_all")
@@ -574,18 +514,14 @@ def firebase_cleanup_all(limit_stocks: int = 5000, limit_per_stock: int = 260):
 @app.get("/api/firebase/reset_all")
 def firebase_reset_all(product_type: str = "股票", market: str = "all", offset: int = 0, limit: int = 500):
     if db is None:
-        return JSONResponse({"status": "failed", "firebase_enabled": False, "message": "Firebase not initialized"}, media_type="application/json; charset=utf-8")
+        return JSONResponse({"status": "failed", "firebase_enabled": False, "message": "Database not initialized"}, media_type="application/json; charset=utf-8")
+    from firebase_cache import delete_stock_data
     universe = product_universe(product_type=product_type, market=market)
     batch = universe[offset:offset + limit]
-    deleted_stock_docs = 0
-    deleted_stock_data_docs = 0
-    deleted_analysis_cache = 0
+    deleted = 0
     for item in batch:
-        code = item["code"]
-        deleted_stock_data_docs += delete_doc_with_data_subcollection(db.collection("stock_daily").document(code))
-        deleted_stock_docs += 1
-        db.collection("analysis_cache").document(code).delete()
-        deleted_analysis_cache += 1
+        delete_stock_data(item["code"])
+        deleted += 1
     return JSONResponse({
         "status": "ok",
         "mode": "stock_universe_batch_reset",
@@ -595,9 +531,7 @@ def firebase_reset_all(product_type: str = "股票", market: str = "all", offset
         "limit": limit,
         "universe_count": len(universe),
         "processed_count": len(batch),
-        "deleted_stock_docs": deleted_stock_docs,
-        "deleted_stock_data_docs": deleted_stock_data_docs,
-        "deleted_analysis_cache": deleted_analysis_cache,
+        "deleted": deleted,
         "next_offset": offset + len(batch) if offset + len(batch) < len(universe) else None,
     }, media_type="application/json; charset=utf-8")
 

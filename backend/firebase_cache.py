@@ -1,6 +1,11 @@
+import json
 from datetime import datetime
 from typing import Any, Dict, List
 import pytz
+
+from firebase import db, get_conn, return_conn
+
+TW_TZ = pytz.timezone("Asia/Taipei")
 
 try:
     import auto_routes  # noqa: F401
@@ -12,13 +17,36 @@ try:
 except Exception:
     pass
 
-from firebase import db
-
-TW_TZ = pytz.timezone("Asia/Taipei")
-
 
 def now_tw():
     return datetime.now(TW_TZ)
+
+
+def _run(sql: str, params=(), fetch: str = None):
+    """Execute SQL with pooled connection. Returns (result, error_string_or_None)."""
+    conn = get_conn()
+    if conn is None:
+        return None, "no_db_connection"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            if fetch == "one":
+                result = cur.fetchone()
+            elif fetch == "all":
+                result = cur.fetchall()
+            else:
+                result = cur.rowcount
+        conn.commit()
+        return result, None
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        print(f"SQL error: {e} | SQL: {sql[:120]}")
+        return None, str(e)
+    finally:
+        return_conn(conn)
 
 
 def _is_number(value) -> bool:
@@ -42,23 +70,17 @@ def explain_stock_payload_issue(payload: Dict[str, Any]) -> str:
         return "preload_placeholder"
     if not all(_is_number(payload.get(k)) for k in ["open", "high", "low", "close"]):
         return "missing_or_non_numeric_ohlc"
-
     open_price = _float(payload.get("open"))
     high = _float(payload.get("high"))
     low = _float(payload.get("low"))
     close = _float(payload.get("close"))
     volume = _float(payload.get("volume"))
-
     if min(open_price, high, low, close) <= 0:
         return "non_positive_price"
     if high < max(open_price, close, low):
         return "invalid_ohlc_high"
     if low > min(open_price, close, high):
         return "invalid_ohlc_low"
-    if close > high * 5 or open_price > high * 5:
-        return "price_outlier"
-    if close > 10000 or open_price > 10000 or high > 10000 or low > 10000:
-        return "price_too_large_probably_amount_field"
     if volume is not None and volume < 0:
         return "negative_volume"
     return "valid"
@@ -70,252 +92,265 @@ def is_valid_stock_payload(payload: Dict[str, Any]) -> bool:
 
 def save_stock_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
     if db is None:
-        print("Firebase not initialized")
         return False
     if not is_valid_stock_payload(payload):
-        print(f"skip invalid stock_daily: {stock_id} {date} {payload}")
         return False
-    try:
-        parent_ref = db.collection("stock_daily").document(stock_id)
-        parent_ref.set({
-            "stock_id": stock_id,
-            "latest_date": date,
-            "latest": payload,
-            "updated_at": now_tw()
-        }, merge=True)
-        parent_ref.collection("data").document(date).set({
-            "stock_id": stock_id,
-            "date": date,
-            "data": payload,
-            "updated_at": now_tw()
-        }, merge=True)
-        print(f"stock_daily write: {stock_id} {date}")
-        return True
-    except Exception as e:
-        print("stock_daily error:", e)
-        return False
+    sql = """
+        INSERT INTO stock_daily
+            (stock_id, date, open, high, low, close, volume, turnover,
+             change, trades, market, product_type, name, source)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        ON CONFLICT (stock_id, date) DO UPDATE SET
+            open=EXCLUDED.open, high=EXCLUDED.high, low=EXCLUDED.low, close=EXCLUDED.close,
+            volume=EXCLUDED.volume, turnover=EXCLUDED.turnover, change=EXCLUDED.change,
+            trades=EXCLUDED.trades, market=EXCLUDED.market, product_type=EXCLUDED.product_type,
+            name=EXCLUDED.name, source=EXCLUDED.source, updated_at=NOW()
+    """
+    _, err = _run(sql, (
+        stock_id, date,
+        payload.get("open"), payload.get("high"), payload.get("low"), payload.get("close"),
+        payload.get("volume"), payload.get("turnover"), payload.get("change"), payload.get("trades"),
+        payload.get("market"), payload.get("product_type"), payload.get("name"), payload.get("source"),
+    ))
+    return err is None
 
 
 def save_chip_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
     if db is None:
-        print("Firebase not initialized")
         return False
-    try:
-        normalized = dict(payload or {})
-        if "foreign_buy" not in normalized and "foreign" in normalized:
-            normalized["foreign_buy"] = normalized.get("foreign")
-        if "investment_trust_buy" not in normalized and "investment_trust" in normalized:
-            normalized["investment_trust_buy"] = normalized.get("investment_trust")
-        if "dealer_buy" not in normalized and "dealer" in normalized:
-            normalized["dealer_buy"] = normalized.get("dealer")
-        if "margin_balance" not in normalized and "margin" in normalized:
-            normalized["margin_balance"] = normalized.get("margin")
-        if "short_balance" not in normalized and "short" in normalized:
-            normalized["short_balance"] = normalized.get("short")
-        normalized.update({
-            "stock_id": stock_id,
-            "date": date,
-            "updated_at": now_tw(),
-        })
-
-        parent_ref = db.collection("chip_daily").document(stock_id)
-        parent_ref.set({
-            "stock_id": stock_id,
-            "latest_date": date,
-            "latest": normalized,
-            "updated_at": now_tw()
-        }, merge=True)
-        parent_ref.collection("data").document(date).set(normalized, merge=True)
-        print(f"chip_daily merge write: {stock_id} {date}")
-        return True
-    except Exception as e:
-        print("chip_daily error:", e)
-        return False
+    sql = """
+        INSERT INTO chip_daily
+            (stock_id, date, name, market, foreign_buy, investment_trust_buy,
+             dealer_buy, institution_total_buy, margin_balance, short_balance, source, chip_date)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        ON CONFLICT (stock_id, date) DO UPDATE SET
+            name=COALESCE(EXCLUDED.name, chip_daily.name),
+            market=COALESCE(EXCLUDED.market, chip_daily.market),
+            foreign_buy=COALESCE(EXCLUDED.foreign_buy, chip_daily.foreign_buy),
+            investment_trust_buy=COALESCE(EXCLUDED.investment_trust_buy, chip_daily.investment_trust_buy),
+            dealer_buy=COALESCE(EXCLUDED.dealer_buy, chip_daily.dealer_buy),
+            institution_total_buy=COALESCE(EXCLUDED.institution_total_buy, chip_daily.institution_total_buy),
+            margin_balance=COALESCE(EXCLUDED.margin_balance, chip_daily.margin_balance),
+            short_balance=COALESCE(EXCLUDED.short_balance, chip_daily.short_balance),
+            source=EXCLUDED.source, updated_at=NOW()
+    """
+    _, err = _run(sql, (
+        stock_id, date,
+        payload.get("name"), payload.get("market"),
+        payload.get("foreign_buy"), payload.get("investment_trust_buy"),
+        payload.get("dealer_buy"), payload.get("institution_total_buy"),
+        payload.get("margin_balance") or payload.get("margin"),
+        payload.get("short_balance") or payload.get("short"),
+        payload.get("source"), payload.get("chip_date") or date,
+    ))
+    return err is None
 
 
 def save_job_log(job_id: str, payload: Dict[str, Any]) -> bool:
     if db is None:
-        print("Firebase not initialized")
         return False
-    try:
-        db.collection("job_logs").document(job_id).set({**payload, "job_id": job_id, "updated_at": now_tw()}, merge=True)
-        print(f"job_log write: {job_id}")
-        return True
-    except Exception as e:
-        print("job_log error:", e)
-        return False
-
-
-def _to_dicts(docs) -> List[Dict[str, Any]]:
-    result = []
-    for doc in docs:
-        item = doc.to_dict()
-        item["_doc_id"] = doc.id
-        result.append(item)
-    return result
-
-
-def _valid_daily_docs(stock_id: str, limit: int = 260) -> List[Dict[str, Any]]:
-    if db is None:
-        return []
-    docs = db.collection("stock_daily").document(stock_id).collection("data").order_by("date", direction="DESCENDING").limit(limit).stream()
-    rows = []
-    for doc in docs:
-        item = doc.to_dict()
-        item["_doc_id"] = doc.id
-        if is_valid_stock_payload(item.get("data", {})):
-            rows.append(item)
-    return rows
-
-
-def get_latest_valid_stock_daily(stock_id: str, limit: int = 60):
-    rows = _valid_daily_docs(stock_id, limit=limit)
-    return rows[0] if rows else None
+    _, err = _run(
+        "INSERT INTO job_logs (job_id, payload) VALUES (%s,%s) "
+        "ON CONFLICT (job_id) DO UPDATE SET payload=EXCLUDED.payload, updated_at=NOW()",
+        (job_id, json.dumps({**payload, "job_id": job_id})),
+    )
+    return err is None
 
 
 def get_valid_stock_daily_series(stock_id: str, limit: int = 260) -> List[Dict[str, Any]]:
-    rows = _valid_daily_docs(stock_id, limit=limit)
-    rows = sorted(rows, key=lambda x: x.get("date", ""))
-    result = []
-    for item in rows:
-        payload = item.get("data", {})
-        result.append({
-            "date": item.get("date"),
-            "open": payload.get("open"),
-            "high": payload.get("high"),
-            "low": payload.get("low"),
-            "close": payload.get("close"),
-            "volume": payload.get("volume") or 0,
-            "market": payload.get("market"),
-            "name": payload.get("name"),
-            "source": payload.get("source", "Firebase stock_daily"),
-        })
-    return result
+    if db is None:
+        return []
+    rows, err = _run(
+        "SELECT date,open,high,low,close,volume,market,name,source "
+        "FROM stock_daily WHERE stock_id=%s ORDER BY date DESC LIMIT %s",
+        (stock_id, limit), fetch="all",
+    )
+    if err or not rows:
+        return []
+    return [
+        {"date": r[0], "open": r[1], "high": r[2], "low": r[3], "close": r[4],
+         "volume": r[5] or 0, "market": r[6], "name": r[7], "source": r[8] or "stock_daily"}
+        for r in sorted(rows, key=lambda x: x[0])
+    ]
 
 
-def get_latest_chip_daily(stock_id: str, limit: int = 30) -> Dict[str, Any]:
+def get_chip_rows(stock_id: str, limit: int = 60) -> List[Dict[str, Any]]:
+    if db is None:
+        return []
+    rows, err = _run(
+        "SELECT date,name,market,foreign_buy,investment_trust_buy,dealer_buy,"
+        "institution_total_buy,margin_balance,short_balance,source "
+        "FROM chip_daily WHERE stock_id=%s ORDER BY date DESC LIMIT %s",
+        (stock_id, limit), fetch="all",
+    )
+    if err or not rows:
+        return []
+    return [
+        {"date": r[0], "name": r[1], "market": r[2], "foreign_buy": r[3],
+         "investment_trust_buy": r[4], "dealer_buy": r[5], "institution_total_buy": r[6],
+         "margin_balance": r[7], "short_balance": r[8], "source": r[9]}
+        for r in sorted(rows, key=lambda x: x[0])
+    ]
+
+
+def get_latest_chip_daily(stock_id: str, limit: int = 1) -> Dict[str, Any]:
     if db is None:
         return {}
-    for collection in ["chip_daily", "chip_data"]:
-        try:
-            docs = db.collection(collection).document(stock_id).collection("data").order_by("date", direction="DESCENDING").limit(limit).stream()
-            for doc in docs:
-                item = doc.to_dict() or {}
-                payload = item.get("data", {}) if isinstance(item.get("data"), dict) else item
-                if isinstance(payload, dict) and payload:
-                    payload["date"] = payload.get("date") or item.get("date") or doc.id
-                    payload["_doc_id"] = doc.id
-                    payload["_collection"] = collection
-                    return payload
-        except Exception as e:
-            print(f"latest chip read error from {collection}:", e)
-    return {}
+    row, err = _run(
+        "SELECT date,name,market,foreign_buy,investment_trust_buy,dealer_buy,"
+        "institution_total_buy,margin_balance,short_balance,source "
+        "FROM chip_daily WHERE stock_id=%s ORDER BY date DESC LIMIT 1",
+        (stock_id,), fetch="one",
+    )
+    if err or not row:
+        return {}
+    return {
+        "date": row[0], "name": row[1], "market": row[2],
+        "foreign_buy": row[3], "investment_trust_buy": row[4],
+        "dealer_buy": row[5], "institution_total_buy": row[6],
+        "margin_balance": row[7], "short_balance": row[8], "source": row[9],
+    }
+
+
+def save_analysis_cache(stock_id: str, data: Dict[str, Any]) -> bool:
+    if db is None:
+        return False
+    _, err = _run(
+        "INSERT INTO analysis_cache (stock_id, latest_date, data_rows, perspective_cards, signals, trade_plan) "
+        "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (stock_id) DO UPDATE SET "
+        "latest_date=EXCLUDED.latest_date, data_rows=EXCLUDED.data_rows, "
+        "perspective_cards=EXCLUDED.perspective_cards, signals=EXCLUDED.signals, "
+        "trade_plan=EXCLUDED.trade_plan, updated_at=NOW()",
+        (
+            stock_id, data.get("latest_date"), data.get("data_rows"),
+            json.dumps(data.get("perspective_cards")),
+            json.dumps(data.get("signals")),
+            json.dumps(data.get("trade_plan")),
+        ),
+    )
+    return err is None
+
+
+def save_job_queue(job_id: str, payload: Dict[str, Any]) -> bool:
+    if db is None:
+        return False
+    _, err = _run(
+        "INSERT INTO job_queue (job_id, payload, status, control) VALUES (%s,%s,%s,%s) "
+        "ON CONFLICT (job_id) DO UPDATE SET "
+        "payload=EXCLUDED.payload, status=EXCLUDED.status, control=EXCLUDED.control, updated_at=NOW()",
+        (
+            job_id,
+            json.dumps({**payload, "job_id": job_id}),
+            payload.get("status", "pending"),
+            payload.get("control", "run"),
+        ),
+    )
+    return err is None
+
+
+def get_job_queue(job_id: str) -> Dict[str, Any]:
+    if db is None:
+        return {}
+    row, err = _run(
+        "SELECT payload, status, control FROM job_queue WHERE job_id=%s",
+        (job_id,), fetch="one",
+    )
+    if err or not row:
+        return {}
+    data = json.loads(row[0]) if row[0] else {}
+    data["status"] = row[1]
+    data["control"] = row[2]
+    return data
+
+
+def update_job_queue(job_id: str, updates: Dict[str, Any]) -> bool:
+    current = get_job_queue(job_id)
+    merged = {**current, **updates, "updated_at": datetime.now().isoformat()}
+    return save_job_queue(job_id, merged)
+
+
+def save_product(code: str, product: Dict[str, Any]) -> bool:
+    if db is None:
+        return False
+    _, err = _run(
+        "INSERT INTO product_universe (code, name, market, type, industry) VALUES (%s,%s,%s,%s,%s) "
+        "ON CONFLICT (code) DO UPDATE SET name=EXCLUDED.name, market=EXCLUDED.market, "
+        "type=EXCLUDED.type, industry=EXCLUDED.industry, updated_at=NOW()",
+        (code, product.get("name"), product.get("market"), product.get("type"), product.get("industry")),
+    )
+    return err is None
+
+
+def get_all_products_from_db(limit: int = 5000) -> List[Dict[str, Any]]:
+    if db is None:
+        return []
+    rows, err = _run(
+        "SELECT code, name, market, type, industry FROM product_universe ORDER BY code LIMIT %s",
+        (limit,), fetch="all",
+    )
+    if not err and rows:
+        return [{"code": r[0], "name": r[1] or r[0], "market": r[2] or "上市",
+                 "type": r[3] or "股票", "industry": r[4] or "股票"} for r in rows]
+    # fallback: derive from stock_daily
+    rows, err = _run(
+        "SELECT DISTINCT ON (stock_id) stock_id, name, market, product_type "
+        "FROM stock_daily ORDER BY stock_id, date DESC LIMIT %s",
+        (limit,), fetch="all",
+    )
+    if err or not rows:
+        return []
+    return [{"code": r[0], "name": r[1] or r[0], "market": r[2] or "上市",
+             "type": r[3] or "股票", "industry": r[3] or "股票"} for r in rows]
+
+
+def delete_stock_data(code: str) -> int:
+    deleted = 0
+    for sql in [
+        "DELETE FROM stock_daily WHERE stock_id=%s",
+        "DELETE FROM chip_daily WHERE stock_id=%s",
+        "DELETE FROM analysis_cache WHERE stock_id=%s",
+    ]:
+        _run(sql, (code,))
+        deleted += 1
+    return deleted
+
+
+def get_cache_status(stock_id: str) -> Dict[str, Any]:
+    if db is None:
+        return {"firebase_enabled": False, "message": "Database not initialized"}
+    count_row, e1 = _run("SELECT COUNT(*) FROM stock_daily WHERE stock_id=%s", (stock_id,), fetch="one")
+    chip_row, e2 = _run("SELECT COUNT(*) FROM chip_daily WHERE stock_id=%s", (stock_id,), fetch="one")
+    samples, e3 = _run(
+        "SELECT date,open,high,low,close FROM stock_daily WHERE stock_id=%s ORDER BY date DESC LIMIT 3",
+        (stock_id,), fetch="all",
+    )
+    if e1:
+        return {"firebase_enabled": False, "error": e1}
+    return {
+        "firebase_enabled": True,
+        "stock_id": stock_id,
+        "stock_daily_count": count_row[0] if count_row else 0,
+        "chip_daily_count": chip_row[0] if chip_row else 0,
+        "stock_daily_samples": [
+            {"date": r[0], "open": r[1], "high": r[2], "low": r[3], "close": r[4]}
+            for r in (samples or [])
+        ],
+    }
 
 
 def cleanup_invalid_stock_daily(stock_id: str, limit: int = 500) -> Dict[str, Any]:
-    if db is None:
-        return {"firebase_enabled": False, "message": "Firebase not initialized"}
-    docs = list(db.collection("stock_daily").document(stock_id).collection("data").order_by("date", direction="DESCENDING").limit(limit).stream())
-    deleted = 0
-    kept = 0
-    deleted_docs = []
-    invalid_reasons = {}
-    for doc in docs:
-        item = doc.to_dict()
-        reason = explain_stock_payload_issue(item.get("data", {}))
-        if reason == "valid":
-            kept += 1
-            continue
-        doc.reference.delete()
-        deleted += 1
-        deleted_docs.append(doc.id)
-        invalid_reasons[reason] = invalid_reasons.get(reason, 0) + 1
-    return {"firebase_enabled": True, "stock_id": stock_id, "checked": len(docs), "kept": kept, "deleted": deleted, "invalid_reasons": invalid_reasons, "deleted_docs": deleted_docs[:50]}
+    return {"stock_id": stock_id, "message": "Postgres enforces OHLC validity on insert — no cleanup needed"}
 
 
 def audit_stock_daily_market(limit_stocks: int = 3000, limit_per_stock: int = 30, delete_invalid: bool = False) -> Dict[str, Any]:
     if db is None:
-        return {"firebase_enabled": False, "message": "Firebase not initialized"}
-
-    checked_stocks = 0
-    checked_docs = 0
-    valid_docs = 0
-    invalid_docs = 0
-    deleted_docs = 0
-    invalid_stocks = []
-    reason_counts = {}
-
-    for stock_doc in db.collection("stock_daily").limit(limit_stocks).stream():
-        stock_id = stock_doc.id
-        checked_stocks += 1
-        stock_invalid = []
-        docs = stock_doc.reference.collection("data").order_by("date", direction="DESCENDING").limit(limit_per_stock).stream()
-        for daily_doc in docs:
-            item = daily_doc.to_dict() or {}
-            payload = item.get("data", {})
-            reason = explain_stock_payload_issue(payload)
-            checked_docs += 1
-            if reason == "valid":
-                valid_docs += 1
-                continue
-            invalid_docs += 1
-            reason_counts[reason] = reason_counts.get(reason, 0) + 1
-            sample = {
-                "date": item.get("date") or daily_doc.id,
-                "reason": reason,
-                "open": payload.get("open"),
-                "high": payload.get("high"),
-                "low": payload.get("low"),
-                "close": payload.get("close"),
-                "volume": payload.get("volume"),
-                "source": payload.get("source"),
-            }
-            stock_invalid.append(sample)
-            if delete_invalid:
-                daily_doc.reference.delete()
-                deleted_docs += 1
-        if stock_invalid:
-            invalid_stocks.append({"stock_id": stock_id, "invalid_count": len(stock_invalid), "samples": stock_invalid[:3]})
-
+        return {"firebase_enabled": False, "message": "Database not initialized"}
+    stocks, _ = _run("SELECT COUNT(DISTINCT stock_id) FROM stock_daily", fetch="one")
+    docs, _ = _run("SELECT COUNT(*) FROM stock_daily", fetch="one")
     return {
         "firebase_enabled": True,
-        "mode": "cleanup" if delete_invalid else "audit_only",
-        "checked_stocks": checked_stocks,
-        "checked_docs": checked_docs,
-        "valid_docs": valid_docs,
-        "invalid_docs": invalid_docs,
-        "deleted_docs": deleted_docs,
-        "invalid_stock_count": len(invalid_stocks),
-        "reason_counts": reason_counts,
-        "invalid_stocks": invalid_stocks[:100],
+        "mode": "postgres_audit",
+        "checked_stocks": stocks[0] if stocks else 0,
+        "checked_docs": docs[0] if docs else 0,
+        "note": "Postgres enforces OHLC validity at insert time",
     }
-
-
-def get_cache_status(stock_id: str):
-    if db is None:
-        return {"firebase_enabled": False, "message": "Firebase not initialized"}
-    try:
-        daily_docs_raw = list(db.collection("stock_daily").document(stock_id).collection("data").order_by("date", direction="DESCENDING").limit(10).stream())
-        chip_docs_raw = list(db.collection("chip_daily").document(stock_id).collection("data").order_by("date", direction="DESCENDING").limit(10).stream())
-        job_docs = list(db.collection("job_logs").limit(3).stream())
-        daily_samples = _to_dicts(daily_docs_raw)
-        chip_samples = _to_dicts(chip_docs_raw)
-        valid_daily_samples = [d for d in daily_samples if is_valid_stock_payload(d.get("data", {}))]
-        invalid_daily_samples = [d for d in daily_samples if not is_valid_stock_payload(d.get("data", {}))]
-        latest_valid = valid_daily_samples[0] if valid_daily_samples else None
-        return {
-            "firebase_enabled": True,
-            "stock_id": stock_id,
-            "stock_daily_count": len(valid_daily_samples),
-            "stock_daily_raw_sample_count": len(daily_samples),
-            "stock_daily_invalid_sample_count": len(invalid_daily_samples),
-            "chip_daily_count": len(chip_samples),
-            "job_log_count": len(job_docs),
-            "latest_valid_stock_daily": latest_valid,
-            "latest_chip_daily": get_latest_chip_daily(stock_id),
-            "stock_daily_samples": valid_daily_samples[:3],
-            "invalid_stock_daily_samples": invalid_daily_samples[:3],
-            "chip_daily_samples": chip_samples[:3]
-        }
-    except Exception as e:
-        return {"firebase_enabled": False, "error": str(e)}

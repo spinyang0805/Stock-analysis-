@@ -6,6 +6,11 @@ import time
 
 import requests
 
+from firebase_cache import (
+    save_product, get_all_products_from_db,
+    save_job_queue, update_job_queue, delete_stock_data,
+)
+
 _INSTALLED = False
 _PRODUCTS_CACHE = None
 
@@ -15,18 +20,10 @@ TPEX_LISTED = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TWSE_ETF = "https://openapi.twse.com.tw/v1/opendata/t187ap03_ETF"
 
 NAME_FIX = {
-    "0050": "元大台灣50",
-    "0056": "元大高股息",
-    "00679B": "元大美債20年",
-    "00878": "國泰永續高股息",
-    "00919": "群益台灣精選高息",
-    "00981A": "主動統一台股增長",
-    "2330": "台積電",
-    "2317": "鴻海",
-    "2408": "南亞科",
-    "2454": "聯發科",
-    "2308": "台達電",
-    "2382": "廣達",
+    "0050": "元大台灣50", "0056": "元大高股息", "00679B": "元大美債20年",
+    "00878": "國泰永續高股息", "00919": "群益台灣精選高息",
+    "00981A": "主動統一台股增長", "2330": "台積電", "2317": "鴻海",
+    "2408": "南亞科", "2454": "聯發科", "2308": "台達電", "2382": "廣達",
 }
 
 SEED_PRODUCTS = [
@@ -50,7 +47,7 @@ def _main():
 
 def _clean_text(value):
     text = str(value or "").strip()
-    if not text or "嚙" in text or "�" in text:
+    if not text or "嚙" in text or "▯" in text:
         return ""
     return text
 
@@ -121,11 +118,9 @@ def _dedupe(items):
         name = _safe_name(code, item.get("name"))
         product_type = item.get("type") or _infer_type(code, name)
         out.append({
-            "code": code,
-            "name": name,
+            "code": code, "name": name,
             "market": _norm_market(item.get("market")),
-            "type": product_type,
-            "industry": item.get("industry") or product_type,
+            "type": product_type, "industry": item.get("industry") or product_type,
         })
     return out
 
@@ -138,14 +133,12 @@ def _external_products():
         industry = _pick(row, ["產業別", "Industry"], "股票")
         if _valid_code(code):
             items.append({"code": code, "name": name, "market": "上市", "type": _infer_type(code, name), "industry": industry or "股票"})
-
     for row in _get_json(TPEX_LISTED):
         code = _pick(row, ["SecuritiesCompanyCode", "公司代號", "Code"])
         name = _safe_name(code, _pick(row, ["CompanyName", "公司名稱", "簡稱"]))
         industry = _pick(row, ["Industry", "產業別"], "股票")
         if _valid_code(code):
             items.append({"code": code, "name": name, "market": "上櫃", "type": _infer_type(code, name), "industry": industry or "股票"})
-
     for row in _get_json(TWSE_ETF):
         code = _pick(row, ["基金代號", "有價證券代號", "Code", "代號"])
         name = _safe_name(code, _pick(row, ["基金名稱", "有價證券名稱", "Name", "名稱"]))
@@ -159,94 +152,61 @@ def _seed_products():
     return _dedupe(SEED_PRODUCTS)
 
 
-def _snapshot_products(db, limit=5000, use_cache=True):
+def _snapshot_products(limit=5000, use_cache=True):
     global _PRODUCTS_CACHE
     if use_cache and _PRODUCTS_CACHE:
         return _PRODUCTS_CACHE[:limit]
-
     items = _external_products()
     if len(items) >= 100:
         _PRODUCTS_CACHE = items
         return items[:limit]
-
-    if db is not None:
-        for collection in ["product_universe", "stock_daily"]:
-            items = []
-            try:
-                for doc in db.collection(collection).limit(limit).stream():
-                    data = doc.to_dict() or {}
-                    latest = data.get("latest") or {}
-                    code = str(data.get("code") or data.get("stock_id") or doc.id).strip().upper()
-                    if not _valid_code(code):
-                        continue
-                    name = _safe_name(code, data.get("name") or latest.get("name"))
-                    product_type = data.get("type") or latest.get("product_type") or _infer_type(code, name)
-                    items.append({
-                        "code": code,
-                        "name": name,
-                        "market": _norm_market(data.get("market") or latest.get("market")),
-                        "type": product_type,
-                        "industry": data.get("industry") or product_type,
-                    })
-            except Exception:
-                pass
-            items = _dedupe(items)
-            if items:
-                _PRODUCTS_CACHE = items
-                return items[:limit]
-
+    items = get_all_products_from_db(limit=limit)
+    if items:
+        _PRODUCTS_CACHE = items
+        return items[:limit]
     _PRODUCTS_CACHE = _seed_products()
     return _PRODUCTS_CACHE[:limit]
 
 
-def _delete_doc_data(doc_ref):
-    count = 0
-    try:
-        for sub in doc_ref.collection("data").stream():
-            sub.reference.delete()
-            count += 1
-    except Exception:
-        pass
-    try:
-        doc_ref.delete()
-    except Exception:
-        pass
-    return count
-
-
 def _run_rebuild(job_id, months, batch_delay, limit):
-    main_module = _main()
-    db = main_module.db
-    ref = db.collection("job_queue").document(job_id)
-    products = _snapshot_products(db, limit=limit)
+    m = _main()
+    products = _snapshot_products(limit=limit)
     total = len(products)
-    ref.set({"status": "running", "phase": "snapshot", "total": total, "progress": 0, "updated_at": datetime.now().isoformat()}, merge=True)
+    update_job_queue(job_id, {"status": "running", "phase": "snapshot", "total": total, "progress": 0})
 
     for product in products:
-        db.collection("product_universe").document(product["code"]).set({**product, "updated_at": datetime.now().isoformat()}, merge=True)
+        save_product(product["code"], product)
 
     deleted_docs = 0
-    for collection in ["stock_daily", "chip_data", "analysis_cache", "indicators"]:
-        for idx, product in enumerate(products, start=1):
-            deleted_docs += _delete_doc_data(db.collection(collection).document(product["code"]))
-            if idx % 10 == 0:
-                ref.set({"phase": "reset", "collection": collection, "progress": idx, "total": total, "deleted_data_docs": deleted_docs, "updated_at": datetime.now().isoformat()}, merge=True)
-        time.sleep(1)
+    for idx, product in enumerate(products, start=1):
+        deleted_docs += delete_stock_data(product["code"])
+        if idx % 10 == 0:
+            update_job_queue(job_id, {"phase": "reset", "progress": idx, "total": total,
+                                      "deleted_data_docs": deleted_docs})
+    time.sleep(1)
 
     written = 0
     errors = []
     for idx, product in enumerate(products, start=1):
         try:
-            result = main_module.run_on_demand_backfill(product["code"], months, product.get("market"), product.get("type"))
+            result = m.run_on_demand_backfill(product["code"], months, product.get("market"), product.get("type"))
             written += int(result.get("written_days", 0))
             if result.get("errors"):
                 errors.append({"code": product["code"], "name": product.get("name"), "errors": result.get("errors", [])[:3]})
         except Exception as exc:
             errors.append({"code": product["code"], "name": product.get("name"), "error": str(exc)})
-        ref.set({"phase": "backfill", "status": "running", "progress": idx, "total": total, "current_stock": product["code"], "current_name": product.get("name"), "written_days": written, "error_count": len(errors), "recent_errors": errors[-20:], "updated_at": datetime.now().isoformat()}, merge=True)
+        update_job_queue(job_id, {
+            "phase": "backfill", "status": "running", "progress": idx, "total": total,
+            "current_stock": product["code"], "current_name": product.get("name"),
+            "written_days": written, "error_count": len(errors), "recent_errors": errors[-20:],
+        })
         time.sleep(batch_delay)
 
-    ref.set({"phase": "done", "status": "done", "progress": total, "total": total, "written_days": written, "error_count": len(errors), "recent_errors": errors[-50:], "finished_at": datetime.now().isoformat()}, merge=True)
+    update_job_queue(job_id, {
+        "phase": "done", "status": "done", "progress": total, "total": total,
+        "written_days": written, "error_count": len(errors),
+        "recent_errors": errors[-50:], "finished_at": datetime.now().isoformat(),
+    })
 
 
 def _install(app, db):
@@ -256,40 +216,44 @@ def _install(app, db):
 
     @app.get("/api/init_universe")
     def init_universe(limit: int = 5000):
-        items = _snapshot_products(db, limit=limit, use_cache=False)
-        return {"status": "ready_for_batch", "count": len(items), "message": "Use /api/init_universe_batch?offset=0&limit=10 and repeat until next_offset is null"}
+        items = _snapshot_products(limit=limit, use_cache=False)
+        return {"status": "ready_for_batch", "count": len(items),
+                "message": "Use /api/init_universe_batch?offset=0&limit=10 and repeat until next_offset is null"}
 
     @app.get("/api/init_universe_batch")
     def init_universe_batch(offset: int = 0, limit: int = 10):
         if db is None:
-            return {"status": "failed", "message": "Firebase not initialized"}
-        items = _snapshot_products(db, limit=5000, use_cache=True)
+            return {"status": "failed", "message": "Database not initialized"}
+        items = _snapshot_products(limit=5000, use_cache=True)
         batch = items[offset:offset + limit]
         written = 0
         errors = []
         for product in batch:
             try:
-                db.collection("product_universe").document(str(product["code"])).set({**product, "updated_at": datetime.now().isoformat()}, merge=True)
+                save_product(str(product["code"]), product)
                 written += 1
             except Exception as exc:
                 errors.append({"code": product.get("code"), "error": str(exc)})
         next_offset = offset + len(batch) if offset + len(batch) < len(items) else None
-        return {"status": "ok", "count": len(items), "offset": offset, "limit": limit, "processed": len(batch), "written": written, "error_count": len(errors), "errors": errors[:10], "next_offset": next_offset}
+        return {"status": "ok", "count": len(items), "offset": offset, "limit": limit,
+                "processed": len(batch), "written": written, "error_count": len(errors),
+                "errors": errors[:10], "next_offset": next_offset}
 
     @app.get("/api/products_fast")
     def products_fast(limit: int = 5000):
         try:
-            items = _snapshot_products(db, limit=limit)
-            return {"count": len(items), "items": items[:200], "source": "cached_external_or_snapshot"}
+            items = _snapshot_products(limit=limit)
+            return {"count": len(items), "items": items[:200], "source": "cached_external_or_db"}
         except Exception as exc:
             return {"count": 0, "items": [], "error": str(exc)}
 
     @app.get("/api/job/rebuild_safe")
     def rebuild_safe(months: int = 12, batch_delay: int = 2, limit: int = 5000):
         if db is None:
-            return {"status": "failed", "message": "Firebase not initialized"}
+            return {"status": "failed", "message": "Database not initialized"}
         job_id = f"rebuild_safe_{int(datetime.now().timestamp())}"
-        db.collection("job_queue").document(job_id).set({"job_id": job_id, "status": "pending", "phase": "created", "months": months, "created_at": datetime.now().isoformat()}, merge=True)
+        save_job_queue(job_id, {"job_id": job_id, "status": "pending", "phase": "created",
+                                "months": months, "created_at": datetime.now().isoformat()})
         threading.Thread(target=_run_rebuild, args=(job_id, months, batch_delay, limit), daemon=True).start()
         return {"status": "queued", "job_id": job_id}
 
@@ -304,8 +268,7 @@ def boot():
                 _install(main_module.app, main_module.db)
                 return
             time.sleep(0.1)
-
-    threading.Thread(target=wait, daemon=True).start()
+    threading.Thread(target=wait, daemon=True, name="maintenance_boot").start()
 
 
 boot()

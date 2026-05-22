@@ -16,21 +16,21 @@ jobs:
       - name: Trigger daily stock and chip update
         run: |
           curl --fail --show-error --silent --max-time 120 \
-            "https://stock-analysis-api-ihun.onrender.com/api/job/daily"
+            "https://stock-analysis-tw.fly.dev/api/job/daily"
 
       - name: Keep recent chip history warm
         run: |
           curl --fail --show-error --silent --max-time 120 \
-            "https://stock-analysis-api-ihun.onrender.com/api/chip/backfill_history_all?months=1&max_days=22"
+            "https://stock-analysis-tw.fly.dev/api/chip/backfill_history_all?months=1&max_days=22"
 
       - name: Weekly one-year stock backfill
         if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 11 * * 0'
         run: |
           curl --fail --show-error --silent --max-time 120 \
-            "https://stock-analysis-api-ihun.onrender.com/api/job/backfill_all_yearly?product_type=all&market=all&months=12"
+            "https://stock-analysis-tw.fly.dev/api/job/backfill_all_yearly?product_type=all&market=all&months=12"
 
       - name: Weekly one-year chip backfill
         if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 11 * * 0'
         run: |
           curl --fail --show-error --silent --max-time 120 \
-            "https://stock-analysis-api-ihun.onrender.com/api/chip/backfill_history_all?months=12"
+            "https://stock-analysis-tw.fly.dev/api/chip/backfill_history_all?months=12"

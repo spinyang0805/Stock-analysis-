@@ -1,18 +1,32 @@
 import os
-import json
-from google.cloud import firestore
-from google.oauth2 import service_account
+from psycopg2 import pool as pg_pool
 
-# Read service account JSON from env
-FIREBASE_KEY = os.getenv("FIREBASE_KEY")
+DATABASE_URL = os.getenv("DATABASE_URL")
+_pool = None
 
 try:
-    if FIREBASE_KEY:
-        info = json.loads(FIREBASE_KEY)
-        credentials = service_account.Credentials.from_service_account_info(info)
-        db = firestore.Client(credentials=credentials, project=info.get("project_id"))
-    else:
-        db = None
+    if DATABASE_URL:
+        _pool = pg_pool.ThreadedConnectionPool(1, 10, DATABASE_URL)
+        print("Database pool initialized")
 except Exception as e:
-    print("Firebase init error:", e)
-    db = None
+    print("Database pool init error:", e)
+
+db = _pool  # kept for backwards-compat `if db is None` checks throughout codebase
+
+
+def get_conn():
+    if _pool is None:
+        return None
+    try:
+        return _pool.getconn()
+    except Exception as e:
+        print("get_conn error:", e)
+        return None
+
+
+def return_conn(conn):
+    if _pool and conn:
+        try:
+            _pool.putconn(conn)
+        except Exception:
+            pass
