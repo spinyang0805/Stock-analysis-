@@ -3,7 +3,7 @@ import * as LightweightCharts from "lightweight-charts";
 
 const { createChart, CandlestickSeries, LineSeries, HistogramSeries } = LightweightCharts;
 const API = (import.meta.env.VITE_API_BASE_URL || "https://stock-analysis-tw.fly.dev").replace(/\/$/, "");
-const APP_VERSION = "v19-realtime-ai";
+const APP_VERSION = "v20-stable";
 const POLL_MS = 10_000;
 
 /* ── Stock list ──────────────────────────────────────────────────── */
@@ -334,13 +334,14 @@ export default function App() {
 
   const [input, setInput] = useState("2330");
   const [stock, setStock] = useState(resolveStock("2330"));
+  const [loadKey, setLoadKey] = useState(0);
   const [openSuggest, setOpenSuggest] = useState(false);
   const [payload, setPayload] = useState(null);
   const [rows, setRows] = useState([]);
   const [chip, setChip] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [realtime, setRealtime] = useState(null);
-  const [status, setStatus] = useState("尚未查詢");
+  const [status, setStatus] = useState("載入中...");
   const [lastRefresh, setLastRefresh] = useState(null);
   const [isLive, setIsLive] = useState(isTradingSession);
   const [hovered, setHovered] = useState(null);
@@ -349,47 +350,44 @@ export default function App() {
   /* ── Chart init ──────────────────────────────────────────────── */
   useEffect(() => {
     if (!mainRef.current || !rsiRef.current || !macdRef.current) return;
-    const commonOpts = (el, h) => ({
-      width: el.clientWidth || 900, height: h,
+    const theme = {
       layout: { background: { color: "#0f172a" }, textColor: "#dbeafe" },
       grid: { vertLines: { color: "#1e293b" }, horzLines: { color: "#1e293b" } },
       timeScale: { timeVisible: true, secondsVisible: false, borderColor: "#334155" },
       rightPriceScale: { borderColor: "#334155" },
       crosshair: { mode: 1 },
-    });
+      autoSize: true,
+    };
 
-    const main = createChart(mainRef.current, commonOpts(mainRef.current, 520));
-    const rsi  = createChart(rsiRef.current,  { ...commonOpts(rsiRef.current, 130), crosshair: { mode: 1 } });
-    const macd = createChart(macdRef.current, { ...commonOpts(macdRef.current, 150), crosshair: { mode: 1 } });
+    const main = createChart(mainRef.current, { ...theme, height: 520 });
+    const rsi  = createChart(rsiRef.current,  { ...theme, height: 130 });
+    const macd = createChart(macdRef.current, { ...theme, height: 150 });
     chartsRef.current = { main, rsi, macd };
 
-    // Main chart series
     const candle = addSeries(main, CandlestickSeries, {
       upColor: "#ef4444", downColor: "#22c55e",
       borderUpColor: "#ef4444", borderDownColor: "#22c55e",
       wickUpColor: "#ef4444", wickDownColor: "#22c55e",
     }, "addCandlestickSeries");
 
-    // Volume in same chart, bottom 22%
     const volume = addSeries(main, HistogramSeries, {
       priceFormat: { type: "volume" }, priceScaleId: "vol",
     }, "addHistogramSeries");
-    main.priceScale("vol").applyOptions({ scaleMargins: { top: 0.78, bottom: 0 }, visible: false });
+    try {
+      main.priceScale("vol").applyOptions({ scaleMargins: { top: 0.78, bottom: 0 }, visible: false });
+    } catch (_) {}
 
-    const ma5s   = addSeries(main, LineSeries, { color: "#facc15", lineWidth: 1, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
-    const ma10s  = addSeries(main, LineSeries, { color: "#fb923c", lineWidth: 1, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
-    const ma20s  = addSeries(main, LineSeries, { color: "#38bdf8", lineWidth: 1, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
-    const ma60s  = addSeries(main, LineSeries, { color: "#a78bfa", lineWidth: 1, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
-    const bbUs   = addSeries(main, LineSeries, { color: "rgba(148,163,184,.35)", lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
-    const bbLs   = addSeries(main, LineSeries, { color: "rgba(148,163,184,.35)", lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
-
-    // RSI + MACD
-    const rsiS  = addSeries(rsi, LineSeries, { color: "#f59e0b", lineWidth: 2 }, "addLineSeries");
+    const ma5s  = addSeries(main, LineSeries, { color: "#facc15", lineWidth: 1, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
+    const ma10s = addSeries(main, LineSeries, { color: "#fb923c", lineWidth: 1, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
+    const ma20s = addSeries(main, LineSeries, { color: "#38bdf8", lineWidth: 1, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
+    const ma60s = addSeries(main, LineSeries, { color: "#a78bfa", lineWidth: 1, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
+    const bbUs  = addSeries(main, LineSeries, { color: "rgba(148,163,184,.3)", lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
+    const bbLs  = addSeries(main, LineSeries, { color: "rgba(148,163,184,.3)", lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false }, "addLineSeries");
+    const rsiS  = addSeries(rsi,  LineSeries, { color: "#f59e0b", lineWidth: 2 }, "addLineSeries");
     const macdS = addSeries(macd, HistogramSeries, {}, "addHistogramSeries");
 
     seriesRef.current = { candle, volume, ma5s, ma10s, ma20s, ma60s, bbUs, bbLs, rsiS, macdS };
 
-    // Crosshair hover → update hovered state
     main.subscribeCrosshairMove(param => {
       if (!param.point || !param.time) { setHovered(null); return; }
       const c = param.seriesData?.get(candle);
@@ -397,7 +395,6 @@ export default function App() {
       if (c) setHovered({ time: param.time, open: c.open, high: c.high, low: c.low, close: c.close, volume: v?.value });
     });
 
-    // Sync visible time range across all 3 charts
     const syncRange = (src, targets) => {
       src.timeScale().subscribeVisibleLogicalRangeChange(range => {
         if (syncingRef.current || !range) return;
@@ -410,15 +407,8 @@ export default function App() {
     syncRange(rsi,  [main, macd]);
     syncRange(macd, [main, rsi]);
 
-    const resize = () => {
-      main.applyOptions({ width: mainRef.current?.clientWidth || 900 });
-      rsi.applyOptions({ width: rsiRef.current?.clientWidth || 900 });
-      macd.applyOptions({ width: macdRef.current?.clientWidth || 900 });
-    };
-    window.addEventListener("resize", resize);
     return () => {
-      window.removeEventListener("resize", resize);
-      Object.values(chartsRef.current).forEach(c => c.remove());
+      Object.values(chartsRef.current).forEach(c => { try { c.remove(); } catch (_) {} });
       chartsRef.current = {};
     };
   }, []);
@@ -460,10 +450,10 @@ export default function App() {
     }
   }, []);
 
-  /* ── Initial full load ───────────────────────────────────────── */
+  /* ── Initial full load (triggers on stock change OR manual refresh) */
   useEffect(() => {
     let alive = true;
-    setStatus(`查詢 ${stock.code} 中...`);
+    setStatus(`⏳ 查詢 ${stock.code} 中...`);
     setRows([]); setPayload(null); setChip(null); setAnalysis(null); setRealtime(null); setHovered(null);
     fetchKline(stock.code);
     Promise.allSettled([
@@ -475,7 +465,7 @@ export default function App() {
       if (anaRes.status === "fulfilled" && anaRes.value.ok) anaRes.value.json().then(j => { if (alive) setAnalysis(j); }).catch(() => {});
     });
     return () => { alive = false; };
-  }, [stock.code, fetchKline]);
+  }, [stock.code, loadKey, fetchKline]);
 
   /* ── Live polling ────────────────────────────────────────────── */
   useEffect(() => {
@@ -489,7 +479,10 @@ export default function App() {
 
   function submit() {
     const t = suggestions[0] || resolveStock(input);
-    setStock(t); setInput(t.code); setOpenSuggest(false);
+    setStock(t);
+    setInput(t.code);
+    setOpenSuggest(false);
+    setLoadKey(k => k + 1);  // always force a fresh load
   }
 
   const meta = { ...stock, ...(payload?.meta || {}), ...(analysis?.meta || {}) };
