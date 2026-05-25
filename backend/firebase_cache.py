@@ -68,15 +68,14 @@ def explain_stock_payload_issue(payload: Dict[str, Any]) -> str:
         return "payload_not_dict"
     if payload.get("preload") is True:
         return "preload_placeholder"
-    if not all(_is_number(payload.get(k)) for k in ["open", "high", "low", "close"]):
-        return "missing_or_non_numeric_ohlc"
-    open_price = _float(payload.get("open"))
-    high = _float(payload.get("high"))
-    low = _float(payload.get("low"))
+    # Only close is mandatory; open/high/low may be None for suspended or limit-hit stocks
     close = _float(payload.get("close"))
+    if close is None or close <= 0:
+        return "missing_or_non_numeric_ohlc"
+    open_price = _float(payload.get("open")) or close
+    high = _float(payload.get("high")) or close
+    low = _float(payload.get("low")) or close
     volume = _float(payload.get("volume"))
-    if min(open_price, high, low, close) <= 0:
-        return "non_positive_price"
     if high < max(open_price, close, low):
         return "invalid_ohlc_high"
     if low > min(open_price, close, high):
@@ -106,9 +105,13 @@ def save_stock_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
             trades=EXCLUDED.trades, market=EXCLUDED.market, product_type=EXCLUDED.product_type,
             name=EXCLUDED.name, source=EXCLUDED.source, updated_at=NOW()
     """
+    close = _float(payload.get("close"))
+    open_p = _float(payload.get("open")) or close
+    high = _float(payload.get("high")) or close
+    low = _float(payload.get("low")) or close
     _, err = _run(sql, (
         stock_id, date,
-        payload.get("open"), payload.get("high"), payload.get("low"), payload.get("close"),
+        open_p, high, low, close,
         payload.get("volume"), payload.get("turnover"), payload.get("change"), payload.get("trades"),
         payload.get("market"), payload.get("product_type"), payload.get("name"), payload.get("source"),
     ))

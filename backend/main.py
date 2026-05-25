@@ -93,7 +93,16 @@ STOCK_INFO_MAP = {
 def normalize_stock(stock: str) -> str:
     stock = str(stock).strip()
     mapped = STOCK_NAME_MAP.get(stock, stock)
-    return str(mapped).upper().replace(".TW", "").replace(".TWO", "").split()[0]
+    cleaned = str(mapped).upper().replace(".TW", "").replace(".TWO", "").split()[0]
+    # If the result still looks like a name (not a code), try product search
+    if not cleaned.replace("A", "").replace("B", "").isdigit():
+        try:
+            results = search_products(stock, limit=1)
+            if results:
+                return str(results[0]["code"]).upper()
+        except Exception:
+            pass
+    return cleaned
 
 
 def safe_float(value):
@@ -356,7 +365,7 @@ def read_chip_payload(code: str, limit: int = 60):
     live_refresh = None
     if not any(is_real_chip_row(row) for row in rows):
         live_refresh = try_refresh_twse_chips()
-        rows = read_chip_rows(db, code, limit=limit)
+        rows = read_chip_rows(code, limit=limit)
     real_rows = [row for row in rows if is_real_chip_row(row)]
     analysis_rows = real_rows or rows
     analysis = analyze_chip_rows(analysis_rows)

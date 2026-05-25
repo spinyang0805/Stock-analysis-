@@ -345,7 +345,9 @@ export default function App() {
   const [lastRefresh, setLastRefresh] = useState(null);
   const [isLive, setIsLive] = useState(isTradingSession);
   const [hovered, setHovered] = useState(null);
-  const suggestions = useMemo(() => findStock(input), [input]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [backfillAttempt, setBackfillAttempt] = useState(0);
+  const searchTimerRef = useRef(null);
 
   /* ── Chart init ──────────────────────────────────────────────── */
   useEffect(() => {
@@ -413,6 +415,23 @@ export default function App() {
     };
   }, []);
 
+  /* ── Search API (全市場股票名稱/代號搜尋) ───────────────────── */
+  useEffect(() => {
+    const q = input.trim();
+    if (!q) { setSuggestions([]); return; }
+    clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}`, { cache: "no-store" });
+        if (res.ok) {
+          const json = await res.json();
+          setSuggestions(Array.isArray(json) ? json.slice(0, 8) : []);
+        }
+      } catch { setSuggestions([]); }
+    }, 250);
+    return () => clearTimeout(searchTimerRef.current);
+  }, [input]);
+
   /* ── Feed chart data ─────────────────────────────────────────── */
   useEffect(() => {
     const s = seriesRef.current;
@@ -444,7 +463,14 @@ export default function App() {
       setRows(nextRows);
       setRealtime(json.realtime || null);
       setLastRefresh(new Date());
-      if (!isRefresh) setStatus(nextRows.length ? `已載入 ${nextRows.length} 筆資料` : "API 正常，尚無股價資料");
+      if (nextRows.length > 0) {
+        if (!isRefresh) setStatus(`已載入 ${nextRows.length} 筆資料`);
+        setBackfillAttempt(0);
+      } else if (!isRefresh) {
+        // 無資料時後端已自動啟動 backfill，前端輪詢等待資料進來
+        setBackfillAttempt(1);
+        setStatus("⏳ 首次查詢，正在補回歷史資料（約 30～60 秒）...");
+      }
     } catch (e) {
       if (!isRefresh) setStatus(`查詢失敗：${e?.message}`);
     }
@@ -454,7 +480,7 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     setStatus(`⏳ 查詢 ${stock.code} 中...`);
-    setRows([]); setPayload(null); setChip(null); setAnalysis(null); setRealtime(null); setHovered(null);
+    setRows([]); setPayload(null); setChip(null); setAnalysis(null); setRealtime(null); setHovered(null); setBackfillAttempt(0);
     fetchKline(stock.code);
     Promise.allSettled([
       fetch(`${API}/api/chip/${encodeURIComponent(stock.code)}?auto_init=false`, { cache: "no-store" }),
@@ -476,6 +502,32 @@ export default function App() {
     }, POLL_MS);
     return () => clearInterval(id);
   }, [stock.code, fetchKline]);
+
+  /* ── Backfill 輪詢：空資料時每 5 秒重查直到資料進來（最多 30 次）── */
+  useEffect(() => {
+    if (backfillAttempt <= 0 || backfillAttempt > 30) return;
+    const code = stock.code;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API}/api/kline/${encodeURIComponent(code)}`, { cache: "no-store" });
+        if (!res.ok) { setBackfillAttempt(a => a + 1); return; }
+        const json = await res.json();
+        const nextRows = normalizeRows(json);
+        if (nextRows.length > 0) {
+          setPayload(json);
+          setRows(nextRows);
+          setRealtime(json.realtime || null);
+          setLastRefresh(new Date());
+          setStatus(`✅ 歷史資料已補回（${nextRows.length} 筆）`);
+          setBackfillAttempt(0);
+        } else {
+          setStatus(`⏳ 補資料中，第 ${backfillAttempt} 次確認...`);
+          setBackfillAttempt(a => a + 1);
+        }
+      } catch { setBackfillAttempt(a => a + 1); }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [backfillAttempt, stock.code]);
 
   function submit() {
     const t = suggestions[0] || resolveStock(input);
@@ -553,7 +605,7 @@ export default function App() {
             )}
           </div>
           <button type="button" onClick={submit} style={buttonStyle}>查詢</button>
-          <span style={{ color: rows.length ? "#22c55e" : "#f59e0b", fontSize: 13 }}>{status}</span>
+          <span style={{ color: rows.length ? "#22c55e" : backfillAttempt > 0 ? "#f97316" : "#f59e0b", fontSize: 13 }}>{status}</span>
           {isLive && <span style={{ color: "#94a3b8", fontSize: 12 }}>每 {POLL_MS / 1000}s 自動更新</span>}
         </div>
       </header>

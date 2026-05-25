@@ -543,35 +543,96 @@ def _parse_tpex_row(row, fields):
     }
 
 
-def run_daily_update():
-    requested_date = today_str()
-    result = {"requested_date": requested_date, "twse_date": None, "tpex_date": None, "t86_date": None, "margin_date": None, "tpex_t86_date": None, "tpex_margin_date": None, "stocks": 0, "chips": 0, "margin_rows": 0, "tpex_chips": 0, "tpex_margin_rows": 0, "errors": []}
-
-    twse_date, twse_rows, twse_fields, twse_errors = latest_twse_daily_rows()
-    result["twse_date"] = twse_date
-    result["errors"].extend(twse_errors[-5:])
-    for row in twse_rows:
+def _write_twse_day(date_text: str, result: dict):
+    """Fetch and write TWSE all-market data for a single trading date."""
+    payload, err = fetch_json(TWSE_ALL, params={"response": "json", "date": date_text})
+    if err:
+        result["errors"].append(f"TWSE {date_text}: {err}")
+    rows = _rows(payload)
+    fields = _fields(payload)
+    written = 0
+    for row in rows:
         try:
-            stock_id, payload = _parse_twse_all_row(row, twse_fields)
-            payload["data_date"] = twse_date
-            if stock_id and save_stock_daily(stock_id, twse_date, payload):
-                result["stocks"] += 1
+            stock_id, doc = _parse_twse_all_row(row, fields)
+            doc["data_date"] = date_text
+            if stock_id and save_stock_daily(stock_id, date_text, doc):
+                written += 1
         except Exception as exc:
-            result["errors"].append(f"TWSE daily row error: {exc}")
+            result["errors"].append(f"TWSE row {date_text}: {exc}")
+    return written, bool(rows)
 
-    tpex_date, tpex_rows, tpex_fields, tpex_errors = latest_tpex_daily_rows()
-    result["tpex_date"] = tpex_date
-    result["errors"].extend(tpex_errors[-5:])
-    for row in tpex_rows:
+
+def _write_tpex_day(date_text: str, result: dict):
+    """Fetch and write TPEx all-market data for a single trading date."""
+    rows, fields, found = [], [], False
+    for params in [
+        {"response": "json", "date": roc_date_slash(date_text)},
+        {"response": "json", "date": date_text},
+        {"response": "json"},
+    ]:
+        payload, err = fetch_json(TPEX_ALL, params=params)
+        if err:
+            result["errors"].append(f"TPEx {date_text}: {err}")
+        rows = _rows(payload)
+        fields = _fields(payload)
+        if rows:
+            found = True
+            break
+    written = 0
+    for row in rows:
         try:
-            stock_id, payload = _parse_tpex_row(row, tpex_fields)
+            stock_id, doc = _parse_tpex_row(row, fields)
             if not stock_id or not stock_id[:1].isdigit():
                 continue
-            payload["data_date"] = tpex_date
-            if save_stock_daily(stock_id, tpex_date, payload):
-                result["stocks"] += 1
+            doc["data_date"] = date_text
+            if save_stock_daily(stock_id, date_text, doc):
+                written += 1
         except Exception as exc:
-            result["errors"].append(f"TPEx daily row error: {exc}")
+            result["errors"].append(f"TPEx row {date_text}: {exc}")
+    return written, found
+
+
+def run_daily_update(lookback_days: int = 5):
+    """Update stock data for the most recent trading days.
+
+    lookback_days: also fill any recent trading days that may have been missed.
+    """
+    requested_date = today_str()
+    result = {
+        "requested_date": requested_date,
+        "twse_date": None, "tpex_date": None,
+        "t86_date": None, "margin_date": None,
+        "tpex_t86_date": None, "tpex_margin_date": None,
+        "stocks": 0, "chips": 0, "margin_rows": 0,
+        "tpex_chips": 0, "tpex_margin_rows": 0,
+        "errors": [], "dates_written": [],
+    }
+
+    # Write data for up to lookback_days recent trading days
+    twse_latest_date = None
+    tpex_latest_date = None
+    for d in recent_dates(lookback_days + 3):
+        twse_written, twse_found = _write_twse_day(d, result)
+        if twse_found:
+            result["stocks"] += twse_written
+            result["dates_written"].append(d)
+            if twse_latest_date is None:
+                twse_latest_date = d
+        tpex_written, tpex_found = _write_tpex_day(d, result)
+        if tpex_found:
+            result["stocks"] += tpex_written
+            if tpex_latest_date is None:
+                tpex_latest_date = d
+        # Stop once we've covered enough trading days with actual data
+        dates_with_data = len(result["dates_written"])
+        if twse_found and dates_with_data >= lookback_days:
+            break
+        time.sleep(0.1)
+
+    twse_date = twse_latest_date or today_str()
+    tpex_date = tpex_latest_date or today_str()
+    result["twse_date"] = twse_date
+    result["tpex_date"] = tpex_date
 
     write_t86_chips(twse_date, result)
     write_margin_chips(twse_date, result)
