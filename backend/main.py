@@ -118,12 +118,13 @@ def firebase_rows_to_df(rows):
     data = []
     for r in rows:
         try:
+            close = float(r["close"])
             data.append({
                 "Date": pd.to_datetime(str(r["date"]), format="%Y%m%d"),
-                "Open": float(r["open"]),
-                "High": float(r["high"]),
-                "Low": float(r["low"]),
-                "Close": float(r["close"]),
+                "Open": float(r["open"]) if r.get("open") is not None else close,
+                "High": float(r["high"]) if r.get("high") is not None else close,
+                "Low": float(r["low"]) if r.get("low") is not None else close,
+                "Close": close,
                 "Volume": float(r.get("volume") or 0),
             })
         except Exception:

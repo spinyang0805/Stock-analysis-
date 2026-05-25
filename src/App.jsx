@@ -503,6 +503,18 @@ export default function App() {
     return () => clearInterval(id);
   }, [stock.code, fetchKline]);
 
+  /* ── 手動觸發 backfill ───────────────────────────────────────── */
+  async function triggerBackfill() {
+    const code = stock.code;
+    setStatus(`⏳ 手動補資料中（${code}）...`);
+    try {
+      await fetch(`${API}/api/job/backfill/${encodeURIComponent(code)}`, { cache: "no-store" });
+      setBackfillAttempt(1);
+    } catch (e) {
+      setStatus(`補資料失敗：${e?.message}`);
+    }
+  }
+
   /* ── Backfill 輪詢：空資料時每 5 秒重查直到資料進來（最多 30 次）── */
   useEffect(() => {
     if (backfillAttempt <= 0 || backfillAttempt > 30) return;
@@ -605,6 +617,11 @@ export default function App() {
             )}
           </div>
           <button type="button" onClick={submit} style={buttonStyle}>查詢</button>
+          {!rows.length && (
+            <button type="button" onClick={triggerBackfill} style={{ ...buttonStyle, background: "#7c3aed", fontSize: 13, padding: "10px 14px" }}>
+              ⚡ 手動補資料
+            </button>
+          )}
           <span style={{ color: rows.length ? "#22c55e" : backfillAttempt > 0 ? "#f97316" : "#f59e0b", fontSize: 13 }}>{status}</span>
           {isLive && <span style={{ color: "#94a3b8", fontSize: 12 }}>每 {POLL_MS / 1000}s 自動更新</span>}
         </div>
