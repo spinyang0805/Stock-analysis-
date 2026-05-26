@@ -1,0 +1,1 @@
+{"firebase_enabled":true,"mode":"postgres_audit","checked_stocks":120,"checked_docs":26878,"note":"Postgres enforces OHLC validity at insert time"}
