@@ -452,6 +452,64 @@ export default function App() {
     Object.values(chartsRef.current).forEach(c => c.timeScale().fitContent());
   }, [rows]);
 
+  /* ── 前端直接抓 TWSE MIS 即時價（繞過伺服器限制）─────────────── */
+  const fetchRealtimeDirect = useCallback(async (code) => {
+    for (const prefix of ["tse", "otc"]) {
+      try {
+        const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${prefix}_${code}.tw&json=1&delay=0&_=${Date.now()}`;
+        const res = await fetch(url, {
+          headers: { "Referer": `https://mis.twse.com.tw/stock/fibest.jsp?stock=${code}` },
+          cache: "no-store",
+        });
+        const data = await res.json();
+        const q = (data.msgArray || [])[0];
+        if (!q) continue;
+        const toNum = v => { const n = parseFloat(String(v || "").replace(/,/g, "")); return isFinite(n) ? n : null; };
+        const price = toNum(q.z) ?? toNum(q.y);
+        if (!price) continue;
+        return {
+          price, close: price,
+          open: toNum(q.o) ?? price,
+          high: toNum(q.h) ?? price,
+          low: toNum(q.l) ?? price,
+          previous_close: toNum(q.y),
+          volume_lot: parseInt(q.v) || 0,
+          time: q.t,
+          name: q.n,
+          source: "TWSE MIS (browser)",
+        };
+      } catch { continue; }
+    }
+    return null;
+  }, []);
+
+  /* ── 開盤期間：前端每 10s 更新今日即時 K 棒 ─────────────────── */
+  useEffect(() => {
+    if (!isLive || !rows.length) return;
+    const code = stock.code;
+    const s = seriesRef.current;
+    if (!s.candle) return;
+
+    async function updateLiveCandle() {
+      const rt = await fetchRealtimeDirect(code);
+      if (!rt || !rt.price) return;
+      setRealtime(rt);
+
+      const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+      const liveCandle = { time: dateStr, open: rt.open, high: rt.high, low: rt.low, close: rt.price };
+      try { s.candle.update(liveCandle); } catch { /* chart not ready */ }
+      try {
+        s.volume.update({ time: dateStr, value: (rt.volume_lot || 0) * 1000,
+          color: rt.price >= rt.open ? "rgba(239,68,68,.5)" : "rgba(34,197,94,.5)" });
+      } catch { }
+    }
+
+    updateLiveCandle();
+    const id = setInterval(updateLiveCandle, POLL_MS);
+    return () => clearInterval(id);
+  }, [isLive, rows.length, stock.code, fetchRealtimeDirect]);
+
   /* ── Fetch kline ─────────────────────────────────────────────── */
   const fetchKline = useCallback(async (code, isRefresh = false) => {
     try {
@@ -493,15 +551,11 @@ export default function App() {
     return () => { alive = false; };
   }, [stock.code, loadKey, fetchKline]);
 
-  /* ── Live polling ────────────────────────────────────────────── */
+  /* ── 定時更新 isLive 狀態（即時 K 棒由上面 effect 處理）──────── */
   useEffect(() => {
-    const id = setInterval(() => {
-      const live = isTradingSession();
-      setIsLive(live);
-      if (live) fetchKline(stock.code, true);
-    }, POLL_MS);
+    const id = setInterval(() => setIsLive(isTradingSession()), POLL_MS);
     return () => clearInterval(id);
-  }, [stock.code, fetchKline]);
+  }, []);
 
   /* ── 手動觸發 backfill ───────────────────────────────────────── */
   async function triggerBackfill() {
