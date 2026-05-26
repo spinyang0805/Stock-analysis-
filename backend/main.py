@@ -58,6 +58,34 @@ _RESPONSE_CACHE = {}
 _BACKFILL_LAST_STARTED = {}
 
 
+def _auto_daily_scheduler():
+    """Run daily update on startup, then re-check every 2 hours after market close."""
+    time.sleep(10)  # wait for DB connection pool to be ready
+    try:
+        print("[auto-daily] startup update starting...")
+        run_daily_update(lookback_days=5)
+        print("[auto-daily] startup update done")
+    except Exception as exc:
+        print(f"[auto-daily] startup error: {exc}")
+
+    while True:
+        time.sleep(7200)  # check every 2 hours
+        try:
+            now_tw = datetime.now(TW_TZ)
+            # Only re-run after market close (15:00–23:59 Taiwan time)
+            if 15 <= now_tw.hour <= 23:
+                print(f"[auto-daily] scheduled update at {now_tw.strftime('%H:%M')} TW...")
+                run_daily_update(lookback_days=3)
+                print("[auto-daily] scheduled update done")
+        except Exception as exc:
+            print(f"[auto-daily] scheduled error: {exc}")
+
+
+@app.on_event("startup")
+async def startup_event():
+    threading.Thread(target=_auto_daily_scheduler, daemon=True, name="auto-daily").start()
+
+
 def _cache_get(key: str):
     item = _RESPONSE_CACHE.get(key)
     if not item:

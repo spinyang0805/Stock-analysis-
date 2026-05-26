@@ -732,7 +732,7 @@ export default function App() {
       crosshair:    { mode:1 },
       autoSize:     true,
     };
-    const main = createChart(mainRef.current, { ...theme, height:300 });
+    const main = createChart(mainRef.current, { ...theme, height:260 });
     const rsi  = createChart(rsiRef.current,  { ...theme, height:80  });
     const macd = createChart(macdRef.current, { ...theme, height:80  });
     chartsRef.current = { main, rsi, macd };
@@ -963,11 +963,6 @@ export default function App() {
             )}
           </div>
           <button type="button" onClick={submit} style={buttonStyle}>查詢</button>
-          {!rows.length&&(
-            <button type="button" onClick={triggerBackfill} style={{ ...buttonStyle, background:"#7c3aed", fontSize:13, padding:"10px 14px" }}>
-              ⚡ 手動補資料
-            </button>
-          )}
           <span style={{ color:rows.length?"#22c55e":backfillAttempt>0?"#f97316":"#f59e0b", fontSize:13 }}>{status}</span>
           {isLive&&<span style={{ color:"#94a3b8", fontSize:12 }}>每 {POLL_MS/1000}s 自動更新</span>}
         </div>
@@ -1038,7 +1033,7 @@ const eyebrowStyle  = { color:"#38bdf8", letterSpacing:1, fontWeight:800, fontSi
 const toolbarStyle  = { marginTop:12, display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" };
 const inputStyle    = { padding:"10px 14px", borderRadius:8, border:"1px solid #334155", background:"#020617", color:"white", minWidth:260, fontSize:14 };
 const buttonStyle   = { padding:"10px 18px", borderRadius:8, border:0, background:"#2563eb", color:"white", fontWeight:700, cursor:"pointer" };
-const mainStyle     = { padding:16, display:"grid", gridTemplateColumns:"minmax(0,2fr) minmax(280px,.85fr)", gap:16 };
+const mainStyle     = { padding:16, display:"grid", gridTemplateColumns:"minmax(0,2fr) minmax(280px,.85fr)", gap:16, alignItems:"start" };
 const asideStyle    = { display:"grid", gap:12, alignContent:"start" };
 const cardStyle     = { background:"#0f172a", border:"1px solid #1e293b", borderRadius:8, padding:14 };
 const rowStyle      = { display:"flex", justifyContent:"space-between", gap:8, borderBottom:"1px solid rgba(148,163,184,.1)", padding:"5px 0", fontSize:13 };
