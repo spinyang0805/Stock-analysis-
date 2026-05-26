@@ -400,17 +400,28 @@ function VolPriceCard({ rows }) {
   const latest = rows?.at(-1) || {};
   const prev   = rows?.at(-2) || {};
   const chg = prev.close ? (latest.close-prev.close)/prev.close*100 : 0;
+  const isNormal = vol.type === "量能正常";
   const matrix = [
-    { label:"量增價漲", color:"#ef4444", bg:"rgba(239,68,68,.12)", active:vol.type==="量增價漲", desc:"強勢買盤" },
-    { label:"量增價跌", color:"#22c55e", bg:"rgba(34,197,94,.12)",  active:vol.type==="量增價跌", desc:"賣壓沉重" },
-    { label:"量縮價漲", color:"#f59e0b", bg:"rgba(245,158,11,.12)", active:vol.type==="量縮價漲", desc:"謹慎無量" },
-    { label:"量縮價跌", color:"#94a3b8", bg:"rgba(148,163,184,.08)",active:vol.type==="量縮價跌", desc:"無力下跌" },
+    { label:"量增價漲", color:"#ef4444", bg:"rgba(239,68,68,.18)", active:vol.type==="量增價漲", desc:"強勢買盤" },
+    { label:"量增價跌", color:"#22c55e", bg:"rgba(34,197,94,.18)",  active:vol.type==="量增價跌", desc:"賣壓沉重" },
+    { label:"量縮價漲", color:"#f59e0b", bg:"rgba(245,158,11,.18)", active:vol.type==="量縮價漲", desc:"謹慎無量" },
+    { label:"量縮價跌", color:"#64748b", bg:"rgba(100,116,139,.18)",active:vol.type==="量縮價跌", desc:"無力下跌" },
   ];
   return (
     <Card title="量價矩陣" icon="📦">
+      {/* Current state badge */}
+      <div style={{ textAlign:"center", marginBottom:8 }}>
+        <span style={{ fontSize:16, fontWeight:900, color:vol.color, padding:"3px 16px", borderRadius:6, background:vol.color+"22", border:`1px solid ${vol.color}55` }}>
+          {vol.type}
+        </span>
+      </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:5, marginBottom:10 }}>
         {matrix.map(m => (
-          <div key={m.label} style={{ padding:"7px 8px", borderRadius:5, background:m.active?m.bg:"rgba(148,163,184,.04)", border:m.active?`1px solid ${m.color}66`:"1px solid transparent", textAlign:"center" }}>
+          <div key={m.label} style={{ padding:"7px 8px", borderRadius:5, textAlign:"center",
+            background: m.active ? m.bg : "rgba(30,41,59,.6)",
+            border: m.active ? `2px solid ${m.color}` : "1px solid rgba(148,163,184,.08)",
+            opacity: m.active ? 1 : (isNormal ? 0.35 : 0.28),
+          }}>
             <div style={{ fontSize:11, fontWeight:m.active?800:400, color:m.active?m.color:"#475569" }}>{m.label}</div>
             <div style={{ fontSize:10, color:m.active?m.color+"cc":"#334155", marginTop:1 }}>{m.desc}</div>
           </div>
@@ -732,9 +743,9 @@ export default function App() {
       crosshair:    { mode:1 },
       autoSize:     true,
     };
-    const main = createChart(mainRef.current, { ...theme, height:260 });
-    const rsi  = createChart(rsiRef.current,  { ...theme, height:80  });
-    const macd = createChart(macdRef.current, { ...theme, height:80  });
+    const main = createChart(mainRef.current, { ...theme, height:210 });
+    const rsi  = createChart(rsiRef.current,  { ...theme, height:70  });
+    const macd = createChart(macdRef.current, { ...theme, height:70  });
     chartsRef.current = { main, rsi, macd };
 
     const candle = addSeries(main, CandlestickSeries, { upColor:"#ef4444", downColor:"#22c55e", borderUpColor:"#ef4444", borderDownColor:"#22c55e", wickUpColor:"#ef4444", wickDownColor:"#22c55e" }, "addCandlestickSeries");
@@ -922,7 +933,6 @@ export default function App() {
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:12 }}>
           <div>
             <div style={eyebrowStyle}>TW STOCK DECISION SYSTEM {APP_VERSION}</div>
-            <div style={{ color:"#475569", fontSize:11, marginTop:2 }}>API: {API}</div>
             <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", marginTop:6 }}>
               <span style={{ fontSize:26, fontWeight:900, color:"#facc15" }}>{meta.code||stock.code}</span>
               <span style={{ fontSize:20, fontWeight:700 }}>{meta.name||stock.name}</span>
@@ -931,18 +941,16 @@ export default function App() {
             </div>
           </div>
           <div style={{ textAlign:"right" }}>
-            <div style={{ fontSize:40, fontWeight:900, color:priceColor }}>{fmt(livePrice)}</div>
-            <div style={{ color:priceColor, fontSize:13 }}>漲跌 {fmt(meta.change??change)}（{fmt(meta.change_pct,2)}%）</div>
+            <div style={{ fontSize:38, fontWeight:900, color:priceColor, lineHeight:1 }}>{fmt(livePrice)}</div>
+            <div style={{ color:priceColor, fontSize:13, marginTop:4 }}>漲跌 {fmt(meta.change??change)}（{fmt(meta.change_pct,2)}%）</div>
+            <div style={{ marginTop:6, display:"flex", gap:14, fontSize:12, justifyContent:"flex-end", flexWrap:"wrap" }}>
+              {[["開",displayBar.open],["高",displayBar.high,"#ef4444"],["低",displayBar.low,"#22c55e"],["量",displayBar.volume?(displayBar.volume/1000).toFixed(0)+"K":"--"]].map(([label,val,color])=>(
+                <span key={label}><span style={{ color:"#64748b" }}>{label} </span><b style={color?{color}:undefined}>{typeof val==="string"?val:fmt(val)}</b></span>
+              ))}
+              {hovered&&<span style={{ color:"#475569" }}>📅 {String(hovered.time)}</span>}
+              {!hovered&&lastRefresh&&<span style={{ color:"#475569" }}>更新 {lastRefresh.toLocaleTimeString("zh-TW")}</span>}
+            </div>
           </div>
-        </div>
-
-        <div style={{ marginTop:8, display:"flex", gap:18, fontSize:13, flexWrap:"wrap" }}>
-          {[["開盤",displayBar.open],["最高",displayBar.high,"#ef4444"],["最低",displayBar.low,"#22c55e"],["收盤",displayBar.close,priceColor],
-            ["成交量",displayBar.volume?(displayBar.volume/1000).toFixed(0)+"千張":"--"]].map(([label,val,color])=>(
-            <span key={label}><span style={{ color:"#64748b" }}>{label} </span><b style={color?{color}:undefined}>{typeof val==="string"?val:fmt(val)}</b></span>
-          ))}
-          {hovered&&<span style={{ color:"#475569", fontSize:12 }}>📅 {String(hovered.time)}</span>}
-          {!hovered&&lastRefresh&&<span style={{ color:"#475569", fontSize:12 }}>更新 {lastRefresh.toLocaleTimeString("zh-TW")}</span>}
         </div>
 
         <div style={toolbarStyle}>
@@ -964,61 +972,62 @@ export default function App() {
           </div>
           <button type="button" onClick={submit} style={buttonStyle}>查詢</button>
           <span style={{ color:rows.length?"#22c55e":backfillAttempt>0?"#f97316":"#f59e0b", fontSize:13 }}>{status}</span>
-          {isLive&&<span style={{ color:"#94a3b8", fontSize:12 }}>每 {POLL_MS/1000}s 自動更新</span>}
+          {isLive&&<span style={{ color:"#94a3b8", fontSize:12 }}>每 {POLL_MS/1000}s 更新</span>}
         </div>
       </header>
 
-      {/* ── Top: Charts + Sidebar ── */}
-      <main style={mainStyle}>
-        {/* Chart column */}
-        <div>
-          <div style={cardStyle}>
-            <div style={{ display:"flex", gap:12, marginBottom:5, fontSize:11, flexWrap:"wrap" }}>
-              {[["■","#facc15","MA5"],["■","#fb923c","MA10"],["■","#38bdf8","MA20"],["■","#a78bfa","MA60"],["╌","rgba(148,163,184,.6)","布林帶"]].map(([sym,color,label])=>(
-                <span key={label}><span style={{ color }}>{sym}</span> {label}</span>
-              ))}
-            </div>
-            <div ref={mainRef} />
+      {/* ── Charts Section（全寬，不影響分析卡排列）── */}
+      <div style={{ padding:"12px 16px 0" }}>
+        {/* K-line */}
+        <div style={cardStyle}>
+          <div style={{ display:"flex", gap:12, marginBottom:4, fontSize:11, flexWrap:"wrap" }}>
+            {[["■","#facc15","MA5"],["■","#fb923c","MA10"],["■","#38bdf8","MA20"],["■","#a78bfa","MA60"],["╌","rgba(148,163,184,.6)","布林帶"]].map(([sym,color,label])=>(
+              <span key={label}><span style={{ color }}>{sym}</span> {label}</span>
+            ))}
+            {hovered&&<span style={{ color:"#475569", marginLeft:"auto" }}>📅 {String(hovered.time)}</span>}
           </div>
-          <div style={{ ...cardStyle, marginTop:8 }}>
-            <div style={{ color:"#f59e0b", fontSize:11, marginBottom:3 }}>
-              RSI14 {Number.isFinite(displayBar.rsi14)&&<span style={{ color:displayBar.rsi14>70?"#ef4444":displayBar.rsi14<30?"#22c55e":"#f59e0b", fontWeight:700 }}>{fmt(displayBar.rsi14,1)}</span>}
+          <div ref={mainRef} />
+        </div>
+        {/* RSI + MACD 並排 */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:8 }}>
+          <div style={cardStyle}>
+            <div style={{ color:"#f59e0b", fontSize:11, marginBottom:2 }}>
+              RSI14 {Number.isFinite(displayBar.rsi14)&&<b style={{ color:displayBar.rsi14>70?"#ef4444":displayBar.rsi14<30?"#22c55e":"#f59e0b" }}>{fmt(displayBar.rsi14,1)}</b>}
             </div>
             <div ref={rsiRef} />
           </div>
-          <div style={{ ...cardStyle, marginTop:8 }}>
-            <div style={{ color:"#94a3b8", fontSize:11, marginBottom:3 }}>
-              MACD {Number.isFinite(displayBar.macd_hist)&&<span style={{ color:displayBar.macd_hist>=0?"#ef4444":"#22c55e", fontWeight:700 }}>{fmt(displayBar.macd_hist,3)}</span>}
+          <div style={cardStyle}>
+            <div style={{ color:"#94a3b8", fontSize:11, marginBottom:2 }}>
+              MACD {Number.isFinite(displayBar.macd_hist)&&<b style={{ color:displayBar.macd_hist>=0?"#ef4444":"#22c55e" }}>{fmt(displayBar.macd_hist,3)}</b>}
             </div>
             <div ref={macdRef} />
           </div>
         </div>
+        {/* Live order book（開盤時顯示） */}
+        {isLive&&(
+          <div style={{ ...cardStyle, marginTop:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, fontSize:13, fontWeight:700, color:"#94a3b8" }}>
+              即時委買委賣 <LiveBadge />
+            </div>
+            {realtime?.bids?.length?<OrderBook bids={realtime.bids} asks={realtime.asks}/>:<div style={{ color:"#64748b", fontSize:13 }}>等待揭示...</div>}
+          </div>
+        )}
+      </div>
 
-        {/* Sidebar */}
-        <aside style={asideStyle}>
-          <TechRadarCard rows={rows} chipData={chip} />
-          <MaStatusCard rows={rows} />
-          <VolPriceCard rows={rows} />
-          {isLive&&(
-            <Card title={<>即時委買委賣 <LiveBadge /></>}>
-              {realtime?.bids?.length?<OrderBook bids={realtime.bids} asks={realtime.asks}/>:<div style={{ color:"#64748b", fontSize:13 }}>等待揭示...</div>}
-              {realtime?.time&&<div style={{ color:"#475569", fontSize:11, marginTop:6 }}>成交時間 {realtime.time}・量 {realtime.volume_lot?.toLocaleString()||"--"} 張</div>}
-            </Card>
-          )}
-        </aside>
-      </main>
-
-      {/* ── Analysis Cards Grid ── */}
-      <div style={{ padding:"0 16px 12px", display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
+      {/* ── 分析卡片 auto-fill（自動換行，不受任何欄高度影響）── */}
+      <div style={{ padding:"12px 16px", display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 }}>
+        <TechRadarCard rows={rows} chipData={chip} />
+        <MaStatusCard rows={rows} />
+        <VolPriceCard rows={rows} />
         <PatternCard rows={rows} />
-        <BlackCandleCard rows={rows} chipData={chip} />
-        <RiskMirrorCard rows={rows} chipData={chip} />
         <ChipXrayCard chipData={chip} />
+        <BlackCandleCard rows={rows} chipData={chip} />
         <MomentumCard rows={rows} />
+        <RiskMirrorCard rows={rows} chipData={chip} />
         <ScenarioCard rows={rows} chipData={chip} />
       </div>
 
-      {/* ── Groq AI Card ── */}
+      {/* ── Groq AI Card（全寬）── */}
       <div style={{ padding:"0 16px 28px" }}>
         <GroqSummaryCard stockCode={stock.code} rows={rows} chipData={chip} />
       </div>
@@ -1027,15 +1036,13 @@ export default function App() {
 }
 
 /* ── Styles ──────────────────────────────────────────────────────── */
-const pageStyle     = { minHeight:"100vh", background:"#020617", color:"#f1f5f9", fontFamily:"Arial, sans-serif" };
-const headerStyle   = { padding:"16px 24px 14px", borderBottom:"1px solid #1e293b", background:"#0f172a" };
-const eyebrowStyle  = { color:"#38bdf8", letterSpacing:1, fontWeight:800, fontSize:12 };
-const toolbarStyle  = { marginTop:12, display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" };
-const inputStyle    = { padding:"10px 14px", borderRadius:8, border:"1px solid #334155", background:"#020617", color:"white", minWidth:260, fontSize:14 };
-const buttonStyle   = { padding:"10px 18px", borderRadius:8, border:0, background:"#2563eb", color:"white", fontWeight:700, cursor:"pointer" };
-const mainStyle     = { padding:16, display:"grid", gridTemplateColumns:"minmax(0,2fr) minmax(280px,.85fr)", gap:16, alignItems:"start" };
-const asideStyle    = { display:"grid", gap:12, alignContent:"start" };
-const cardStyle     = { background:"#0f172a", border:"1px solid #1e293b", borderRadius:8, padding:14 };
-const rowStyle      = { display:"flex", justifyContent:"space-between", gap:8, borderBottom:"1px solid rgba(148,163,184,.1)", padding:"5px 0", fontSize:13 };
-const suggestStyle  = { position:"absolute", top:44, left:0, right:0, background:"#0f172a", border:"1px solid #334155", borderRadius:8, zIndex:10, overflow:"hidden" };
-const suggestItemStyle={ padding:"9px 12px", cursor:"pointer", borderBottom:"1px solid rgba(148,163,184,.1)", fontSize:14 };
+const pageStyle        = { minHeight:"100vh", background:"#020617", color:"#f1f5f9", fontFamily:"Arial, sans-serif" };
+const headerStyle      = { padding:"14px 20px 12px", borderBottom:"1px solid #1e293b", background:"#0f172a" };
+const eyebrowStyle     = { color:"#38bdf8", letterSpacing:1, fontWeight:800, fontSize:11 };
+const toolbarStyle     = { marginTop:10, display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" };
+const inputStyle       = { padding:"8px 12px", borderRadius:8, border:"1px solid #334155", background:"#020617", color:"white", minWidth:220, fontSize:14 };
+const buttonStyle      = { padding:"8px 16px", borderRadius:8, border:0, background:"#2563eb", color:"white", fontWeight:700, cursor:"pointer" };
+const cardStyle        = { background:"#0f172a", border:"1px solid #1e293b", borderRadius:8, padding:14 };
+const rowStyle         = { display:"flex", justifyContent:"space-between", gap:8, borderBottom:"1px solid rgba(148,163,184,.1)", padding:"5px 0", fontSize:13 };
+const suggestStyle     = { position:"absolute", top:42, left:0, right:0, background:"#0f172a", border:"1px solid #334155", borderRadius:8, zIndex:10, overflow:"hidden" };
+const suggestItemStyle = { padding:"9px 12px", cursor:"pointer", borderBottom:"1px solid rgba(148,163,184,.1)", fontSize:14 };
