@@ -893,7 +893,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (backfillAttempt<=0||backfillAttempt>30) return;
+    if (backfillAttempt<=0||backfillAttempt>72) return;  // 72×5s = 6 min max
     const code=stock.code;
     const timer=setTimeout(async ()=>{
       try {
@@ -901,11 +901,16 @@ export default function App() {
         if (!res.ok) { setBackfillAttempt(a=>a+1); return; }
         const json=await res.json();
         const nextRows=normalizeRows(json);
+        // Always update chart with whatever data has arrived so far
         if (nextRows.length>0) {
           setPayload(json); setRows(nextRows); setRealtime(json.realtime||null); setLastRefresh(new Date());
+        }
+        if (nextRows.length>=90) {
           setStatus(`✅ 歷史資料已補回（${nextRows.length} 筆）`); setBackfillAttempt(0);
+        } else if (nextRows.length>0) {
+          setStatus(`⏳ 補充歷史中（已有 ${nextRows.length} 筆，等待更多...）`); setBackfillAttempt(a=>a+1);
         } else {
-          setStatus(`⏳ 補資料中，第 ${backfillAttempt} 次確認...`); setBackfillAttempt(a=>a+1);
+          setStatus(`⏳ 補資料中（${backfillAttempt}/72）...`); setBackfillAttempt(a=>a+1);
         }
       } catch { setBackfillAttempt(a=>a+1); }
     }, 5000);
@@ -919,8 +924,13 @@ export default function App() {
 
   const meta = { ...stock, ...(payload?.meta||{}), ...(analysis?.meta||{}) };
   const displayBar = hovered || rows.at(-1) || {};
-  const change = Number(meta.change ?? (displayBar.close-displayBar.open));
-  const priceColor = change>=0?"#ef4444":"#22c55e";
+  // Compute change from last two K-line closes (reliable even when backend meta is null)
+  const _last = rows.at(-1) || {}, _prev = rows.at(-2) || {};
+  const rowChange = (_last.close && _prev.close) ? _last.close - _prev.close : null;
+  const rowChangePct = (rowChange != null && _prev.close) ? rowChange / _prev.close * 100 : null;
+  const changeNum = meta.change ?? rowChange;
+  const changePctNum = meta.change_pct ?? rowChangePct;
+  const priceColor = (changeNum ?? 0) >= 0 ? "#ef4444" : "#22c55e";
   const livePrice = (hovered?hovered.close:null)??realtime?.price??meta.price??displayBar.close;
 
   /* ── Render ────────────────────────────────────────────────────── */
@@ -942,7 +952,7 @@ export default function App() {
           </div>
           <div style={{ textAlign:"right" }}>
             <div style={{ fontSize:38, fontWeight:900, color:priceColor, lineHeight:1 }}>{fmt(livePrice)}</div>
-            <div style={{ color:priceColor, fontSize:13, marginTop:4 }}>漲跌 {fmt(meta.change??change)}（{fmt(meta.change_pct,2)}%）</div>
+            <div style={{ color:priceColor, fontSize:13, marginTop:4 }}>漲跌 {changeNum!=null?(changeNum>=0?"+":"")+fmt(changeNum):"--"}（{changePctNum!=null?fmt(changePctNum,2):"--"}%）</div>
             <div style={{ marginTop:6, display:"flex", gap:14, fontSize:12, justifyContent:"flex-end", flexWrap:"wrap" }}>
               {[["開",displayBar.open],["高",displayBar.high,"#ef4444"],["低",displayBar.low,"#22c55e"],["量",displayBar.volume?(displayBar.volume/1000).toFixed(0)+"K":"--"]].map(([label,val,color])=>(
                 <span key={label}><span style={{ color:"#64748b" }}>{label} </span><b style={color?{color}:undefined}>{typeof val==="string"?val:fmt(val)}</b></span>

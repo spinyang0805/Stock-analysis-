@@ -59,7 +59,7 @@ app.add_middleware(
 
 MIN_ANALYSIS_ROWS = 90
 RESPONSE_CACHE_TTL_SECONDS = 60
-BACKFILL_COOLDOWN_SECONDS = 20 * 60
+BACKFILL_COOLDOWN_SECONDS = 5 * 60
 TW_TZ = pytz.timezone("Asia/Taipei")
 _RESPONSE_CACHE = {}
 _BACKFILL_LAST_STARTED = {}
@@ -324,7 +324,17 @@ def start_backfill_if_needed(code: str):
     cache = get_cache_status(code)
     if cache.get("firebase_enabled") and cache.get("stock_daily_count", 0) < MIN_ANALYSIS_ROWS:
         _BACKFILL_LAST_STARTED[code] = now
-        start_thread(f"backfill-{code}", run_on_demand_backfill, code, 12)
+        # Detect market so TPEx stocks use the correct API
+        market = "TWSE"
+        try:
+            results = search_products(code, limit=1)
+            if results:
+                m = str(results[0].get("market", "")).strip()
+                if m in ("上櫃", "TPEx", "OTC"):
+                    market = "TPEx"
+        except Exception:
+            pass
+        start_thread(f"backfill-{code}", run_on_demand_backfill, code, 12, market)
         return True
     return False
 
