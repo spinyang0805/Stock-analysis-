@@ -8,7 +8,7 @@ import time
 
 import pandas as pd
 import pytz
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -1091,7 +1091,7 @@ def _tool_get_stock_detail(stock_code: str) -> str:
 
 
 @app.post("/api/ai/stock-picker")
-async def ai_stock_picker(request):
+async def ai_stock_picker(request: Request):
     import os
     import requests as req
     body = await request.json()

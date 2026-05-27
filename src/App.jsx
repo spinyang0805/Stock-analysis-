@@ -772,7 +772,8 @@ function AIChatPage() {
         body:JSON.stringify({messages:compressHistory(newMsgs)}), cache:"no-store",
       });
       const json = await res.json();
-      setMessages(prev=>[...prev,{role:"assistant", content:json.reply||json.error||"無回應"}]);
+      const reply = json.reply ?? json.error ?? "";
+      setMessages(prev=>[...prev,{role:"assistant", content:reply||"AI 未回傳內容，請再試一次"}]);
     } catch(e) {
       setMessages(prev=>[...prev,{role:"assistant", content:`連線失敗：${e.message}`}]);
     }
