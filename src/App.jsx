@@ -1175,46 +1175,44 @@ export default function App() {
         </div>
       </header>
 
-      {/* ── Charts Section（全寬，不影響分析卡排列）── */}
-      <div style={{ padding:"12px 16px 0" }}>
-        {/* K-line */}
-        <div style={cardStyle}>
-          <div style={{ display:"flex", gap:12, marginBottom:4, fontSize:11, flexWrap:"wrap" }}>
-            {[["■","#facc15","MA5"],["■","#fb923c","MA10"],["■","#38bdf8","MA20"],["■","#a78bfa","MA60"],["╌","rgba(148,163,184,.6)","布林帶"]].map(([sym,color,label])=>(
-              <span key={label}><span style={{ color }}>{sym}</span> {label}</span>
-            ))}
-            {hovered&&<span style={{ color:"#475569", marginLeft:"auto" }}>📅 {String(hovered.time)}</span>}
-          </div>
-          <div ref={mainRef} style={{height:150}} />
-        </div>
-        {/* RSI + MACD 並排 */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:8 }}>
-          <div style={cardStyle}>
-            <div style={{ color:"#f59e0b", fontSize:11, marginBottom:2 }}>
-              RSI14 {Number.isFinite(displayBar.rsi14)&&<b style={{ color:displayBar.rsi14>70?"#ef4444":displayBar.rsi14<30?"#22c55e":"#f59e0b" }}>{fmt(displayBar.rsi14,1)}</b>}
-            </div>
-            <div ref={rsiRef} style={{height:70}} />
-          </div>
-          <div style={cardStyle}>
-            <div style={{ color:"#94a3b8", fontSize:11, marginBottom:2 }}>
-              MACD {Number.isFinite(displayBar.macd_hist)&&<b style={{ color:displayBar.macd_hist>=0?"#ef4444":"#22c55e" }}>{fmt(displayBar.macd_hist,3)}</b>}
-            </div>
-            <div ref={macdRef} style={{height:70}} />
-          </div>
-        </div>
-        {/* Live order book（開盤時顯示） */}
-        {isLive&&(
-          <div style={{ ...cardStyle, marginTop:8 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, fontSize:13, fontWeight:700, color:"#94a3b8" }}>
-              即時委買委賣 <LiveBadge />
-            </div>
-            {realtime?.bids?.length?<OrderBook bids={realtime.bids} asks={realtime.asks}/>:<div style={{ color:"#64748b", fontSize:13 }}>等待揭示...</div>}
-          </div>
-        )}
-      </div>
-
-      {/* ── 分析卡片 auto-fill（自動換行，不受任何欄高度影響）── */}
+      {/* ── 卡片格（圖表 + 分析卡一起 auto-fill）── */}
       <div style={{ padding:"12px 16px", display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 }}>
+
+        {/* K線區塊佔兩欄寬 */}
+        <div style={{ gridColumn:"span 2" }}>
+          <div style={cardStyle}>
+            <div style={{ display:"flex", gap:12, marginBottom:4, fontSize:11, flexWrap:"wrap" }}>
+              {[["■","#facc15","MA5"],["■","#fb923c","MA10"],["■","#38bdf8","MA20"],["■","#a78bfa","MA60"],["╌","rgba(148,163,184,.6)","布林帶"]].map(([sym,color,label])=>(
+                <span key={label}><span style={{ color }}>{sym}</span> {label}</span>
+              ))}
+              {hovered&&<span style={{ color:"#475569", marginLeft:"auto" }}>📅 {String(hovered.time)}</span>}
+            </div>
+            <div ref={mainRef} style={{height:150}} />
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:8 }}>
+            <div style={cardStyle}>
+              <div style={{ color:"#f59e0b", fontSize:11, marginBottom:2 }}>
+                RSI14 {Number.isFinite(displayBar.rsi14)&&<b style={{ color:displayBar.rsi14>70?"#ef4444":displayBar.rsi14<30?"#22c55e":"#f59e0b" }}>{fmt(displayBar.rsi14,1)}</b>}
+              </div>
+              <div ref={rsiRef} style={{height:70}} />
+            </div>
+            <div style={cardStyle}>
+              <div style={{ color:"#94a3b8", fontSize:11, marginBottom:2 }}>
+                MACD {Number.isFinite(displayBar.macd_hist)&&<b style={{ color:displayBar.macd_hist>=0?"#ef4444":"#22c55e" }}>{fmt(displayBar.macd_hist,3)}</b>}
+              </div>
+              <div ref={macdRef} style={{height:70}} />
+            </div>
+          </div>
+          {isLive&&(
+            <div style={{ ...cardStyle, marginTop:8 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, fontSize:13, fontWeight:700, color:"#94a3b8" }}>
+                即時委買委賣 <LiveBadge />
+              </div>
+              {realtime?.bids?.length?<OrderBook bids={realtime.bids} asks={realtime.asks}/>:<div style={{ color:"#64748b", fontSize:13 }}>等待揭示...</div>}
+            </div>
+          )}
+        </div>
+
         <FundamentalsCard stockCode={stock.code} />
         <TechRadarCard rows={rows} chipData={chip} />
         <MaStatusCard rows={rows} />
