@@ -8,7 +8,17 @@ from firebase_cache import save_stock_daily, save_chip_daily, save_job_log
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 REQUEST_TIMEOUT = 20
-HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json,text/plain,*/*"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Connection": "keep-alive",
+}
+TPEX_HEADERS = {
+    **HEADERS,
+    "Referer": "https://www.tpex.org.tw/",
+    "Origin": "https://www.tpex.org.tw",
+}
 
 TWSE_ALL = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY_ALL"
 TWSE_T86 = "https://www.twse.com.tw/rwd/zh/fund/T86"
@@ -23,20 +33,32 @@ TPEX_MARGIN = "https://www.tpex.org.tw/www/zh-tw/margin/balance"
 HOT_STOCKS = ["2330", "2317", "3702", "2454", "2382"]
 
 
-def fetch_json(url, params=None):
-    try:
-        res = requests.get(url, params=params, headers=HEADERS, timeout=REQUEST_TIMEOUT)
-        res.raise_for_status()
-        return res.json(), None
-    except requests.exceptions.SSLError as ssl_exc:
+def fetch_json(url, params=None, headers=None, retries=2):
+    h = headers or HEADERS
+    last_err = None
+    for attempt in range(retries + 1):
         try:
-            res = requests.get(url, params=params, headers=HEADERS, timeout=REQUEST_TIMEOUT, verify=False)
+            res = requests.get(url, params=params, headers=h, timeout=REQUEST_TIMEOUT)
+            if res.status_code in (520, 521, 522, 523, 524) and attempt < retries:
+                time.sleep(1.5 * (attempt + 1))
+                continue
             res.raise_for_status()
-            return res.json(), f"SSL fallback used for {url}: {ssl_exc}"
+            return res.json(), None
+        except requests.exceptions.SSLError as ssl_exc:
+            try:
+                res = requests.get(url, params=params, headers=h, timeout=REQUEST_TIMEOUT, verify=False)
+                if res.status_code in (520, 521, 522, 523, 524) and attempt < retries:
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                res.raise_for_status()
+                return res.json(), f"SSL fallback: {ssl_exc}"
+            except Exception as exc:
+                last_err = str(exc)
         except Exception as exc:
-            return {}, f"SSL fallback failed for {url}: {exc}"
-    except Exception as exc:
-        return {}, str(exc)
+            last_err = str(exc)
+            if attempt < retries:
+                time.sleep(1.0)
+    return {}, last_err or "unknown error"
 
 
 def today_str():
@@ -164,11 +186,13 @@ def latest_tpex_daily_rows(max_lookback_days: int = 10):
     errors = []
     for d in recent_dates(max_lookback_days):
         for params in [
+            {"response": "json", "l": "zh-tw", "date": roc_date_slash(d)},
             {"response": "json", "date": roc_date_slash(d)},
+            {"response": "json", "l": "zh-tw", "date": d},
             {"response": "json", "date": d},
             {"response": "json"},
         ]:
-            payload, err = fetch_json(TPEX_ALL, params=params)
+            payload, err = fetch_json(TPEX_ALL, params=params, headers=TPEX_HEADERS)
             if err:
                 errors.append(f"TPEx {d}: {err}")
             rows = _rows(payload)
@@ -227,15 +251,18 @@ def fetch_twse_stock_month(stock_id: str, year: int, month: int, product_type: s
 def fetch_tpex_stock_month(stock_id: str, year: int, month: int, product_type: str = "股票"):
     errors = []
     written = 0
+    roc_ym = f"{year - 1911}/{month:02d}"
     params_candidates = [
-        {"response": "json", "date": f"{year - 1911}/{month:02d}", "stockNo": stock_id},
+        {"response": "json", "l": "zh-tw", "d": roc_ym, "s": f"{stock_id},asc,0"},
+        {"response": "json", "l": "zh-tw", "date": roc_ym, "stockNo": stock_id},
+        {"response": "json", "date": roc_ym, "stockNo": stock_id},
         {"response": "json", "date": f"{year}{month:02d}", "stockNo": stock_id},
-        {"response": "json", "date": f"{year - 1911}/{month:02d}/01", "stockNo": stock_id},
+        {"response": "json", "date": f"{roc_ym}/01", "stockNo": stock_id},
     ]
     payload = {}
     err = None
     for params in params_candidates:
-        payload, err = fetch_json(TPEX_STOCK_DAY, params=params)
+        payload, err = fetch_json(TPEX_STOCK_DAY, params=params, headers=TPEX_HEADERS)
         rows = _rows(payload)
         if rows:
             break
@@ -411,7 +438,7 @@ def _parse_tpex_insti_row(row):
 
 
 def write_tpex_insti_chips(date_text: str, result: dict):
-    payload, err = fetch_json(TPEX_INSTITUTIONAL, params={"response": "json", "date": date_text, "sect": "AL", "type": "Daily"})
+    payload, err = fetch_json(TPEX_INSTITUTIONAL, params={"response": "json", "date": date_text, "sect": "AL", "type": "Daily"}, headers=TPEX_HEADERS)
     if err:
         result["errors"].append(f"TPEx insti {date_text}: {err}")
     rows, _ = _table_rows(payload)
@@ -431,7 +458,7 @@ def write_tpex_insti_chips(date_text: str, result: dict):
 
 
 def write_tpex_margin_chips(date_text: str, result: dict):
-    payload, err = fetch_json(TPEX_MARGIN, params={"response": "json", "date": date_text})
+    payload, err = fetch_json(TPEX_MARGIN, params={"response": "json", "date": date_text}, headers=TPEX_HEADERS)
     if err:
         result["errors"].append(f"TPEx margin {date_text}: {err}")
     rows, fields = _table_rows(payload)
