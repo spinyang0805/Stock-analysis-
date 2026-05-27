@@ -212,8 +212,10 @@ def to_kline_payload(df: pd.DataFrame):
     data = []
     for _, row in df.iterrows():
         date_value = pd.to_datetime(row[date_col])
+        if date_value.weekday() >= 5:  # skip Sat/Sun — TWSE doesn't trade
+            continue
         item = {
-            "time": int(date_value.timestamp()),
+            "time": date_value.strftime("%Y-%m-%d"),
             "date": date_value.strftime("%Y%m%d"),
             "open": safe_float(row.get("Open")),
             "high": safe_float(row.get("High")),

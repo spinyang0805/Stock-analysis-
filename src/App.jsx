@@ -738,7 +738,7 @@ export default function App() {
     const theme = {
       layout:       { background:{color:"#0f172a"}, textColor:"#dbeafe" },
       grid:         { vertLines:{color:"#1e293b"}, horzLines:{color:"#1e293b"} },
-      timeScale:    { timeVisible:true, secondsVisible:false, borderColor:"#334155" },
+      timeScale:    { timeVisible:false, secondsVisible:false, borderColor:"#334155" },
       rightPriceScale:{ borderColor:"#334155" },
       crosshair:    { mode:1 },
       autoSize:     true,
