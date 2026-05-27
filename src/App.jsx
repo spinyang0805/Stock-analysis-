@@ -929,9 +929,9 @@ export default function App() {
       crosshair:    { mode:1 },
       autoSize:     true,
     };
-    const main = createChart(mainRef.current, { ...theme, height:150 });
-    const rsi  = createChart(rsiRef.current,  { ...theme, height:70  });
-    const macd = createChart(macdRef.current, { ...theme, height:70  });
+    const main = createChart(mainRef.current, { ...theme, height:110 });
+    const rsi  = createChart(rsiRef.current,  { ...theme, height:48  });
+    const macd = createChart(macdRef.current, { ...theme, height:48  });
     chartsRef.current = { main, rsi, macd };
 
     const candle = addSeries(main, CandlestickSeries, { upColor:"#ef4444", downColor:"#22c55e", borderUpColor:"#ef4444", borderDownColor:"#22c55e", wickUpColor:"#ef4444", wickDownColor:"#22c55e" }, "addCandlestickSeries");
@@ -1178,29 +1178,29 @@ export default function App() {
       {/* ── 卡片格（圖表 + 分析卡一起 auto-fill）── */}
       <div style={{ padding:"12px 16px", display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 }}>
 
-        {/* K線區塊佔兩欄寬 */}
+        {/* K線區塊佔兩欄寬，三圖合一張卡 */}
         <div style={{ gridColumn:"span 2" }}>
           <div style={cardStyle}>
-            <div style={{ display:"flex", gap:12, marginBottom:4, fontSize:11, flexWrap:"wrap" }}>
-              {[["■","#facc15","MA5"],["■","#fb923c","MA10"],["■","#38bdf8","MA20"],["■","#a78bfa","MA60"],["╌","rgba(148,163,184,.6)","布林帶"]].map(([sym,color,label])=>(
+            <div style={{ display:"flex", gap:10, marginBottom:4, fontSize:10, flexWrap:"wrap" }}>
+              {[["■","#facc15","MA5"],["■","#fb923c","MA10"],["■","#38bdf8","MA20"],["■","#a78bfa","MA60"],["╌","rgba(148,163,184,.6)","BB"]].map(([sym,color,label])=>(
                 <span key={label}><span style={{ color }}>{sym}</span> {label}</span>
               ))}
               {hovered&&<span style={{ color:"#475569", marginLeft:"auto" }}>📅 {String(hovered.time)}</span>}
             </div>
-            <div ref={mainRef} style={{height:150}} />
-          </div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:8 }}>
-            <div style={cardStyle}>
-              <div style={{ color:"#f59e0b", fontSize:11, marginBottom:2 }}>
-                RSI14 {Number.isFinite(displayBar.rsi14)&&<b style={{ color:displayBar.rsi14>70?"#ef4444":displayBar.rsi14<30?"#22c55e":"#f59e0b" }}>{fmt(displayBar.rsi14,1)}</b>}
+            <div ref={mainRef} style={{height:110}} />
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:6 }}>
+              <div>
+                <div style={{ color:"#f59e0b", fontSize:10, margin:"4px 0 2px" }}>
+                  RSI14 {Number.isFinite(displayBar.rsi14)&&<b style={{ color:displayBar.rsi14>70?"#ef4444":displayBar.rsi14<30?"#22c55e":"#f59e0b" }}>{fmt(displayBar.rsi14,1)}</b>}
+                </div>
+                <div ref={rsiRef} style={{height:48}} />
               </div>
-              <div ref={rsiRef} style={{height:70}} />
-            </div>
-            <div style={cardStyle}>
-              <div style={{ color:"#94a3b8", fontSize:11, marginBottom:2 }}>
-                MACD {Number.isFinite(displayBar.macd_hist)&&<b style={{ color:displayBar.macd_hist>=0?"#ef4444":"#22c55e" }}>{fmt(displayBar.macd_hist,3)}</b>}
+              <div>
+                <div style={{ color:"#94a3b8", fontSize:10, margin:"4px 0 2px" }}>
+                  MACD {Number.isFinite(displayBar.macd_hist)&&<b style={{ color:displayBar.macd_hist>=0?"#ef4444":"#22c55e" }}>{fmt(displayBar.macd_hist,3)}</b>}
+                </div>
+                <div ref={macdRef} style={{height:48}} />
               </div>
-              <div ref={macdRef} style={{height:70}} />
             </div>
           </div>
           {isLive&&(

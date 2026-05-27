@@ -1119,7 +1119,7 @@ async def ai_stock_picker(request: Request):
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
                 json={
-                    "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                    "model": "llama-3.3-70b-versatile",
                     "messages": full_messages,
                     "tools": _PICKER_TOOLS,
                     "tool_choice": "auto",
