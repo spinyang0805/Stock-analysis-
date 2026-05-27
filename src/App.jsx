@@ -1574,7 +1574,7 @@ export default function App() {
         <GroqSummaryCard stockCode={stock.code} rows={rows} chipData={chip} />
       </div>
       </div>
-      ))}
+      )}
     </div>
   );
 }
