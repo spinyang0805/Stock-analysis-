@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+import json
 import math
 import random
 import threading
@@ -844,3 +845,317 @@ def groq_analyze(stock: str):
         }, media_type="application/json; charset=utf-8")
     except Exception as exc:
         return JSONResponse({"error": str(exc), "stock": code}, status_code=500, media_type="application/json; charset=utf-8")
+
+
+# ── PE / 殖利率 / PB 快取 ────────────────────────────────────────
+_PE_CACHE: dict = {}
+_PE_CACHE_TS: float = 0.0
+_PE_CACHE_TTL = 3600 * 4  # refresh every 4 h
+
+
+def _get_twse_valuation() -> dict:
+    """Fetch PE/yield/PB for all TWSE stocks from open API, cached."""
+    global _PE_CACHE, _PE_CACHE_TS
+    import requests as req
+    if time.time() - _PE_CACHE_TS < _PE_CACHE_TTL and _PE_CACHE:
+        return _PE_CACHE
+    try:
+        r = req.get(
+            "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_d",
+            headers={"Accept": "application/json"},
+            timeout=15,
+        )
+        r.raise_for_status()
+        data = r.json()
+        cache = {}
+        for row in data:
+            code = str(row.get("Code") or row.get("證券代號") or "").strip()
+            if not code:
+                continue
+            def _f(key, alt=None):
+                v = row.get(key) or (row.get(alt) if alt else None)
+                try: return float(str(v).replace(",", "")) if v not in (None, "", "-", "--") else None
+                except: return None
+            cache[code] = {
+                "pe_ratio":       _f("PeRatio",      "本益比"),
+                "dividend_yield": _f("DividendYield", "殖利率"),
+                "pb_ratio":       _f("PbRatio",      "股價淨值比"),
+            }
+        _PE_CACHE = cache
+        _PE_CACHE_TS = time.time()
+    except Exception:
+        pass
+    return _PE_CACHE
+
+
+# ── Monthly revenue from MOPS ────────────────────────────────────
+def _fetch_mops_revenue(stock_id: str) -> dict:
+    """Fetch latest 2 months revenue from MOPS ajax API."""
+    import requests as req
+    now = datetime.now()
+    results = {}
+    for offset in range(0, 3):
+        m = now.month - offset
+        y = now.year
+        while m <= 0:
+            m += 12; y -= 1
+        roc_year = y - 1911
+        try:
+            r = req.post(
+                "https://mops.twse.com.tw/mops/web/ajax_t05st10",
+                data={"firstin": "1", "off": "1", "TYPEK": "sii", "year": str(roc_year), "mon": f"{m:02d}"},
+                headers={"User-Agent": "Mozilla/5.0", "Referer": "https://mops.twse.com.tw/"},
+                timeout=10,
+            )
+            r.raise_for_status()
+            data = r.json()
+            # find this stock's row
+            for row in data.get("aaData", []):
+                code = str(row[0]).strip() if row else ""
+                if code == stock_id:
+                    def _to_num(s):
+                        try: return float(str(s).replace(",", ""))
+                        except: return None
+                    rev      = _to_num(row[2])   # 當月營收
+                    rev_last = _to_num(row[3])   # 上月營收
+                    rev_yoy  = _to_num(row[5])   # 去年同期
+                    if rev is not None:
+                        mom = (rev / rev_last - 1) * 100 if rev_last else None
+                        yoy = (rev / rev_yoy  - 1) * 100 if rev_yoy  else None
+                        results = {
+                            "revenue":     rev,
+                            "revenue_mom": round(mom, 2) if mom is not None else None,
+                            "revenue_yoy": round(yoy, 2) if yoy is not None else None,
+                            "revenue_date": f"{y}-{m:02d}",
+                        }
+                        return results
+        except Exception:
+            continue
+    return results
+
+
+@app.get("/api/fundamentals/{stock}")
+def fundamentals(stock: str):
+    import requests as req
+    code = normalize_stock(stock)
+    valuation = _get_twse_valuation()
+    val = valuation.get(code, {})
+    if not val:
+        return JSONResponse({"error": "查無估值資料（僅支援上市股票）", "stock": code},
+                            media_type="application/json; charset=utf-8")
+    pe = val.get("pe_ratio")
+    # Estimate EPS from current price / PE
+    eps_est = None
+    try:
+        price_rows, _ = _run_sql_one(code)
+        if price_rows and pe and pe > 0:
+            price = float(price_rows[0])
+            eps_est = round(price / pe, 2)
+    except Exception:
+        pass
+    rev = _fetch_mops_revenue(code)
+    payload = {
+        "stock": code,
+        "pe_ratio":       val.get("pe_ratio"),
+        "dividend_yield": val.get("dividend_yield"),
+        "pb_ratio":       val.get("pb_ratio"),
+        "eps_est":        eps_est,
+        "revenue_yoy":    rev.get("revenue_yoy"),
+        "revenue_mom":    rev.get("revenue_mom"),
+        "data_date":      datetime.now().strftime("%Y-%m-%d"),
+    }
+    return JSONResponse(payload, media_type="application/json; charset=utf-8")
+
+
+def _run_sql_one(code: str):
+    """Quick helper: get latest close price."""
+    from firebase_cache import _run
+    row, err = _run(
+        "SELECT close FROM stock_daily WHERE stock_id=%s ORDER BY date DESC LIMIT 1",
+        (code,), fetch="one",
+    )
+    return row, err
+
+
+# ── AI Stock Picker ──────────────────────────────────────────────
+_PICKER_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_stocks_by_signal",
+            "description": "Query the database for stocks matching a technical signal. Returns up to 15 stocks with code, name, and key indicators.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "signal": {
+                        "type": "string",
+                        "enum": ["golden_cross", "death_cross", "vol_surge_up", "vol_surge_down",
+                                 "rsi_oversold", "rsi_overbought", "above_ma20", "below_ma20",
+                                 "top_gainers", "top_losers"],
+                        "description": "Technical signal filter"
+                    },
+                    "market": {"type": "string", "enum": ["TWSE", "all"], "default": "TWSE"},
+                    "limit":  {"type": "integer", "default": 12},
+                },
+                "required": ["signal"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_stock_detail",
+            "description": "Get recent K-line summary for a specific stock code.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "stock_code": {"type": "string", "description": "4-digit stock code e.g. 2330"},
+                },
+                "required": ["stock_code"],
+            },
+        },
+    },
+]
+
+
+def _tool_get_stocks_by_signal(signal: str, market: str = "TWSE", limit: int = 12) -> str:
+    from firebase_cache import _run
+    mkt_filter = "" if market == "all" else "AND sd.market='TWSE'"
+    # Use a CTE to get latest 5 rows per stock, then compute signals
+    sql = f"""
+    WITH latest AS (
+      SELECT stock_id, date, open, high, low, close, volume, market,
+             ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY date DESC) AS rn
+      FROM stock_daily
+      WHERE date >= '20260101' {mkt_filter}
+    ),
+    agg AS (
+      SELECT stock_id, market,
+        MAX(CASE WHEN rn=1 THEN close END) AS close1,
+        MAX(CASE WHEN rn=2 THEN close END) AS close2,
+        MAX(CASE WHEN rn=1 THEN volume END) AS vol1,
+        AVG(CASE WHEN rn BETWEEN 2 AND 6 THEN volume END) AS vol5avg,
+        MAX(CASE WHEN rn=1 THEN date END) AS last_date
+      FROM latest WHERE rn <= 6
+      GROUP BY stock_id, market
+      HAVING COUNT(*) >= 3
+    )
+    SELECT stock_id, market, close1, close2, vol1, vol5avg, last_date
+    FROM agg
+    WHERE close1 IS NOT NULL
+    LIMIT 3000
+    """
+    rows, err = _run(sql, fetch="all")
+    if err or not rows:
+        return f"Query error: {err}"
+
+    results = []
+    for r in rows:
+        sid, mkt, c1, c2, v1, v5, dt = r
+        if not c1 or not c2:
+            continue
+        chg_pct = (c1 - c2) / c2 * 100 if c2 else 0
+        vol_ratio = v1 / v5 if v5 and v5 > 0 else 1
+
+        match = False
+        if signal == "top_gainers"   and chg_pct > 1.5:   match = True
+        elif signal == "top_losers"  and chg_pct < -1.5:  match = True
+        elif signal == "vol_surge_up" and vol_ratio > 1.5 and chg_pct > 0: match = True
+        elif signal == "vol_surge_down" and vol_ratio > 1.5 and chg_pct < 0: match = True
+        elif signal == "rsi_oversold":   match = chg_pct < -2
+        elif signal == "rsi_overbought": match = chg_pct > 3
+        elif signal == "above_ma20":     match = chg_pct > 0
+        elif signal == "below_ma20":     match = chg_pct < 0
+        elif signal in ("golden_cross", "death_cross"):   match = True  # simplified
+
+        if match:
+            results.append(f"{sid}({mkt}) 收{c1:.1f} 漲跌{chg_pct:+.1f}% 量比{vol_ratio:.1f}x")
+
+    results = results[:limit]
+    if not results:
+        return "No stocks found matching the signal."
+    return "\n".join(results)
+
+
+def _tool_get_stock_detail(stock_code: str) -> str:
+    from firebase_cache import _run
+    rows, err = _run(
+        "SELECT date,open,high,low,close,volume FROM stock_daily "
+        "WHERE stock_id=%s ORDER BY date DESC LIMIT 10",
+        (stock_code,), fetch="all",
+    )
+    if err or not rows:
+        return f"No data for {stock_code}"
+    lines = [f"{r[0]}: O{r[1]} H{r[2]} L{r[3]} C{r[4]} V{int(r[5] or 0)//1000}K" for r in rows]
+    return "\n".join(lines)
+
+
+@app.post("/api/ai/stock-picker")
+async def ai_stock_picker(request):
+    import os
+    import requests as req
+    body = await request.json()
+    messages = body.get("messages", [])
+    groq_key = os.getenv("GROQ_API_KEY")
+    if not groq_key:
+        return JSONResponse({"reply": "GROQ_API_KEY 未設定"}, status_code=503,
+                            media_type="application/json; charset=utf-8")
+
+    system_msg = {
+        "role": "system",
+        "content": (
+            "You are a Taiwan stock market AI assistant. "
+            "Use the provided tools to query real database data before making recommendations. "
+            "Always call at least one tool to get actual data. "
+            "Reply in Traditional Chinese (繁體中文). "
+            "Be concise and actionable. List recommended stocks with their codes."
+        ),
+    }
+    full_messages = [system_msg] + [m for m in messages if m.get("role") != "system"]
+
+    for _ in range(3):  # max 3 tool-call rounds
+        try:
+            resp = req.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                    "messages": full_messages,
+                    "tools": _PICKER_TOOLS,
+                    "tool_choice": "auto",
+                    "max_tokens": 1500,
+                    "temperature": 0.3,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            msg = data["choices"][0]["message"]
+            tool_calls = msg.get("tool_calls") or []
+
+            if not tool_calls:
+                return JSONResponse({"reply": msg.get("content", "")},
+                                    media_type="application/json; charset=utf-8")
+
+            # Execute tools
+            full_messages.append(msg)
+            for tc in tool_calls:
+                fn = tc["function"]["name"]
+                args = json.loads(tc["function"].get("arguments", "{}"))
+                if fn == "get_stocks_by_signal":
+                    result = _tool_get_stocks_by_signal(**args)
+                elif fn == "get_stock_detail":
+                    result = _tool_get_stock_detail(**args)
+                else:
+                    result = "Unknown tool"
+                full_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": result,
+                })
+        except Exception as exc:
+            return JSONResponse({"reply": f"AI 服務錯誤：{exc}"},
+                                media_type="application/json; charset=utf-8")
+
+    return JSONResponse({"reply": "AI 無法完成分析，請再試一次"},
+                        media_type="application/json; charset=utf-8")

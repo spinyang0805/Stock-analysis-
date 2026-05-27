@@ -701,6 +701,189 @@ function OrderBook({ bids=[], asks=[] }) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   SideNav
+   ══════════════════════════════════════════════════════════════════ */
+function SideNav({ page, setPage, open, setOpen }) {
+  const items = [
+    { id:"dashboard", icon:"📈", label:"個股分析" },
+    { id:"ai",        icon:"🤖", label:"AI 選股" },
+  ];
+  return (
+    <div style={{ width:open?190:52, minHeight:"100vh", background:"#0f172a", borderRight:"1px solid #1e293b",
+      flexShrink:0, transition:"width .2s", overflow:"hidden", display:"flex", flexDirection:"column", position:"sticky", top:0 }}>
+      <div onClick={()=>setOpen(o=>!o)}
+        style={{ padding:"14px 0", textAlign:"center", cursor:"pointer", color:"#475569", fontSize:15,
+          borderBottom:"1px solid #1e293b", userSelect:"none", flexShrink:0 }}>
+        {open?"◀":"▶"}
+      </div>
+      {items.map(it=>(
+        <div key={it.id} onClick={()=>setPage(it.id)}
+          style={{ display:"flex", alignItems:"center", gap:10, padding:"13px 14px", cursor:"pointer",
+            background:page===it.id?"rgba(37,99,235,.15)":"transparent",
+            borderLeft:page===it.id?"3px solid #2563eb":"3px solid transparent",
+            transition:"background .15s" }}>
+          <span style={{ fontSize:20, flexShrink:0 }}>{it.icon}</span>
+          {open&&<span style={{ fontSize:13, fontWeight:600, color:"#f1f5f9", whiteSpace:"nowrap" }}>{it.label}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   AIChatPage
+   ══════════════════════════════════════════════════════════════════ */
+function AIChatPage() {
+  const [messages, setMessages] = useState([{
+    role:"assistant",
+    content:"您好！我是 AI 選股助理。\n請描述您想找的股票條件，例如：\n• 找近期突破月線的強勢股\n• 推薦技術面黃金交叉的股票\n• 哪些股票量增價漲且籌碼集中？"
+  }]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+
+  const quickActions = [
+    "找近期突破月線的強勢股",
+    "推薦技術面黃金交叉的股票",
+    "哪些股票量增價漲？",
+    "找 RSI 超賣可能反彈的股票",
+  ];
+
+  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[messages, loading]);
+
+  function compressHistory(msgs) {
+    if (msgs.length <= 8) return msgs;
+    const old = msgs.slice(0, -8).filter(m=>m.role!=="system");
+    const recent = msgs.slice(-8);
+    const summary = old.map(m=>`[${m.role}] ${String(m.content).slice(0,100)}`).join(" | ");
+    return [{ role:"system", content:`Prior conversation (compressed): ${summary}` }, ...recent];
+  }
+
+  async function send(text) {
+    const content = (text||input).trim();
+    if (!content||loading) return;
+    setInput("");
+    const newMsgs = [...messages, {role:"user", content}];
+    setMessages(newMsgs);
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/ai/stock-picker`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({messages:compressHistory(newMsgs)}), cache:"no-store",
+      });
+      const json = await res.json();
+      setMessages(prev=>[...prev,{role:"assistant", content:json.reply||json.error||"無回應"}]);
+    } catch(e) {
+      setMessages(prev=>[...prev,{role:"assistant", content:`連線失敗：${e.message}`}]);
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", height:"100vh", background:"#020617", color:"#f1f5f9" }}>
+      <div style={{ padding:"14px 20px", borderBottom:"1px solid #1e293b", background:"#0f172a", flexShrink:0 }}>
+        <div style={{ color:"#38bdf8", fontSize:11, fontWeight:800, letterSpacing:1 }}>TW STOCK DECISION SYSTEM</div>
+        <div style={{ fontSize:18, fontWeight:900, marginTop:4 }}>🤖 AI 選股助理</div>
+      </div>
+      <div style={{ padding:"8px 14px", display:"flex", gap:8, flexWrap:"wrap", borderBottom:"1px solid #1e293b", flexShrink:0 }}>
+        {quickActions.map(q=>(
+          <button key={q} onClick={()=>send(q)} disabled={loading}
+            style={{ padding:"5px 12px", borderRadius:20, border:"1px solid #334155", background:"#1e293b",
+              color:"#94a3b8", cursor:"pointer", fontSize:12, whiteSpace:"nowrap" }}>{q}</button>
+        ))}
+      </div>
+      <div style={{ flex:1, overflow:"auto", padding:"12px 16px" }}>
+        {messages.map((m,i)=>(
+          <div key={i} style={{ margin:"10px 0", display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
+            <div style={{ maxWidth:"82%", padding:"10px 14px", borderRadius:12,
+              background:m.role==="user"?"#1d4ed8":"#1e293b", color:"#f1f5f9", fontSize:13,
+              lineHeight:1.8, whiteSpace:"pre-wrap" }}>
+              {m.role==="assistant"&&<div style={{ color:"#38bdf8", fontSize:11, marginBottom:4, fontWeight:700 }}>🤖 AI 助理</div>}
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {loading&&(
+          <div style={{ display:"flex", justifyContent:"flex-start", margin:"10px 0" }}>
+            <div style={{ padding:"10px 14px", borderRadius:12, background:"#1e293b", color:"#64748b", fontSize:13 }}>
+              ⏳ AI 分析中，正在查詢資料庫...
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef}/>
+      </div>
+      <div style={{ padding:"12px 16px", borderTop:"1px solid #1e293b", background:"#0f172a",
+        display:"flex", gap:8, flexShrink:0 }}>
+        <input value={input} onChange={e=>setInput(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()} disabled={loading}
+          placeholder="問 AI 推薦適合的股票… (Enter 送出)"
+          style={{ flex:1, padding:"10px 14px", borderRadius:8, border:"1px solid #334155",
+            background:"#020617", color:"white", fontSize:14 }} />
+        <button onClick={()=>send()} disabled={loading||!input.trim()}
+          style={{ padding:"10px 20px", borderRadius:8, background:loading?"#1e293b":"#2563eb",
+            color:"white", border:0, cursor:loading?"default":"pointer", fontWeight:700, fontSize:14 }}>
+          送出
+        </button>
+        {messages.length>2&&(
+          <button onClick={()=>setMessages([messages[0]])}
+            style={{ padding:"10px 14px", borderRadius:8, border:"1px solid #334155",
+              background:"transparent", color:"#475569", cursor:"pointer", fontSize:12 }}>
+            清除
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   FundamentalsCard
+   ══════════════════════════════════════════════════════════════════ */
+function FundamentalsCard({ stockCode }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(()=>{
+    if (!stockCode) return;
+    setData(null); setLoading(true);
+    fetch(`${API}/api/fundamentals/${encodeURIComponent(stockCode)}`,{cache:"no-store"})
+      .then(r=>r.json()).then(j=>setData(j)).catch(()=>{}).finally(()=>setLoading(false));
+  },[stockCode]);
+
+  const pct=(v,d=1)=>v!=null?`${v>=0?"+":""}${fmt(v,d)}%`:"--";
+
+  const items = data ? [
+    {label:"本益比 PE",    value:data.pe_ratio!=null?fmt(data.pe_ratio,1):"--",
+      color:data.pe_ratio&&data.pe_ratio<15?"#22c55e":data.pe_ratio&&data.pe_ratio>30?"#ef4444":"#f1f5f9"},
+    {label:"殖利率",       value:data.dividend_yield!=null?`${fmt(data.dividend_yield,2)}%`:"--", color:"#f59e0b"},
+    {label:"股價淨值比 PB",value:data.pb_ratio!=null?fmt(data.pb_ratio,2):"--"},
+    {label:"EPS 估算",     value:data.eps_est!=null?fmt(data.eps_est,2):"--"},
+    {label:"月營收 YOY",   value:pct(data.revenue_yoy), color:data.revenue_yoy>0?"#ef4444":data.revenue_yoy<0?"#22c55e":"#f1f5f9"},
+    {label:"月營收 MOM",   value:pct(data.revenue_mom), color:data.revenue_mom>0?"#ef4444":data.revenue_mom<0?"#22c55e":"#f1f5f9"},
+  ] : [];
+
+  return (
+    <Card title="個股基本面" icon="📊">
+      {loading&&<div style={{color:"#64748b",fontSize:13}}>載入中...</div>}
+      {!loading&&(!data||data.error)&&<div style={{color:"#475569",fontSize:12}}>{data?.error||"基本面資料暫無（僅支援上市股票）"}</div>}
+      {!loading&&data&&!data.error&&(
+        <>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}}>
+            {items.map(it=>(
+              <div key={it.label} style={{padding:"8px 10px",borderRadius:4,background:"rgba(148,163,184,.06)"}}>
+                <div style={{color:"#64748b",fontSize:11,marginBottom:2}}>{it.label}</div>
+                <div style={{color:it.color||"#f1f5f9",fontWeight:700,fontSize:15}}>{it.value}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{color:"#475569",fontSize:11}}>資料來源：TWSE・{data.data_date||"--"}</div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
    Main App
    ══════════════════════════════════════════════════════════════════ */
 function addSeries(chart, Type, opts, fallback) {
@@ -715,6 +898,8 @@ export default function App() {
   const seriesRef  = useRef({});
   const syncingRef = useRef(false);
 
+  const [page,            setPage]           = useState("dashboard");
+  const [sideOpen,        setSideOpen]       = useState(true);
   const [input,           setInput]          = useState("2330");
   const [stock,           setStock]          = useState(resolveStock("2330"));
   const [loadKey,         setLoadKey]        = useState(0);
@@ -743,7 +928,7 @@ export default function App() {
       crosshair:    { mode:1 },
       autoSize:     true,
     };
-    const main = createChart(mainRef.current, { ...theme, height:210 });
+    const main = createChart(mainRef.current, { ...theme, height:150 });
     const rsi  = createChart(rsiRef.current,  { ...theme, height:70  });
     const macd = createChart(macdRef.current, { ...theme, height:70  });
     chartsRef.current = { main, rsi, macd };
@@ -935,8 +1120,11 @@ export default function App() {
 
   /* ── Render ────────────────────────────────────────────────────── */
   return (
-    <div style={pageStyle}>
+    <div style={{ display:"flex", minHeight:"100vh", background:"#020617" }}>
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}} *{box-sizing:border-box;}`}</style>
+      <SideNav page={page} setPage={setPage} open={sideOpen} setOpen={setSideOpen} />
+      {page==="ai" ? <AIChatPage /> : (
+      <div style={{ flex:1, minWidth:0, overflow:"auto", ...pageStyle }}>
 
       {/* ── Header ── */}
       <header style={headerStyle}>
@@ -1026,6 +1214,7 @@ export default function App() {
 
       {/* ── 分析卡片 auto-fill（自動換行，不受任何欄高度影響）── */}
       <div style={{ padding:"12px 16px", display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 }}>
+        <FundamentalsCard stockCode={stock.code} />
         <TechRadarCard rows={rows} chipData={chip} />
         <MaStatusCard rows={rows} />
         <VolPriceCard rows={rows} />
@@ -1041,6 +1230,8 @@ export default function App() {
       <div style={{ padding:"0 16px 28px" }}>
         <GroqSummaryCard stockCode={stock.code} rows={rows} chipData={chip} />
       </div>
+      </div>
+      )}
     </div>
   );
 }
