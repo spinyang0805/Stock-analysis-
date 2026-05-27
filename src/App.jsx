@@ -929,9 +929,9 @@ export default function App() {
       crosshair:    { mode:1 },
       autoSize:     true,
     };
-    const main = createChart(mainRef.current, { ...theme, height:110 });
-    const rsi  = createChart(rsiRef.current,  { ...theme, height:48  });
-    const macd = createChart(macdRef.current, { ...theme, height:48  });
+    const main = createChart(mainRef.current, { ...theme, height:220 });
+    const rsi  = createChart(rsiRef.current,  { ...theme, height:220 });
+    const macd = createChart(macdRef.current, { ...theme, height:220 });
     chartsRef.current = { main, rsi, macd };
 
     const candle = addSeries(main, CandlestickSeries, { upColor:"#ef4444", downColor:"#22c55e", borderUpColor:"#ef4444", borderDownColor:"#22c55e", wickUpColor:"#ef4444", wickDownColor:"#22c55e" }, "addCandlestickSeries");
@@ -1187,19 +1187,19 @@ export default function App() {
               ))}
               {hovered&&<span style={{ color:"#475569", marginLeft:"auto" }}>📅 {String(hovered.time)}</span>}
             </div>
-            <div ref={mainRef} style={{height:110}} />
+            <div ref={mainRef} style={{height:220}} />
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:6 }}>
               <div>
                 <div style={{ color:"#f59e0b", fontSize:10, margin:"4px 0 2px" }}>
                   RSI14 {Number.isFinite(displayBar.rsi14)&&<b style={{ color:displayBar.rsi14>70?"#ef4444":displayBar.rsi14<30?"#22c55e":"#f59e0b" }}>{fmt(displayBar.rsi14,1)}</b>}
                 </div>
-                <div ref={rsiRef} style={{height:48}} />
+                <div ref={rsiRef} style={{height:220}} />
               </div>
               <div>
                 <div style={{ color:"#94a3b8", fontSize:10, margin:"4px 0 2px" }}>
                   MACD {Number.isFinite(displayBar.macd_hist)&&<b style={{ color:displayBar.macd_hist>=0?"#ef4444":"#22c55e" }}>{fmt(displayBar.macd_hist,3)}</b>}
                 </div>
-                <div ref={macdRef} style={{height:48}} />
+                <div ref={macdRef} style={{height:220}} />
               </div>
             </div>
           </div>
