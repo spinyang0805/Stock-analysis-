@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 import math
 import random
@@ -42,7 +43,13 @@ try:
 except Exception:
     fetch_realtime_board = fetch_institutional = fetch_margin = analyze_dashboard = None
 
-app = FastAPI(title="TW Stock Decision API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    threading.Thread(target=_auto_daily_scheduler, daemon=True, name="auto-daily").start()
+    yield
+
+
+app = FastAPI(title="TW Stock Decision API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -79,11 +86,6 @@ def _auto_daily_scheduler():
                 print("[auto-daily] scheduled update done")
         except Exception as exc:
             print(f"[auto-daily] scheduled error: {exc}")
-
-
-@app.on_event("startup")
-async def startup_event():
-    threading.Thread(target=_auto_daily_scheduler, daemon=True, name="auto-daily").start()
 
 
 def _cache_get(key: str):

@@ -13,7 +13,8 @@ HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json,text/plain,*
 TWSE_ALL = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY_ALL"
 TWSE_T86 = "https://www.twse.com.tw/rwd/zh/fund/T86"
 TWSE_MARGIN = "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN"
-TWSE_STOCK_DAY = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
+TWSE_STOCK_DAY = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY"
+TWSE_STOCK_DAY_LEGACY = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
 TPEX_ALL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyCloseQuotes"
 TPEX_STOCK_DAY = "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"
 TPEX_INSTITUTIONAL = "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade"
@@ -180,28 +181,40 @@ def latest_tpex_daily_rows(max_lookback_days: int = 10):
 def fetch_twse_stock_month(stock_id: str, year: int, month: int, product_type: str = "股票"):
     errors = []
     written = 0
-    payload, err = fetch_json(
-        TWSE_STOCK_DAY,
-        params={"response": "json", "date": f"{year}{month:02d}01", "stockNo": stock_id},
-    )
-    if err:
-        errors.append(f"TWSE month error {stock_id}: {err}")
+    params = {"response": "json", "date": f"{year}{month:02d}01", "stockNo": stock_id}
+    payload = {}
+    for url in [TWSE_STOCK_DAY, TWSE_STOCK_DAY_LEGACY]:
+        payload, err = fetch_json(url, params=params)
+        if err:
+            errors.append(f"TWSE month {url} {stock_id}: {err}")
+        if isinstance(payload, dict) and payload.get("stat") == "OK" and payload.get("data"):
+            break
     if not isinstance(payload, dict) or payload.get("stat") != "OK":
         return 0, errors
+    fields = _fields(payload)
+    date_i    = _idx(fields, "日期", default=0)
+    volume_i  = _idx(fields, "成交", "股數", default=1)
+    turnover_i= _idx(fields, "成交", "金額", default=2)
+    open_i    = _idx(fields, "開盤", default=3)
+    high_i    = _idx(fields, "最高", default=4)
+    low_i     = _idx(fields, "最低", default=5)
+    close_i   = _idx(fields, "收盤", default=6)
+    change_i  = _idx(fields, "漲跌", default=7)
+    trades_i  = _idx(fields, "成交", "筆數", default=8)
     for row in payload.get("data", []):
         try:
-            date_text = roc_to_yyyymmdd(row[0])
+            date_text = roc_to_yyyymmdd(str(_row_value(row, date_i)))
             doc = {
                 "market": "TWSE",
                 "product_type": product_type,
-                "volume": safe_float(row[1]),
-                "turnover": safe_float(row[2]),
-                "open": safe_float(row[3]),
-                "high": safe_float(row[4]),
-                "low": safe_float(row[5]),
-                "close": safe_float(row[6]),
-                "change": safe_float(row[7]),
-                "trades": safe_float(row[8]),
+                "volume": safe_float(_row_value(row, volume_i)),
+                "turnover": safe_float(_row_value(row, turnover_i)),
+                "open": safe_float(_row_value(row, open_i)),
+                "high": safe_float(_row_value(row, high_i)),
+                "low": safe_float(_row_value(row, low_i)),
+                "close": safe_float(_row_value(row, close_i)),
+                "change": safe_float(_row_value(row, change_i)),
+                "trades": safe_float(_row_value(row, trades_i)),
                 "source": "TWSE STOCK_DAY",
             }
             if save_stock_daily(stock_id, date_text, doc):

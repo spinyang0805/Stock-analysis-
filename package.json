@@ -16,5 +16,7 @@
     "recharts": "latest",
     "lightweight-charts": "latest"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.0"
+  }
 }

@@ -1,9 +1,7 @@
-# fly.toml app configuration file generated for stock-analysis-tw on 2026-05-21T16:49:12Z
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
+# Frontend static app — separate from the backend app "stock-analysis-tw".
+# Deploy from the backend/ directory for the API.
 
-app = 'stock-analysis-tw'
+app = 'stock-analysis-tw-web'
 primary_region = 'nrt'
 
 [build]
@@ -17,7 +15,6 @@ primary_region = 'nrt'
   processes = ['app']
 
 [[vm]]
-  memory = '1gb'
+  memory = '256mb'
   cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 256
