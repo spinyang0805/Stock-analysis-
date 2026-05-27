@@ -1184,7 +1184,7 @@ export default function App() {
             ))}
             {hovered&&<span style={{ color:"#475569", marginLeft:"auto" }}>📅 {String(hovered.time)}</span>}
           </div>
-          <div ref={mainRef} />
+          <div ref={mainRef} style={{height:150}} />
         </div>
         {/* RSI + MACD 並排 */}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:8 }}>
@@ -1192,13 +1192,13 @@ export default function App() {
             <div style={{ color:"#f59e0b", fontSize:11, marginBottom:2 }}>
               RSI14 {Number.isFinite(displayBar.rsi14)&&<b style={{ color:displayBar.rsi14>70?"#ef4444":displayBar.rsi14<30?"#22c55e":"#f59e0b" }}>{fmt(displayBar.rsi14,1)}</b>}
             </div>
-            <div ref={rsiRef} />
+            <div ref={rsiRef} style={{height:70}} />
           </div>
           <div style={cardStyle}>
             <div style={{ color:"#94a3b8", fontSize:11, marginBottom:2 }}>
               MACD {Number.isFinite(displayBar.macd_hist)&&<b style={{ color:displayBar.macd_hist>=0?"#ef4444":"#22c55e" }}>{fmt(displayBar.macd_hist,3)}</b>}
             </div>
-            <div ref={macdRef} />
+            <div ref={macdRef} style={{height:70}} />
           </div>
         </div>
         {/* Live order book（開盤時顯示） */}
