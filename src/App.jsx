@@ -1179,7 +1179,7 @@ export default function App() {
       <div style={{ padding:"12px 16px", display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 }}>
 
         {/* K線區塊佔兩欄寬，三圖合一張卡 */}
-        <div style={{ gridColumn:"span 2" }}>
+        <div style={{ gridColumn:"span 2", alignSelf:"start" }}>
           <div style={cardStyle}>
             <div style={{ display:"flex", gap:10, marginBottom:4, fontSize:10, flexWrap:"wrap" }}>
               {[["■","#facc15","MA5"],["■","#fb923c","MA10"],["■","#38bdf8","MA20"],["■","#a78bfa","MA60"],["╌","rgba(148,163,184,.6)","BB"]].map(([sym,color,label])=>(
