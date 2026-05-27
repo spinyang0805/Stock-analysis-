@@ -934,6 +934,25 @@ def _fetch_mops_revenue(stock_id: str) -> dict:
     return results
 
 
+@app.get("/api/prices")
+def get_prices(stocks: str = ""):
+    """Return latest close price for multiple stocks in one DB query."""
+    from firebase_cache import _run
+    codes = [s.strip() for s in stocks.split(",") if s.strip()]
+    if not codes:
+        return JSONResponse({})
+    placeholders = ",".join(["%s"] * len(codes))
+    rows, err = _run(
+        f"SELECT DISTINCT ON (stock_id) stock_id, close FROM stock_daily "
+        f"WHERE stock_id IN ({placeholders}) ORDER BY stock_id, date DESC",
+        tuple(codes), fetch="all",
+    )
+    if err or not rows:
+        return JSONResponse({})
+    return JSONResponse({r[0]: float(r[1]) if r[1] is not None else None for r in rows},
+                        media_type="application/json; charset=utf-8")
+
+
 @app.get("/api/fundamentals/{stock}")
 def fundamentals(stock: str):
     import requests as req

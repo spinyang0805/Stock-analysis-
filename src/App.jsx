@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as LightweightCharts from "lightweight-charts";
+import { supabase } from "./supabase.js";
 
 const { createChart, CandlestickSeries, LineSeries, HistogramSeries } = LightweightCharts;
 const API = "https://stock-analysis-tw.fly.dev";
@@ -703,11 +704,17 @@ function OrderBook({ bids=[], asks=[] }) {
 /* ══════════════════════════════════════════════════════════════════
    SideNav
    ══════════════════════════════════════════════════════════════════ */
-function SideNav({ page, setPage, open, setOpen }) {
+function SideNav({ page, setPage, open, setOpen, user, userRole, onSignIn, onSignOut }) {
   const items = [
     { id:"dashboard", icon:"📈", label:"個股分析" },
-    { id:"ai",        icon:"🤖", label:"AI 選股" },
-  ];
+    { id:"ai",        icon:"🤖", label:"AI 選股",    needAuth:true },
+    { id:"watchlist", icon:"⭐", label:"存股清單",   needAuth:true },
+    { id:"admin",     icon:"🛠", label:"帳號管理",   needRole:"admin" },
+  ].filter(it => {
+    if (it.needRole && userRole !== it.needRole) return false;
+    return true;
+  });
+  const roleBadge = { admin:"管理員", vip:"VIP", user:"會員" };
   return (
     <div style={{ width:open?190:52, minHeight:"100vh", background:"#0f172a", borderRight:"1px solid #1e293b",
       flexShrink:0, transition:"width .2s", overflow:"hidden", display:"flex", flexDirection:"column", position:"sticky", top:0 }}>
@@ -717,7 +724,7 @@ function SideNav({ page, setPage, open, setOpen }) {
         {open?"◀":"▶"}
       </div>
       {items.map(it=>(
-        <div key={it.id} onClick={()=>setPage(it.id)}
+        <div key={it.id} onClick={()=>{ if(it.needAuth&&!user){onSignIn();return;} setPage(it.id); }}
           style={{ display:"flex", alignItems:"center", gap:10, padding:"13px 14px", cursor:"pointer",
             background:page===it.id?"rgba(37,99,235,.15)":"transparent",
             borderLeft:page===it.id?"3px solid #2563eb":"3px solid transparent",
@@ -726,6 +733,36 @@ function SideNav({ page, setPage, open, setOpen }) {
           {open&&<span style={{ fontSize:13, fontWeight:600, color:"#f1f5f9", whiteSpace:"nowrap" }}>{it.label}</span>}
         </div>
       ))}
+      {/* 底部：使用者資訊 */}
+      <div style={{ marginTop:"auto", borderTop:"1px solid #1e293b", padding:"12px 10px" }}>
+        {user ? (
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            {open && <>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                {user.user_metadata?.avatar_url
+                  ? <img src={user.user_metadata.avatar_url} style={{ width:28, height:28, borderRadius:"50%", flexShrink:0 }} alt="" />
+                  : <div style={{ width:28, height:28, borderRadius:"50%", background:"#1d4ed8", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0 }}>
+                      {(user.email||"?")[0].toUpperCase()}
+                    </div>}
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#f1f5f9", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {user.user_metadata?.full_name || user.email?.split("@")[0]}
+                  </div>
+                  {userRole && <div style={{ fontSize:10, color:"#38bdf8" }}>{roleBadge[userRole]||userRole}</div>}
+                </div>
+              </div>
+              <button onClick={onSignOut} style={{ width:"100%", padding:"5px 0", borderRadius:6, border:"1px solid #334155", background:"transparent", color:"#64748b", cursor:"pointer", fontSize:11 }}>登出</button>
+            </>}
+            {!open && <div style={{ textAlign:"center", cursor:"pointer" }} onClick={onSignOut} title="登出">🚪</div>}
+          </div>
+        ) : (
+          <div>
+            {open
+              ? <button onClick={onSignIn} style={{ width:"100%", padding:"8px 0", borderRadius:6, border:0, background:"#1d4ed8", color:"white", cursor:"pointer", fontSize:12, fontWeight:700 }}>Google 登入</button>
+              : <div style={{ textAlign:"center", cursor:"pointer", fontSize:18 }} onClick={onSignIn} title="登入">🔑</div>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -885,6 +922,250 @@ function FundamentalsCard({ stockCode }) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   AddToWatchlistModal
+   ══════════════════════════════════════════════════════════════════ */
+function AddToWatchlistModal({ stock, user, onClose }) {
+  const [avgCost, setAvgCost] = useState("");
+  const [shares,  setShares]  = useState("");
+  const [note,    setNote]    = useState("");
+  const [saving,  setSaving]  = useState(false);
+  const [msg,     setMsg]     = useState("");
+
+  async function save() {
+    if (!avgCost || !shares) { setMsg("請填入均價與張數"); return; }
+    setSaving(true);
+    const { error } = await supabase.from("watchlist").upsert({
+      user_id:    user.id,
+      stock_id:   stock.code,
+      stock_name: stock.name || stock.code,
+      market:     stock.market || "",
+      avg_cost:   parseFloat(avgCost),
+      shares:     parseInt(shares),
+      note:       note.trim(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,stock_id" });
+    setSaving(false);
+    if (error) setMsg("儲存失敗：" + error.message);
+    else onClose(true);
+  }
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ background:"#0f172a", border:"1px solid #1e293b", borderRadius:12, padding:24, width:340, color:"#f1f5f9" }}>
+        <div style={{ fontSize:16, fontWeight:800, marginBottom:16 }}>⭐ 加入存股清單</div>
+        <div style={{ fontSize:14, color:"#facc15", marginBottom:12 }}>{stock.code} {stock.name}</div>
+        {[["買入均價（元）", avgCost, setAvgCost, "number"], ["持有張數（張）", shares, setShares, "number"], ["備註", note, setNote, "text"]].map(([label, val, setter, type]) => (
+          <div key={label} style={{ marginBottom:10 }}>
+            <div style={{ fontSize:11, color:"#94a3b8", marginBottom:4 }}>{label}</div>
+            <input value={val} onChange={e=>setter(e.target.value)} type={type}
+              style={{ width:"100%", padding:"8px 10px", borderRadius:6, border:"1px solid #334155", background:"#020617", color:"white", fontSize:14, boxSizing:"border-box" }} />
+          </div>
+        ))}
+        {msg && <div style={{ color:"#f97316", fontSize:12, marginBottom:8 }}>{msg}</div>}
+        <div style={{ display:"flex", gap:8, marginTop:14 }}>
+          <button onClick={save} disabled={saving} style={{ flex:1, padding:"9px 0", borderRadius:7, border:0, background:"#2563eb", color:"white", fontWeight:700, cursor:"pointer" }}>
+            {saving ? "儲存中..." : "確認加入"}
+          </button>
+          <button onClick={()=>onClose(false)} style={{ flex:1, padding:"9px 0", borderRadius:7, border:"1px solid #334155", background:"transparent", color:"#94a3b8", cursor:"pointer" }}>取消</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   WatchlistPage
+   ══════════════════════════════════════════════════════════════════ */
+function WatchlistPage({ user, setPage, setStock, setInput, setLoadKey }) {
+  const [list,    setList]    = useState([]);
+  const [prices,  setPrices]  = useState({});
+  const [loading, setLoading] = useState(true);
+  const [editItem, setEditItem] = useState(null); // item being edited
+  const [editForm, setEditForm] = useState({});
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("watchlist").select("*").order("created_at", { ascending: false })
+      .then(({ data }) => {
+        setList(data || []);
+        setLoading(false);
+        if (data?.length) loadPrices(data.map(d => d.stock_id));
+      });
+  }, [user]);
+
+  async function loadPrices(codes) {
+    try {
+      const r = await fetch(`${API}/api/prices?stocks=${codes.join(",")}`, { cache:"no-store" });
+      const j = await r.json();
+      setPrices(j);
+    } catch {}
+  }
+
+  async function remove(id) {
+    if (!confirm("確定刪除？")) return;
+    await supabase.from("watchlist").delete().eq("id", id);
+    setList(prev => prev.filter(x => x.id !== id));
+  }
+
+  async function saveEdit() {
+    const updates = {
+      avg_cost:   parseFloat(editForm.avg_cost) || null,
+      shares:     parseInt(editForm.shares)     || 0,
+      note:       (editForm.note || "").trim(),
+      updated_at: new Date().toISOString(),
+    };
+    await supabase.from("watchlist").update(updates).eq("id", editItem.id);
+    setList(prev => prev.map(x => x.id === editItem.id ? { ...x, ...updates } : x));
+    setEditItem(null);
+  }
+
+  function goAnalysis(code, name, market) {
+    setStock({ code, name: name || code, market: market || "--", industry: "--" });
+    setInput(code);
+    setLoadKey(k => k + 1);
+    setPage("dashboard");
+  }
+
+  const totalPnl = list.reduce((sum, item) => {
+    const cur = prices[item.stock_id];
+    if (!cur || !item.avg_cost || !item.shares) return sum;
+    return sum + (cur - item.avg_cost) * item.shares * 1000;
+  }, 0);
+
+  return (
+    <div style={{ flex:1, overflow:"auto", background:"#020617", color:"#f1f5f9", fontFamily:"Arial,sans-serif", padding:"20px 24px" }}>
+      {/* Edit Modal */}
+      {editItem && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:"#0f172a", border:"1px solid #1e293b", borderRadius:12, padding:24, width:320, color:"#f1f5f9" }}>
+            <div style={{ fontSize:15, fontWeight:800, marginBottom:14 }}>編輯 {editItem.stock_id}</div>
+            {[["買入均價（元）","avg_cost"],["持有張數（張）","shares"],["備註","note"]].map(([label,key]) => (
+              <div key={key} style={{ marginBottom:10 }}>
+                <div style={{ fontSize:11, color:"#94a3b8", marginBottom:4 }}>{label}</div>
+                <input value={editForm[key]||""} onChange={e=>setEditForm(f=>({...f,[key]:e.target.value}))}
+                  style={{ width:"100%", padding:"7px 10px", borderRadius:6, border:"1px solid #334155", background:"#020617", color:"white", fontSize:13, boxSizing:"border-box" }} />
+              </div>
+            ))}
+            <div style={{ display:"flex", gap:8, marginTop:14 }}>
+              <button onClick={saveEdit} style={{ flex:1, padding:"8px 0", borderRadius:6, border:0, background:"#2563eb", color:"white", fontWeight:700, cursor:"pointer" }}>儲存</button>
+              <button onClick={()=>setEditItem(null)} style={{ flex:1, padding:"8px 0", borderRadius:6, border:"1px solid #334155", background:"transparent", color:"#94a3b8", cursor:"pointer" }}>取消</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+        <div>
+          <div style={{ fontSize:22, fontWeight:900 }}>⭐ 我的存股清單</div>
+          <div style={{ fontSize:12, color:"#64748b", marginTop:4 }}>{list.length} 支持股・未實現損益 <span style={{ color:totalPnl>=0?"#ef4444":"#22c55e", fontWeight:700 }}>{totalPnl>=0?"+":""}{Math.round(totalPnl).toLocaleString()} 元</span></div>
+        </div>
+        <button onClick={()=>loadPrices(list.map(d=>d.stock_id))} style={{ padding:"7px 14px", borderRadius:7, border:"1px solid #334155", background:"#1e293b", color:"#94a3b8", cursor:"pointer", fontSize:12 }}>↻ 刷新現價</button>
+      </div>
+
+      {loading ? <div style={{ color:"#475569" }}>載入中...</div> : list.length === 0 ? (
+        <div style={{ color:"#475569", textAlign:"center", marginTop:60, fontSize:14 }}>
+          尚未加入任何股票<br/><span style={{ fontSize:12 }}>在個股分析頁點「+ 加入清單」</span>
+        </div>
+      ) : (
+        <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13, minWidth:700 }}>
+            <thead>
+              <tr style={{ borderBottom:"1px solid #1e293b", color:"#64748b", fontSize:11 }}>
+                {["代號","名稱","市場","買入均價","張數","現價","未實現損益","損益率","備註","操作"].map(h=>(
+                  <th key={h} style={{ padding:"8px 10px", textAlign:"left", fontWeight:600, whiteSpace:"nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {list.map(item => {
+                const cur = prices[item.stock_id];
+                const pnl = (cur && item.avg_cost && item.shares) ? (cur - item.avg_cost) * item.shares * 1000 : null;
+                const pnlPct = (cur && item.avg_cost) ? (cur - item.avg_cost) / item.avg_cost * 100 : null;
+                const c = pnl == null ? "#94a3b8" : pnl >= 0 ? "#ef4444" : "#22c55e";
+                return (
+                  <tr key={item.id} style={{ borderBottom:"1px solid rgba(148,163,184,.08)" }}>
+                    <td style={{ padding:"10px", cursor:"pointer", color:"#facc15", fontWeight:700 }}
+                        onClick={()=>goAnalysis(item.stock_id, item.stock_name, item.market)}>{item.stock_id}</td>
+                    <td style={{ padding:"10px" }}>{item.stock_name||"--"}</td>
+                    <td style={{ padding:"10px", color:"#64748b" }}>{item.market||"--"}</td>
+                    <td style={{ padding:"10px" }}>{item.avg_cost!=null?fmt(item.avg_cost):"--"}</td>
+                    <td style={{ padding:"10px" }}>{item.shares!=null?item.shares.toLocaleString()+"張":"--"}</td>
+                    <td style={{ padding:"10px" }}>{cur!=null?fmt(cur):<span style={{color:"#475569"}}>--</span>}</td>
+                    <td style={{ padding:"10px", color:c, fontWeight:700 }}>{pnl!=null?`${pnl>=0?"+":""}${Math.round(pnl).toLocaleString()}`:"--"}</td>
+                    <td style={{ padding:"10px", color:c }}>{pnlPct!=null?`${pnlPct>=0?"+":""}${pnlPct.toFixed(2)}%`:"--"}</td>
+                    <td style={{ padding:"10px", color:"#475569", maxWidth:120, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.note||"--"}</td>
+                    <td style={{ padding:"10px", whiteSpace:"nowrap" }}>
+                      <button onClick={()=>{ setEditItem(item); setEditForm({avg_cost:item.avg_cost||"",shares:item.shares||"",note:item.note||""}); }}
+                        style={{ marginRight:6, padding:"4px 10px", borderRadius:5, border:"1px solid #334155", background:"#1e293b", color:"#94a3b8", cursor:"pointer", fontSize:11 }}>編輯</button>
+                      <button onClick={()=>remove(item.id)}
+                        style={{ padding:"4px 10px", borderRadius:5, border:"1px solid #450a0a", background:"rgba(239,68,68,.1)", color:"#ef4444", cursor:"pointer", fontSize:11 }}>刪除</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   AdminPage
+   ══════════════════════════════════════════════════════════════════ */
+function AdminPage() {
+  const [users,   setUsers]   = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.from("profiles").select("*").order("created_at", { ascending: false })
+      .then(({ data }) => { setUsers(data || []); setLoading(false); });
+  }, []);
+
+  async function changeRole(id, newRole) {
+    await supabase.from("profiles").update({ role: newRole }).eq("id", id);
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, role: newRole } : u));
+  }
+
+  const roleColor = { admin:"#f97316", vip:"#a78bfa", user:"#94a3b8" };
+  return (
+    <div style={{ flex:1, overflow:"auto", background:"#020617", color:"#f1f5f9", fontFamily:"Arial,sans-serif", padding:"20px 24px" }}>
+      <div style={{ fontSize:22, fontWeight:900, marginBottom:18 }}>🛠 帳號管理</div>
+      {loading ? <div style={{color:"#475569"}}>載入中...</div> : (
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead>
+            <tr style={{ borderBottom:"1px solid #1e293b", color:"#64748b", fontSize:11 }}>
+              {["Email","名稱","權限","加入時間"].map(h=>(
+                <th key={h} style={{ padding:"8px 10px", textAlign:"left", fontWeight:600 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {users.map(u=>(
+              <tr key={u.id} style={{ borderBottom:"1px solid rgba(148,163,184,.08)" }}>
+                <td style={{ padding:"10px" }}>{u.email}</td>
+                <td style={{ padding:"10px" }}>{u.display_name||"--"}</td>
+                <td style={{ padding:"10px" }}>
+                  <select value={u.role||"user"} onChange={e=>changeRole(u.id, e.target.value)}
+                    style={{ padding:"4px 8px", borderRadius:5, border:"1px solid #334155", background:"#1e293b",
+                      color:roleColor[u.role]||"#94a3b8", cursor:"pointer", fontSize:12 }}>
+                    <option value="user">一般</option>
+                    <option value="vip">VIP</option>
+                    <option value="admin">管理員</option>
+                  </select>
+                </td>
+                <td style={{ padding:"10px", color:"#475569", fontSize:11 }}>{u.created_at?.slice(0,10)||"--"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
    Main App
    ══════════════════════════════════════════════════════════════════ */
 function addSeries(chart, Type, opts, fallback) {
@@ -899,6 +1180,10 @@ export default function App() {
   const seriesRef        = useRef({});
   const syncingRef       = useRef(false);
   const chartContainerRef = useRef(null);
+
+  const [user,            setUser]           = useState(null);
+  const [userRole,        setUserRole]       = useState(null);
+  const [showWLModal,     setShowWLModal]    = useState(false);
 
   const [page,            setPage]           = useState("dashboard");
   const [sideOpen,        setSideOpen]       = useState(true);
@@ -918,6 +1203,36 @@ export default function App() {
   const [suggestions,     setSuggestions]    = useState([]);
   const [backfillAttempt, setBackfillAttempt]= useState(0);
   const searchTimerRef = useRef(null);
+
+  /* ── Auth ──────────────────────────────────────────────────────── */
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) _loadProfile(session.user.id);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) _loadProfile(u.id); else setUserRole(null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function _loadProfile(uid) {
+    const { data } = await supabase.from('profiles').select('role').eq('id', uid).single();
+    setUserRole(data?.role ?? 'user');
+  }
+
+  async function signInWithGoogle() {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+  }
 
   /* ── Chart init ────────────────────────────────────────────────── */
   useEffect(() => {
@@ -1144,8 +1459,14 @@ export default function App() {
   return (
     <div style={{ display:"flex", minHeight:"100vh", background:"#020617" }}>
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}} *{box-sizing:border-box;}`}</style>
-      <SideNav page={page} setPage={setPage} open={sideOpen} setOpen={setSideOpen} />
-      {page==="ai" ? <AIChatPage /> : (
+      <SideNav page={page} setPage={setPage} open={sideOpen} setOpen={setSideOpen}
+        user={user} userRole={userRole} onSignIn={signInWithGoogle} onSignOut={signOut} />
+      {showWLModal && user && (
+        <AddToWatchlistModal stock={stock} user={user} onClose={ok=>{ setShowWLModal(false); }} />
+      )}
+      {page==="ai"       ? <AIChatPage /> :
+       page==="watchlist"? <WatchlistPage user={user} setPage={setPage} setStock={setStock} setInput={setInput} setLoadKey={setLoadKey} /> :
+       page==="admin"    ? <AdminPage /> : (
       <div style={{ flex:1, minWidth:0, overflow:"auto", ...pageStyle }}>
 
       {/* ── Header ── */}
@@ -1191,6 +1512,8 @@ export default function App() {
             )}
           </div>
           <button type="button" onClick={submit} style={buttonStyle}>查詢</button>
+          {user && <button type="button" onClick={()=>setShowWLModal(true)}
+            style={{ padding:"8px 14px", borderRadius:8, border:"1px solid #334155", background:"#1e293b", color:"#facc15", cursor:"pointer", fontSize:13 }}>⭐ 加入清單</button>}
           <span style={{ color:rows.length?"#22c55e":backfillAttempt>0?"#f97316":"#f59e0b", fontSize:13 }}>{status}</span>
           {isLive&&<span style={{ color:"#94a3b8", fontSize:12 }}>每 {POLL_MS/1000}s 更新</span>}
         </div>
@@ -1251,7 +1574,7 @@ export default function App() {
         <GroqSummaryCard stockCode={stock.code} rows={rows} chipData={chip} />
       </div>
       </div>
-      )}
+      ))}
     </div>
   );
 }

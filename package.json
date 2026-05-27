@@ -14,7 +14,8 @@
     "react-dom": "latest",
     "lucide-react": "latest",
     "recharts": "latest",
-    "lightweight-charts": "latest"
+    "lightweight-charts": "latest",
+    "@supabase/supabase-js": "^2.45.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0"
