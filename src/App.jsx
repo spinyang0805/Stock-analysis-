@@ -935,19 +935,19 @@ export default function App() {
     const macd = createChart(macdRef.current, { ...theme, height:40 });
     chartsRef.current = { main, rsi, macd };
 
-    // Dynamically resize charts to fill half/half of the grid row height
+    // Dynamically resize chart CONTAINERS so autoSize fills them correctly
     const chartObs = new ResizeObserver(() => {
       const el = chartContainerRef.current;
-      if (!el || !chartsRef.current.main) return;
+      if (!el) return;
       const rowH = el.clientHeight;
       if (rowH < 80) return;
-      // overhead: card padding 28px + legend 22px + RSI-label 20px + gaps 14px
+      // overhead: card padding 28 + legend 22 + RSI-label 20 + gaps 14
       const avail = Math.max(60, rowH - 84);
       const kH   = Math.floor(avail / 2);
       const subH = avail - kH;
-      chartsRef.current.main.applyOptions({ height: kH });
-      chartsRef.current.rsi.applyOptions({ height: subH });
-      chartsRef.current.macd.applyOptions({ height: subH });
+      if (mainRef.current)  mainRef.current.style.height  = kH   + "px";
+      if (rsiRef.current)   rsiRef.current.style.height   = subH + "px";
+      if (macdRef.current)  macdRef.current.style.height  = subH + "px";
     });
     if (chartContainerRef.current) chartObs.observe(chartContainerRef.current);
 
@@ -1208,19 +1208,19 @@ export default function App() {
               ))}
               {hovered&&<span style={{ color:"#475569", marginLeft:"auto" }}>📅 {String(hovered.time)}</span>}
             </div>
-            <div ref={mainRef} />
+            <div ref={mainRef} style={{height:80}} />
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:6 }}>
               <div>
                 <div style={{ color:"#f59e0b", fontSize:10, margin:"4px 0 2px" }}>
                   RSI14 {Number.isFinite(displayBar.rsi14)&&<b style={{ color:displayBar.rsi14>70?"#ef4444":displayBar.rsi14<30?"#22c55e":"#f59e0b" }}>{fmt(displayBar.rsi14,1)}</b>}
                 </div>
-                <div ref={rsiRef} />
+                <div ref={rsiRef} style={{height:40}} />
               </div>
               <div>
                 <div style={{ color:"#94a3b8", fontSize:10, margin:"4px 0 2px" }}>
                   MACD {Number.isFinite(displayBar.macd_hist)&&<b style={{ color:displayBar.macd_hist>=0?"#ef4444":"#22c55e" }}>{fmt(displayBar.macd_hist,3)}</b>}
                 </div>
-                <div ref={macdRef} />
+                <div ref={macdRef} style={{height:40}} />
               </div>
             </div>
           </div>
