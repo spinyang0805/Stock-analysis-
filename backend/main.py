@@ -39,6 +39,7 @@ from rule_engine import build_ai_rule_context
 from signal_engine import generate_signals, generate_trade_plan, backtest_strategy
 from chip_routes import analyze_chip_rows, read_chip_rows
 
+
 try:
     from dashboard_service import fetch_realtime_board, fetch_institutional, fetch_margin, analyze_dashboard
 except Exception:
@@ -57,6 +58,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+try:
+    from batch_api import install as _install_batch_api
+    _install_batch_api(app)
+    print("[batch_api] routes installed")
+except Exception as _batch_err:
+    print(f"[batch_api] install error: {_batch_err}")
 
 MIN_ANALYSIS_ROWS = 90
 RESPONSE_CACHE_TTL_SECONDS = 60
