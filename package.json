@@ -9,15 +9,15 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "vite": "5.4.11",
+    "@supabase/supabase-js": "^2.45.0",
+    "lightweight-charts": "latest",
+    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest",
     "recharts": "latest",
-    "lightweight-charts": "latest",
-    "@supabase/supabase-js": "^2.45.0"
+    "vite": "^8.0.14"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.0"
+    "@vitejs/plugin-react": "^6.0.2"
   }
 }
