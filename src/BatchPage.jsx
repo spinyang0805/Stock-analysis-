@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 
 const API = "https://stock-analysis-tw.fly.dev";
-const PAGE_VERSION = "batch-v6-real-data";
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const PAGE_VERSION = "batch-v7-persistent";
+const LOG_KEY = "batch_logs_v1";
 
 // ── styles ───────────────────────────────────────────────────────────────────
 const S = {
@@ -42,10 +41,14 @@ const S = {
 
 function addLog(setLogs, msg) {
   const ts = new Date().toLocaleTimeString("zh-TW", { hour12:false });
-  setLogs((p) => [`[${ts}] ${msg}`, ...p].slice(0, 50));
+  setLogs((p) => [`[${ts}] ${msg}`, ...p].slice(0, 100));
 }
 
-// ── Job poller ───────────────────────────────────────────────────────────────
+function jobShortName(jobId) {
+  return (jobId || "").split("-").slice(0, 2).join("-");
+}
+
+// ── Global job poller ────────────────────────────────────────────────────────
 function useJobPoller() {
   const [jobs, setJobs] = useState({});
   const timers = useRef({});
@@ -68,7 +71,44 @@ function useJobPoller() {
   }, []);
 
   useEffect(() => () => Object.values(timers.current).forEach(clearInterval), []);
-  return { jobs, poll };
+  return { jobs, setJobs, poll };
+}
+
+// ── Banner: shown when any job is running ────────────────────────────────────
+function ActiveJobsBanner({ jobs }) {
+  const running = Object.values(jobs).filter(j => j.status === "running");
+  if (running.length === 0) return null;
+  return (
+    <div style={{
+      background:"rgba(245,158,11,.08)", border:"1px solid rgba(245,158,11,.35)",
+      borderRadius:10, padding:"10px 16px", marginBottom:14,
+      display:"flex", alignItems:"center", gap:12,
+    }}>
+      <div style={{ width:8, height:8, borderRadius:"50%", background:"#f59e0b", animation:"pulse 1.4s infinite" }} />
+      <div>
+        <div style={{ color:"#f59e0b", fontWeight:700, fontSize:13 }}>
+          背景任務執行中（{running.length} 個）
+        </div>
+        <div style={{ color:"#94a3b8", fontSize:11, marginTop:2 }}>
+          {running.map(j => jobShortName(j.job_id)).join("、")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── All jobs section (restored + new) ───────────────────────────────────────
+function AllJobsSection({ jobs }) {
+  const sorted = Object.values(jobs)
+    .sort((a, b) => (b.started_at || "").localeCompare(a.started_at || ""))
+    .slice(0, 8);
+  if (sorted.length === 0) return null;
+  return (
+    <div style={S.card}>
+      <h3 style={S.cardTitle}>🗂 任務紀錄（本次後台）</h3>
+      {sorted.map(j => <JobCard key={j.job_id} job={j} />)}
+    </div>
+  );
 }
 
 // ── Section 1 : Connection Tests ─────────────────────────────────────────────
@@ -77,16 +117,13 @@ function ConnTestSection() {
   const [result, setResult] = useState(null);
 
   async function run() {
-    setBusy(true);
-    setResult(null);
+    setBusy(true); setResult(null);
     try {
       const res = await fetch(`${API}/api/batch/test`, { cache:"no-store" });
       setResult(await res.json());
     } catch (e) {
       setResult({ error: String(e) });
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   const r = result?.results || {};
@@ -130,10 +167,7 @@ function ConnTestSection() {
 }
 
 // ── Section 2 : Chip Data ────────────────────────────────────────────────────
-function ChipSection({ logs, setLogs }) {
-  const { jobs, poll } = useJobPoller();
-
-  // Today
+function ChipSection({ jobs, poll, logs, setLogs }) {
   const [todayBusy, setTodayBusy] = useState(false);
   const [todayResult, setTodayResult] = useState(null);
   const [todayDate, setTodayDate] = useState("");
@@ -150,12 +184,9 @@ function ChipSection({ logs, setLogs }) {
     } catch (e) {
       addLog(setLogs, `籌碼今日失敗：${e.message}`);
       setTodayResult({ error: String(e) });
-    } finally {
-      setTodayBusy(false);
-    }
+    } finally { setTodayBusy(false); }
   }
 
-  // History backfill
   const [histMonths, setHistMonths] = useState(3);
   const [histJobId, setHistJobId] = useState(null);
   const histJob = histJobId ? jobs[histJobId] : null;
@@ -179,7 +210,6 @@ function ChipSection({ logs, setLogs }) {
     <div style={S.card}>
       <h3 style={S.cardTitle}>📊 籌碼資料 (chip_daily)</h3>
 
-      {/* Today */}
       <div style={{ borderBottom:"1px solid #1e293b", paddingBottom:14, marginBottom:14 }}>
         <div style={{ fontWeight:700, fontSize:13, color:"#94a3b8", marginBottom:8 }}>今日籌碼寫入（TWSE T86 + 融資融券 + TPEx 法人 + TPEx 融資）</div>
         <div style={S.row}>
@@ -211,7 +241,6 @@ function ChipSection({ logs, setLogs }) {
         )}
       </div>
 
-      {/* History */}
       <div>
         <div style={{ fontWeight:700, fontSize:13, color:"#94a3b8", marginBottom:8 }}>歷史批次回補（背景執行）</div>
         <div style={S.row}>
@@ -232,10 +261,7 @@ function ChipSection({ logs, setLogs }) {
 }
 
 // ── Section 3 : Stock Daily ──────────────────────────────────────────────────
-function StockSection({ logs, setLogs }) {
-  const { jobs, poll } = useJobPoller();
-
-  // Daily update
+function StockSection({ jobs, poll, logs, setLogs }) {
   const [dailyLookback, setDailyLookback] = useState(5);
   const [dailyJobId, setDailyJobId] = useState(null);
   const dailyJob = dailyJobId ? jobs[dailyJobId] : null;
@@ -255,7 +281,6 @@ function StockSection({ logs, setLogs }) {
     }
   }
 
-  // Single stock
   const [singleCode, setSingleCode] = useState("");
   const [singleMonths, setSingleMonths] = useState(12);
   const [singleMarket, setSingleMarket] = useState("TWSE");
@@ -278,7 +303,6 @@ function StockSection({ logs, setLogs }) {
     }
   }
 
-  // Universe batch
   const [uniType, setUniType] = useState("股票");
   const [uniMarket, setUniMarket] = useState("上市");
   const [uniOffset, setUniOffset] = useState(0);
@@ -310,7 +334,6 @@ function StockSection({ logs, setLogs }) {
     <div style={S.card}>
       <h3 style={S.cardTitle}>📈 K線 / 股價資料 (stock_daily)</h3>
 
-      {/* Today */}
       <div style={{ borderBottom:"1px solid #1e293b", paddingBottom:14, marginBottom:14 }}>
         <div style={{ fontWeight:700, fontSize:13, color:"#94a3b8", marginBottom:8 }}>今日全市場更新（TWSE + TPEx）</div>
         <div style={S.row}>
@@ -325,7 +348,6 @@ function StockSection({ logs, setLogs }) {
         {dailyJob && <JobCard job={dailyJob} />}
       </div>
 
-      {/* Single */}
       <div style={{ borderBottom:"1px solid #1e293b", paddingBottom:14, marginBottom:14 }}>
         <div style={{ fontWeight:700, fontSize:13, color:"#94a3b8", marginBottom:8 }}>個股歷史回補</div>
         <div style={S.row}>
@@ -353,7 +375,6 @@ function StockSection({ logs, setLogs }) {
         {singleJob && <JobCard job={singleJob} />}
       </div>
 
-      {/* Universe */}
       <div>
         <div style={{ fontWeight:700, fontSize:13, color:"#94a3b8", marginBottom:8 }}>全市場批次回補</div>
         <div style={S.row}>
@@ -405,23 +426,23 @@ function StockSection({ logs, setLogs }) {
   );
 }
 
-// ── JobCard component ────────────────────────────────────────────────────────
+// ── JobCard ──────────────────────────────────────────────────────────────────
 function JobCard({ job }) {
   if (!job) return null;
   const isRunning = job.status === "running";
   const isDone    = job.status === "done";
   const isError   = job.status === "error";
   const r         = job.result || {};
-
   const statusColor = isRunning ? "#f59e0b" : isDone ? "#22c55e" : "#ef4444";
-  const statusLabel = isRunning ? "執行中…" : isDone ? "已完成" : "失敗";
 
   return (
     <div style={{ marginTop:10, padding:"10px 14px", borderRadius:10, background:"#0a1628", border:`1px solid ${statusColor}33` }}>
-      <div style={{ display:"flex", gap:12, alignItems:"center", marginBottom:8 }}>
-        <span style={{ ...S.tag(isDone ? true : isError ? false : null) }}>{statusLabel}</span>
+      <div style={{ display:"flex", gap:12, alignItems:"center", marginBottom:8, flexWrap:"wrap" }}>
+        <span style={S.tag(isDone ? true : isError ? false : null)}>
+          {isRunning ? "執行中…" : isDone ? "已完成" : "失敗"}
+        </span>
         <span style={{ fontSize:11, color:"#475569" }}>{job.job_id}</span>
-        {job.started_at && <span style={{ fontSize:11, color:"#475569" }}>開始 {job.started_at.slice(11,19)}</span>}
+        {job.started_at  && <span style={{ fontSize:11, color:"#475569" }}>開始 {job.started_at.slice(11,19)}</span>}
         {job.finished_at && <span style={{ fontSize:11, color:"#475569" }}>結束 {job.finished_at.slice(11,19)}</span>}
       </div>
       {isRunning && (
@@ -431,20 +452,18 @@ function JobCard({ job }) {
       )}
       {isDone && (
         <div style={{ display:"flex", gap:12, flexWrap:"wrap", fontSize:12 }}>
-          {r.stocks !== undefined     && <Stat label="股票寫入" value={r.stocks} />}
-          {r.written_days !== undefined && <Stat label="天數" value={r.written_days} />}
-          {r.stocks_done !== undefined  && <Stat label="處理檔數" value={r.stocks_done} />}
-          {r.t86_written !== undefined  && <Stat label="T86" value={r.t86_written} />}
-          {r.margin_written !== undefined && <Stat label="融資券" value={r.margin_written} />}
+          {r.stocks !== undefined        && <Stat label="股票寫入"  value={r.stocks} />}
+          {r.written_days !== undefined  && <Stat label="天數"      value={r.written_days} />}
+          {r.stocks_done !== undefined   && <Stat label="處理檔數"  value={r.stocks_done} />}
+          {r.t86_written !== undefined   && <Stat label="T86"       value={r.t86_written} />}
+          {r.margin_written !== undefined && <Stat label="融資券"   value={r.margin_written} />}
           {r.tpex_t86_written !== undefined && <Stat label="TPEx法人" value={r.tpex_t86_written} />}
           {r.tpex_margin_written !== undefined && <Stat label="TPEx融資" value={r.tpex_margin_written} />}
           {r.processed_dates !== undefined && <Stat label="處理天數" value={r.processed_dates} />}
-          {(r.errors||[]).length > 0   && <Stat label="錯誤" value={(r.errors||[]).length} color="#ef4444" />}
+          {(r.errors||[]).length > 0     && <Stat label="錯誤" value={(r.errors||[]).length} color="#ef4444" />}
         </div>
       )}
-      {isError && (
-        <div style={{ color:"#ef4444", fontSize:12 }}>{job.error}</div>
-      )}
+      {isError && <div style={{ color:"#ef4444", fontSize:12 }}>{job.error}</div>}
       {isDone && (r.errors||[]).length > 0 && (
         <details style={{ marginTop:8 }}>
           <summary style={{ fontSize:11, color:"#64748b", cursor:"pointer" }}>錯誤詳情 ({(r.errors||[]).length})</summary>
@@ -455,7 +474,7 @@ function JobCard({ job }) {
   );
 }
 
-function Stat({ label, value, color = "#22c55e" }) {
+function Stat({ label, value, color="#22c55e" }) {
   return (
     <div style={{ textAlign:"center", background:"#1e293b", borderRadius:8, padding:"5px 12px" }}>
       <div style={{ color:"#64748b", fontSize:10 }}>{label}</div>
@@ -464,11 +483,18 @@ function Stat({ label, value, color = "#22c55e" }) {
   );
 }
 
-// ── Section 4 : Activity Log ──────────────────────────────────────────────────
-function LogSection({ logs }) {
+// ── Activity Log ─────────────────────────────────────────────────────────────
+function LogSection({ logs, onClear }) {
   return (
     <div style={S.card}>
-      <h3 style={{ ...S.cardTitle, marginBottom:8 }}>📋 操作紀錄</h3>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+        <h3 style={{ ...S.cardTitle, marginBottom:0 }}>📋 操作紀錄</h3>
+        {logs.length > 0 && (
+          <button style={{ ...S.btn("#1e293b"), padding:"4px 10px", fontSize:11, color:"#64748b" }} onClick={onClear}>
+            清除
+          </button>
+        )}
+      </div>
       <div style={{ ...S.panel, maxHeight:220, overflowY:"auto" }}>
         {logs.length === 0
           ? <div style={S.muted}>尚無紀錄</div>
@@ -481,7 +507,50 @@ function LogSection({ logs }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function BatchPage() {
-  const [logs, setLogs] = useState([]);
+  // Logs persisted in sessionStorage — survive page navigation
+  const [logs, setLogs] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem(LOG_KEY) || "[]"); }
+    catch { return []; }
+  });
+
+  useEffect(() => {
+    try { sessionStorage.setItem(LOG_KEY, JSON.stringify(logs.slice(0, 100))); }
+    catch {}
+  }, [logs]);
+
+  // Global job registry — shared across all sections
+  const { jobs, setJobs, poll } = useJobPoller();
+
+  // On mount: fetch recent jobs from backend, resume polling any still running
+  useEffect(() => {
+    fetch(`${API}/api/batch/jobs`, { cache:"no-store" })
+      .then(r => r.json())
+      .then(data => {
+        const recent = data.jobs || [];
+        if (recent.length === 0) return;
+        setJobs(prev => {
+          const next = { ...prev };
+          recent.forEach(j => { if (!next[j.job_id]) next[j.job_id] = j; });
+          return next;
+        });
+        const running = recent.filter(j => j.status === "running");
+        if (running.length > 0) {
+          addLog(setLogs, `恢復監控 ${running.length} 個執行中任務`);
+          running.forEach(j => {
+            poll(j.job_id, (done) => {
+              addLog(setLogs, `[恢復] ${jobShortName(j.job_id)} 完成 (${done.status})`);
+            });
+          });
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function clearLogs() {
+    setLogs([]);
+    try { sessionStorage.removeItem(LOG_KEY); } catch {}
+  }
 
   return (
     <div style={S.page}>
@@ -492,10 +561,14 @@ export default function BatchPage() {
         <div style={S.muted}>{PAGE_VERSION} · 所有寫入操作皆為真實 TWSE/TPEx API → PostgreSQL</div>
       </div>
 
+      <ActiveJobsBanner jobs={jobs} />
+
       <ConnTestSection />
-      <ChipSection logs={logs} setLogs={setLogs} />
-      <StockSection logs={logs} setLogs={setLogs} />
-      <LogSection logs={logs} />
+      <ChipSection  jobs={jobs} poll={poll} logs={logs} setLogs={setLogs} />
+      <StockSection jobs={jobs} poll={poll} logs={logs} setLogs={setLogs} />
+
+      <AllJobsSection jobs={jobs} />
+      <LogSection logs={logs} onClear={clearLogs} />
     </div>
   );
 }
