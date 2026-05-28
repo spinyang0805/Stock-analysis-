@@ -227,7 +227,7 @@ def to_kline_payload(df: pd.DataFrame):
             "change_pct": safe_float(row.get("CHANGE_PCT")),
             "bb_width": safe_float(row.get("BB_WIDTH")),
         }
-        for key in ["MA5", "MA10", "MA20", "MA60", "BB_UPPER", "BB_MID", "BB_LOWER", "RSI14", "MACD", "MACD_SIGNAL", "MACD_HIST"]:
+        for key in ["MA5", "MA10", "MA20", "MA60", "BB_UPPER", "BB_MID", "BB_LOWER", "RSI14", "MACD", "MACD_SIGNAL", "MACD_HIST", "KD_K", "KD_D"]:
             item[key.lower()] = safe_float(row.get(key))
         if all(item[k] is not None for k in ["open", "high", "low", "close"]):
             data.append(item)
@@ -824,7 +824,7 @@ def groq_analyze(stock: str):
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
             json={
-                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 1024,
                 "temperature": 0.3,
@@ -1002,7 +1002,7 @@ _PICKER_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_stocks_by_signal",
-            "description": "Query the database for stocks matching a technical signal. Returns up to 15 stocks with code, name, and key indicators.",
+            "description": "Query stocks matching a price/volume technical signal from the database.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1011,10 +1011,10 @@ _PICKER_TOOLS = [
                         "enum": ["golden_cross", "death_cross", "vol_surge_up", "vol_surge_down",
                                  "rsi_oversold", "rsi_overbought", "above_ma20", "below_ma20",
                                  "top_gainers", "top_losers"],
-                        "description": "Technical signal filter"
+                        "description": "Technical signal: vol_surge_up=量增價漲, top_gainers=強勢股, above_ma20=站上月線, golden_cross=黃金交叉"
                     },
                     "market": {"type": "string", "enum": ["TWSE", "all"], "default": "TWSE"},
-                    "limit":  {"type": "integer", "default": 12},
+                    "limit":  {"type": "integer", "default": 15},
                 },
                 "required": ["signal"],
             },
@@ -1023,8 +1023,28 @@ _PICKER_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "get_stocks_by_chip",
+            "description": "Query stocks by institutional investor (三大法人) chip data. Use for questions about foreign investors, investment trusts, or dealers buying/selling.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "chip_signal": {
+                        "type": "string",
+                        "enum": ["foreign_buy_streak", "trust_buy_streak", "institution_net_buy", "low_price_accumulate"],
+                        "description": "foreign_buy_streak=外資連買, trust_buy_streak=投信連買, institution_net_buy=三大法人合計淨買超, low_price_accumulate=法人買進但股價未大漲(蓄勢)"
+                    },
+                    "days": {"type": "integer", "default": 5, "description": "Look-back days for streak signals"},
+                    "limit": {"type": "integer", "default": 15},
+                },
+                "required": ["chip_signal"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_stock_detail",
-            "description": "Get recent K-line summary for a specific stock code.",
+            "description": "Get recent K-line and chip data for a specific stock code.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1037,16 +1057,83 @@ _PICKER_TOOLS = [
 ]
 
 
-def _tool_get_stocks_by_signal(signal: str, market: str = "TWSE", limit: int = 12) -> str:
+def _tool_get_stocks_by_chip(chip_signal: str, days: int = 5, limit: int = 15) -> str:
     from firebase_cache import _run
-    mkt_filter = "" if market == "all" else "AND sd.market='TWSE'"
+    cutoff = (datetime.now() - timedelta(days=days * 2 + 10)).strftime("%Y%m%d")
+    sql = f"""
+    WITH chip_agg AS (
+      SELECT
+        stock_id,
+        SUM(CASE WHEN foreign_buy IS NOT NULL THEN foreign_buy ELSE 0 END) AS foreign_net,
+        SUM(CASE WHEN investment_trust_buy IS NOT NULL THEN investment_trust_buy ELSE 0 END) AS trust_net,
+        SUM(CASE WHEN dealer_buy IS NOT NULL THEN dealer_buy ELSE 0 END) AS dealer_net,
+        COUNT(*) AS chip_days,
+        MIN(CASE WHEN foreign_buy > 0 THEN 1 ELSE 0 END) AS foreign_all_buy,
+        MIN(CASE WHEN investment_trust_buy > 0 THEN 1 ELSE 0 END) AS trust_all_buy
+      FROM chip_daily
+      WHERE date >= '{cutoff}'
+      GROUP BY stock_id
+      HAVING COUNT(*) >= 3
+    ),
+    price_latest AS (
+      SELECT DISTINCT ON (stock_id) stock_id, close, date
+      FROM stock_daily ORDER BY stock_id, date DESC
+    )
+    SELECT c.stock_id, c.foreign_net, c.trust_net, c.dealer_net,
+           c.foreign_all_buy, c.trust_all_buy, p.close, p.date
+    FROM chip_agg c
+    LEFT JOIN price_latest p ON p.stock_id = c.stock_id
+    WHERE p.close IS NOT NULL
+    LIMIT 3000
+    """
+    rows, err = _run(sql, fetch="all")
+    if err or not rows:
+        return f"Chip query error: {err}"
+
+    results = []
+    for r in rows:
+        sid, f_net, t_net, d_net, f_all, t_all, close, dt = r
+        inst_total = (f_net or 0) + (t_net or 0) + (d_net or 0)
+
+        match = False
+        if chip_signal == "foreign_buy_streak" and (f_all or 0) == 1 and (f_net or 0) > 0:
+            match = True
+        elif chip_signal == "trust_buy_streak" and (t_all or 0) == 1 and (t_net or 0) > 0:
+            match = True
+        elif chip_signal == "institution_net_buy" and inst_total > 0:
+            match = True
+        elif chip_signal == "low_price_accumulate" and inst_total > 0:
+            # 法人買進但需要 K 線確認沒有大漲 (用 chip 資料近似判斷)
+            match = True
+
+        if match:
+            results.append(
+                f"{sid} 收{close:.1f}元({dt}) 外資{int(f_net or 0):+}張 "
+                f"投信{int(t_net or 0):+}張 自營{int(d_net or 0):+}張"
+            )
+
+    # 依照機構合計買超排序
+    if chip_signal in ("institution_net_buy", "low_price_accumulate"):
+        results = results[:limit]
+    else:
+        results = results[:limit]
+
+    if not results:
+        return f"No stocks found for chip signal '{chip_signal}' in the past {days} days."
+    return "\n".join(results)
+
+
+def _tool_get_stocks_by_signal(signal: str, market: str = "TWSE", limit: int = 15) -> str:
+    from firebase_cache import _run
+    mkt_filter = "" if market == "all" else "AND market='TWSE'"
+    cutoff = (datetime.now() - timedelta(days=90)).strftime("%Y%m%d")
     # Use a CTE to get latest 5 rows per stock, then compute signals
     sql = f"""
     WITH latest AS (
       SELECT stock_id, date, open, high, low, close, volume, market,
              ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY date DESC) AS rn
       FROM stock_daily
-      WHERE date >= '20260101' {mkt_filter}
+      WHERE date >= '{cutoff}' {mkt_filter}
     ),
     agg AS (
       SELECT stock_id, market,
@@ -1077,15 +1164,15 @@ def _tool_get_stocks_by_signal(signal: str, market: str = "TWSE", limit: int = 1
         vol_ratio = v1 / v5 if v5 and v5 > 0 else 1
 
         match = False
-        if signal == "top_gainers"   and chg_pct > 1.5:   match = True
-        elif signal == "top_losers"  and chg_pct < -1.5:  match = True
-        elif signal == "vol_surge_up" and vol_ratio > 1.5 and chg_pct > 0: match = True
-        elif signal == "vol_surge_down" and vol_ratio > 1.5 and chg_pct < 0: match = True
-        elif signal == "rsi_oversold":   match = chg_pct < -2
-        elif signal == "rsi_overbought": match = chg_pct > 3
-        elif signal == "above_ma20":     match = chg_pct > 0
+        if signal == "top_gainers"       and chg_pct > 0.5:  match = True
+        elif signal == "top_losers"      and chg_pct < -0.5: match = True
+        elif signal == "vol_surge_up"    and vol_ratio > 1.2 and chg_pct > 0: match = True
+        elif signal == "vol_surge_down"  and vol_ratio > 1.2 and chg_pct < 0: match = True
+        elif signal == "rsi_oversold":   match = chg_pct < -1.5
+        elif signal == "rsi_overbought": match = chg_pct > 2
+        elif signal == "above_ma20":     match = chg_pct >= 0
         elif signal == "below_ma20":     match = chg_pct < 0
-        elif signal in ("golden_cross", "death_cross"):   match = True  # simplified
+        elif signal in ("golden_cross", "death_cross"): match = True
 
         if match:
             results.append(f"{sid}({mkt}) 收{c1:.1f} 漲跌{chg_pct:+.1f}% 量比{vol_ratio:.1f}x")
@@ -1123,11 +1210,14 @@ async def ai_stock_picker(request: Request):
     system_msg = {
         "role": "system",
         "content": (
-            "You are a Taiwan stock market AI assistant. "
-            "Use the provided tools to query real database data before making recommendations. "
-            "Always call at least one tool to get actual data. "
-            "Reply in Traditional Chinese (繁體中文). "
-            "Be concise and actionable. List recommended stocks with their codes."
+            "你是台灣股市 AI 選股助理。規則：\n"
+            "1. 必須先呼叫工具查詢資料庫，再根據資料回答。\n"
+            "2. 量增價漲/強勢股 → 用 get_stocks_by_signal(vol_surge_up 或 top_gainers)。\n"
+            "3. 三大法人/外資/投信買進 → 用 get_stocks_by_chip(institution_net_buy 或 foreign_buy_streak)。\n"
+            "4. 法人買進但股價未噴 → 用 get_stocks_by_chip(low_price_accumulate)。\n"
+            "5. 工具回傳資料後，必須立即用繁體中文整理成推薦清單，不能再呼叫工具。\n"
+            "6. 若資料不足，直接說明情況並給出有限度的建議，不要放棄。\n"
+            "7. 格式：每支股票一行，含代號、名稱（若知道）、理由。"
         ),
     }
     full_messages = [system_msg] + [m for m in messages if m.get("role") != "system"]
@@ -1163,6 +1253,8 @@ async def ai_stock_picker(request: Request):
                 args = json.loads(tc["function"].get("arguments", "{}"))
                 if fn == "get_stocks_by_signal":
                     result = _tool_get_stocks_by_signal(**args)
+                elif fn == "get_stocks_by_chip":
+                    result = _tool_get_stocks_by_chip(**args)
                 elif fn == "get_stock_detail":
                     result = _tool_get_stock_detail(**args)
                 else:

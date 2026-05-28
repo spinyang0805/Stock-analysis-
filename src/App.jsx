@@ -43,6 +43,7 @@ function normalizeRows(payload) {
       ma20: num(r.ma20, r.MA20), ma60: num(r.ma60, r.MA60),
       bb_upper: num(r.bb_upper), bb_lower: num(r.bb_lower),
       rsi14: num(r.rsi14), macd_hist: num(r.macd_hist),
+      kd_k: num(r.kd_k), kd_d: num(r.kd_d),
       bb_width: num(r.bb_width),
     }))
     .filter(r => r.time && [r.open, r.high, r.low, r.close].every(Number.isFinite))
@@ -213,20 +214,21 @@ function getRsiAnalysis(rows) {
   return { rsi, status, color, conclusion };
 }
 
-function getMacdAnalysis(rows) {
-  if (!rows?.length) return { status:"N/A", color:"#94a3b8", hist:null, conclusion:"資料不足。" };
+function getKdAnalysis(rows) {
+  if (!rows?.length) return { status:"N/A", color:"#94a3b8", k:null, d:null, conclusion:"資料不足。" };
   const latest = rows.at(-1);
   const prev   = rows.at(-2) || {};
-  const hist = latest.macd_hist, prevHist = prev.macd_hist;
-  if (!Number.isFinite(hist)) return { status:"計算中", color:"#94a3b8", hist:null, conclusion:"MACD資料累積中。" };
+  const k = latest.kd_k, d = latest.kd_d;
+  const pk = prev.kd_k,  pd = prev.kd_d;
+  if (!Number.isFinite(k)) return { status:"計算中", color:"#94a3b8", k:null, d:null, conclusion:"KD資料累積中。" };
   let status, color, conclusion;
-  if (hist > 0 && prevHist <= 0)       { status="金叉翻多"; color="#ef4444"; conclusion="MACD柱翻正金叉，中線多頭訊號，可積極建立多頭部位。"; }
-  else if (hist < 0 && prevHist >= 0)  { status="死叉翻空"; color="#22c55e"; conclusion="MACD柱翻負死叉，中線空頭訊號，建議減碼降低持倉。"; }
-  else if (hist > 0 && hist > prevHist){ status="多頭擴張"; color="#f97316"; conclusion="多頭動能持續擴張，趨勢強勁，順勢持有。"; }
-  else if (hist > 0)                   { status="多頭收斂"; color="#f59e0b"; conclusion="多頭動能開始收斂，注意是否轉折，可考慮部分獲利。"; }
-  else if (hist < prevHist)            { status="空頭擴張"; color="#16a34a"; conclusion="空頭動能持續擴大，下跌趨勢確立，不宜搶反彈。"; }
-  else                                 { status="空頭收斂"; color="#86efac"; conclusion="空頭動能收斂，跌勢趨緩，等待金叉翻多確認後再進場。"; }
-  return { hist, prevHist, status, color, conclusion };
+  if (k >= 80)                          { status="超買"; color="#ef4444"; conclusion=`K值 ${k.toFixed(1)} 進入超買區（≥80），短線過熱，留意回檔風險。`; }
+  else if (k <= 20)                     { status="超賣"; color="#22c55e"; conclusion=`K值 ${k.toFixed(1)} 深入超賣區（≤20），逢低布局機會，等反彈確認。`; }
+  else if (k > d && Number.isFinite(pk) && pk <= pd) { status="KD金叉"; color="#f97316"; conclusion="KD形成黃金交叉，短線買進訊號，動能轉多。"; }
+  else if (k < d && Number.isFinite(pk) && pk >= pd) { status="KD死叉"; color="#38bdf8"; conclusion="KD形成死亡交叉，短線賣出訊號，動能轉空。"; }
+  else if (k > d)                       { status="偏多"; color="#f59e0b"; conclusion=`K(${k.toFixed(1)}) > D(${d.toFixed(1)})，動能偏多，趨勢延續中。`; }
+  else                                  { status="偏空"; color="#94a3b8"; conclusion=`K(${k.toFixed(1)}) < D(${d.toFixed(1)})，動能偏空，持觀望態度。`; }
+  return { k, d, pk, pd, status, color, conclusion };
 }
 
 function getScenarios(rows, chipData) {
@@ -257,13 +259,13 @@ function getOverallScore(rows, chipData) {
   const vol  = getVolPriceMatrix(rows);
   const chip = getChipAnalysis(chipData);
   const rsi  = getRsiAnalysis(rows);
-  const macd = getMacdAnalysis(rows);
+  const kd = getKdAnalysis(rows);
   let score = 50;
   const maAdd = {"四線多排":20,"多頭排列":10,"黃金交叉":8,"均線糾結":0,"死亡交叉":-10,"空頭排列":-15,"轉空警訊":-12};
   score += maAdd[ma.label] ?? 0;
   score += vol.score * 5;
   if (rsi.rsi) { if (rsi.rsi > 70) score -= 5; if (rsi.rsi < 30) score += 5; }
-  if (macd.hist != null) score += macd.hist > 0 ? 5 : -5;
+  if (kd.k != null) score += kd.k > kd.d ? 5 : -5;
   score += chip.foreign5d > 0 ? 8 : chip.foreign5d < 0 ? -8 : 0;
   score += chip.trust5d > 0 ? 5 : chip.trust5d < 0 ? -5 : 0;
   return Math.max(0, Math.min(100, Math.round(score)));
@@ -275,19 +277,19 @@ function getTechRadar(rows, chipData) {
   const vol  = getVolPriceMatrix(rows);
   const chip = getChipAnalysis(chipData);
   const rsi  = getRsiAnalysis(rows);
-  const macd = getMacdAnalysis(rows);
+  const kd   = getKdAnalysis(rows);
   const pat  = detectPatterns(rows);
   const maScore  = {"四線多排":95,"多頭排列":75,"黃金交叉":70,"均線糾結":50,"死亡交叉":30,"空頭排列":20,"轉空警訊":15}[ma.label] ?? 50;
   const volScore = {2:85,1:65,0:50,"-1":40,"-2":15}[String(vol.score)] ?? 50;
   const rsiScore = rsi.rsi ? Math.min(100, Math.max(0, rsi.rsi)) : 50;
-  const macdScore = macd.hist != null ? Math.min(90, Math.max(10, 50 + macd.hist * 300)) : 50;
+  const kdScore  = kd.k != null ? Math.min(90, Math.max(10, kd.k)) : 50;
   const breakoutScore = Math.min(90, Math.max(10, 40 + pat.bullCount*20 - pat.bearCount*15));
   return {
     dims: [
       { label:"趨勢強度", value:maScore,    color:ma.color },
       { label:"量價配合", value:volScore,   color:vol.color },
       { label:"RSI動能",  value:rsiScore,   color:rsi.color },
-      { label:"MACD訊號", value:macdScore,  color:macd.color },
+      { label:"KD動能",   value:kdScore,    color:kd.color },
       { label:"籌碼健康", value:chip.score, color:chip.score>60?"#ef4444":chip.score<40?"#22c55e":"#f59e0b" },
       { label:"突破潛力", value:breakoutScore, color:breakoutScore>60?"#ef4444":"#94a3b8" },
     ],
@@ -513,10 +515,10 @@ function BlackCandleCard({ rows, chipData }) {
   );
 }
 
-/* ── Card: 動能指標（RSI + MACD + 布林）─────────────────────────────── */
+/* ── Card: 動能指標（RSI + KD + 布林）──────────────────────────────── */
 function MomentumCard({ rows }) {
-  const rsi  = useMemo(() => getRsiAnalysis(rows),  [rows]);
-  const macd = useMemo(() => getMacdAnalysis(rows), [rows]);
+  const rsi  = useMemo(() => getRsiAnalysis(rows), [rows]);
+  const kd   = useMemo(() => getKdAnalysis(rows),  [rows]);
   const latest = rows?.at(-1) || {};
   return (
     <Card title="動能指標" icon="⚡">
@@ -528,20 +530,22 @@ function MomentumCard({ rows }) {
           {rsi.rsi&&<div style={{ marginTop:4, height:4, borderRadius:2, background:"#1e293b" }}><div style={{ height:"100%", width:`${rsi.rsi}%`, background:rsi.color, borderRadius:2 }} /></div>}
         </div>
         <div style={{ padding:"8px 6px", borderRadius:6, background:"rgba(148,163,184,.06)", textAlign:"center" }}>
-          <div style={{ fontSize:10, color:"#64748b" }}>MACD柱</div>
-          <div style={{ fontSize:22, fontWeight:900, color:macd.color }}>{macd.hist!=null?fmt(macd.hist,3):"--"}</div>
-          <div style={{ fontSize:11, color:macd.color }}>{macd.status}</div>
+          <div style={{ fontSize:10, color:"#64748b" }}>KD值</div>
+          <div style={{ fontSize:16, fontWeight:900, color:kd.color }}>
+            {kd.k!=null?<>K <b>{kd.k.toFixed(1)}</b> / D <b>{kd.d?.toFixed(1)}</b></>:"--"}
+          </div>
+          <div style={{ fontSize:11, color:kd.color }}>{kd.status}</div>
         </div>
       </div>
       <Row label="布林寬度" value={fmt(latest.bb_width,4)} color={latest.bb_width<0.02?"#f59e0b":"#94a3b8"} />
-      {Number.isFinite(latest.bb_width) && latest.bb_width < 0.02 && <Row label="布林狀態" value="🗜️ 極度收縮（大波動蓄勢）" color="#f59e0b" />}
+      {Number.isFinite(latest.bb_width) && latest.bb_width < 0.02 && <Row label="布林狀態" value="極度收縮（大波動蓄勢）" color="#f59e0b" />}
       <div style={{ marginTop:6 }}>
         <div style={{ fontSize:10, color:"#64748b", marginBottom:3 }}>RSI</div>
         <ConclusionLine text={rsi.conclusion} color={rsi.color} />
       </div>
       <div style={{ marginTop:4 }}>
-        <div style={{ fontSize:10, color:"#64748b", marginBottom:3 }}>MACD</div>
-        <ConclusionLine text={macd.conclusion} color={macd.color} />
+        <div style={{ fontSize:10, color:"#64748b", marginBottom:3 }}>KD</div>
+        <ConclusionLine text={kd.conclusion} color={kd.color} />
       </div>
     </Card>
   );
@@ -1175,7 +1179,7 @@ function addSeries(chart, Type, opts, fallback) {
 export default function App() {
   const mainRef = useRef(null);
   const rsiRef  = useRef(null);
-  const macdRef = useRef(null);
+  const kdRef   = useRef(null);
   const chartsRef        = useRef({});
   const seriesRef        = useRef({});
   const syncingRef       = useRef(false);
@@ -1236,7 +1240,7 @@ export default function App() {
 
   /* ── Chart init ────────────────────────────────────────────────── */
   useEffect(() => {
-    if (!mainRef.current||!rsiRef.current||!macdRef.current) return;
+    if (!mainRef.current||!rsiRef.current||!kdRef.current) return;
     const theme = {
       layout:       { background:{color:"#0f172a"}, textColor:"#dbeafe" },
       grid:         { vertLines:{color:"#1e293b"}, horzLines:{color:"#1e293b"} },
@@ -1247,8 +1251,8 @@ export default function App() {
     };
     const main = createChart(mainRef.current, { ...theme, height:80 });
     const rsi  = createChart(rsiRef.current,  { ...theme, height:40 });
-    const macd = createChart(macdRef.current, { ...theme, height:40 });
-    chartsRef.current = { main, rsi, macd };
+    const kd   = createChart(kdRef.current,   { ...theme, height:40 });
+    chartsRef.current = { main, rsi, kd };
 
     // Dynamically resize chart CONTAINERS so autoSize fills them correctly
     const chartObs = new ResizeObserver(() => {
@@ -1262,7 +1266,7 @@ export default function App() {
       const subH = avail - kH;
       if (mainRef.current)  mainRef.current.style.height  = kH   + "px";
       if (rsiRef.current)   rsiRef.current.style.height   = subH + "px";
-      if (macdRef.current)  macdRef.current.style.height  = subH + "px";
+      if (kdRef.current)    kdRef.current.style.height    = subH + "px";
     });
     if (chartContainerRef.current) chartObs.observe(chartContainerRef.current);
 
@@ -1276,8 +1280,9 @@ export default function App() {
     const bbUs  = addSeries(main, LineSeries, { color:"rgba(148,163,184,.3)", lineWidth:1, lineStyle:2, lastValueVisible:false, priceLineVisible:false }, "addLineSeries");
     const bbLs  = addSeries(main, LineSeries, { color:"rgba(148,163,184,.3)", lineWidth:1, lineStyle:2, lastValueVisible:false, priceLineVisible:false }, "addLineSeries");
     const rsiS  = addSeries(rsi,  LineSeries, { color:"#f59e0b", lineWidth:2 }, "addLineSeries");
-    const macdS = addSeries(macd, HistogramSeries, {}, "addHistogramSeries");
-    seriesRef.current = { candle, volume, ma5s, ma10s, ma20s, ma60s, bbUs, bbLs, rsiS, macdS };
+    const kdKs  = addSeries(kd, LineSeries, { color:"#f97316", lineWidth:2, lastValueVisible:false, priceLineVisible:false }, "addLineSeries");
+    const kdDs  = addSeries(kd, LineSeries, { color:"#38bdf8", lineWidth:2, lastValueVisible:false, priceLineVisible:false }, "addLineSeries");
+    seriesRef.current = { candle, volume, ma5s, ma10s, ma20s, ma60s, bbUs, bbLs, rsiS, kdKs, kdDs };
 
     main.subscribeCrosshairMove(param => {
       if (!param.point||!param.time) { setHovered(null); return; }
@@ -1291,7 +1296,7 @@ export default function App() {
       targets.forEach(t=>{try{t.timeScale().setVisibleLogicalRange(range);}catch(_){}});
       syncingRef.current=false;
     });
-    syncRange(main,[rsi,macd]); syncRange(rsi,[main,macd]); syncRange(macd,[main,rsi]);
+    syncRange(main,[rsi,kd]); syncRange(rsi,[main,kd]); syncRange(kd,[main,rsi]);
 
     return () => {
       chartObs.disconnect();
@@ -1324,7 +1329,8 @@ export default function App() {
     s.ma20s.setData(pickLine(rows,"ma20")); s.ma60s.setData(pickLine(rows,"ma60"));
     s.bbUs.setData(pickLine(rows,"bb_upper")); s.bbLs.setData(pickLine(rows,"bb_lower"));
     s.rsiS.setData(pickLine(rows,"rsi14"));
-    s.macdS.setData(rows.filter(r=>Number.isFinite(r.macd_hist)).map(r=>({time:r.time,value:r.macd_hist,color:r.macd_hist>=0?"rgba(239,68,68,.8)":"rgba(34,197,94,.8)"})));
+    s.kdKs.setData(pickLine(rows,"kd_k"));
+    s.kdDs.setData(pickLine(rows,"kd_d"));
     Object.values(chartsRef.current).forEach(c=>c.timeScale().fitContent());
   }, [rows]);
 
@@ -1541,9 +1547,14 @@ export default function App() {
               </div>
               <div>
                 <div style={{ color:"#94a3b8", fontSize:10, margin:"4px 0 2px" }}>
-                  MACD {Number.isFinite(displayBar.macd_hist)&&<b style={{ color:displayBar.macd_hist>=0?"#ef4444":"#22c55e" }}>{fmt(displayBar.macd_hist,3)}</b>}
+                  KD&nbsp;
+                  {Number.isFinite(displayBar.kd_k)&&<>
+                    <span style={{ color:"#f97316" }}>K <b>{fmt(displayBar.kd_k,1)}</b></span>
+                    {" "}
+                    <span style={{ color:"#38bdf8" }}>D <b>{fmt(displayBar.kd_d,1)}</b></span>
+                  </>}
                 </div>
-                <div ref={macdRef} style={{height:40}} />
+                <div ref={kdRef} style={{height:40}} />
               </div>
             </div>
           </div>

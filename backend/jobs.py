@@ -248,6 +248,44 @@ def fetch_twse_stock_month(stock_id: str, year: int, month: int, product_type: s
     return written, errors
 
 
+def _fetch_yfinance_tpex_month(stock_id: str, year: int, month: int, product_type: str = "股票"):
+    """Fallback: fetch TPEx monthly K-line via yfinance (.TWO suffix)."""
+    import calendar as _cal
+    import datetime as _dt
+    try:
+        import yfinance as yf
+    except ImportError:
+        return 0, ["yfinance not installed"]
+    try:
+        start = _dt.date(year, month, 1).isoformat()
+        last_day = _cal.monthrange(year, month)[1]
+        end = _dt.date(year, month, last_day).isoformat()
+        ticker = f"{stock_id}.TWO"
+        hist = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=True)
+        if hist is None or hist.empty:
+            return 0, [f"yfinance no data: {ticker} {year}-{month:02d}"]
+        written, errors = 0, []
+        for idx, row in hist.iterrows():
+            try:
+                date_str = idx.strftime("%Y%m%d")
+                def _v(col):
+                    val = row.get(col)
+                    return float(val) if val is not None and float(val) == float(val) else None
+                doc = {
+                    "market": "TPEx", "product_type": product_type,
+                    "open": _v("Open"), "high": _v("High"),
+                    "low": _v("Low"), "close": _v("Close"),
+                    "volume": _v("Volume"), "source": "yfinance_tpex",
+                }
+                if save_stock_daily(stock_id, date_str, doc):
+                    written += 1
+            except Exception as exc:
+                errors.append(f"yf row {stock_id}: {exc}")
+        return written, errors
+    except Exception as exc:
+        return 0, [f"yfinance error {stock_id}: {exc}"]
+
+
 def fetch_tpex_stock_month(stock_id: str, year: int, month: int, product_type: str = "股票"):
     errors = []
     written = 0
@@ -271,7 +309,9 @@ def fetch_tpex_stock_month(stock_id: str, year: int, month: int, product_type: s
     rows = _rows(payload)
     fields = _fields(payload)
     if not rows:
-        return 0, errors or [f"TPEx no rows {stock_id} {year}-{month:02d}"]
+        # TPEx API unavailable — fall back to yfinance
+        w2, e2 = _fetch_yfinance_tpex_month(stock_id, year, month, product_type)
+        return w2, errors + e2
 
     date_i = _idx(fields, "日期", default=0)
     close_i = _idx(fields, "收盤", default=2)
@@ -337,9 +377,15 @@ def write_t86_chips(start_date: str, result: dict):
         fields = _fields(payload)
         code_i = _idx(fields, "證券", "代號", default=0)
         name_i = _idx(fields, "證券", "名稱", default=1)
-        foreign_i = _idx(fields, "外資", "買賣超", default=4)
-        trust_i = _idx(fields, "投信", "買賣超", default=7)
-        dealer_i = _idx(fields, "自營商", "買賣超", default=8)
+        # T86 fields: "外陸資買賣超股數(不含外資自營商)" at 4, "投信買賣超股數" at 10,
+        # "自營商買賣超股數" at 11, "三大法人買賣超股數" at 18.
+        # Use "外陸資" (not "外資") to avoid matching the parenthetical "(不含外資自營商)"
+        # which also contains "自營商", causing both foreign_i and dealer_i to land on index 4.
+        foreign_i = _idx(fields, "外陸資", "買賣超", default=4)
+        trust_i = _idx(fields, "投信", "買賣超", default=10)
+        # "自營商買賣超股數" is a longer unique key that won't match index 4
+        dealer_i = _idx(fields, "自營商買賣超股數", default=11)
+        total_i = _idx(fields, "三大法人", "買賣超", default=18)
         written = 0
         for row in rows:
             try:
@@ -355,6 +401,7 @@ def write_t86_chips(start_date: str, result: dict):
                     "investment_trust_buy": safe_int(_row_value(row, trust_i)),
                     "dealer": safe_int(_row_value(row, dealer_i)),
                     "dealer_buy": safe_int(_row_value(row, dealer_i)),
+                    "institution_total_buy": safe_int(_row_value(row, total_i)),
                     "source_t86": "TWSE T86",
                     "source": "TWSE T86",
                     "chip_date": d,

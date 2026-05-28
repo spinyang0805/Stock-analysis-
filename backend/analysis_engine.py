@@ -44,6 +44,19 @@ def enrich_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["MACD_SIGNAL"] = df["MACD"].ewm(span=9, adjust=False).mean()
     df["MACD_HIST"] = df["MACD"] - df["MACD_SIGNAL"]
 
+    # KD (9-period Stochastic Oscillator), initial K=D=50 per Taiwan convention
+    low9  = df["Low"].rolling(9).min()
+    high9 = df["High"].rolling(9).max()
+    rsv   = (df["Close"] - low9) / (high9 - low9).replace(0, np.nan) * 100
+    k_arr = [50.0] * len(df)
+    d_arr = [50.0] * len(df)
+    for i in range(1, len(df)):
+        rv = rsv.iloc[i]
+        k_arr[i] = 2/3 * k_arr[i-1] + 1/3 * (rv if pd.notna(rv) else k_arr[i-1])
+        d_arr[i] = 2/3 * d_arr[i-1] + 1/3 * k_arr[i]
+    df["KD_K"] = k_arr
+    df["KD_D"] = d_arr
+
     df["BB_MID"] = df["Close"].rolling(20).mean()
     bb_std = df["Close"].rolling(20).std()
     df["BB_UPPER"] = df["BB_MID"] + 2 * bb_std

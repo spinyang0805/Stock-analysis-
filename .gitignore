@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables (never commit secrets)
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+.Python
+
+# Temporary / local files
+tmp_audit.json
+*.log
+*.tmp
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Render / Fly build artifacts
+.fly/
