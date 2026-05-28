@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as LightweightCharts from "lightweight-charts";
 import { supabase } from "./supabase.js";
+import BatchPage from "./BatchPage.jsx";
 
 const { createChart, CandlestickSeries, LineSeries, HistogramSeries } = LightweightCharts;
 const API = "https://stock-analysis-tw.fly.dev";
@@ -42,7 +43,7 @@ function normalizeRows(payload) {
       ma5: num(r.ma5, r.MA5),   ma10: num(r.ma10, r.MA10),
       ma20: num(r.ma20, r.MA20), ma60: num(r.ma60, r.MA60),
       bb_upper: num(r.bb_upper), bb_lower: num(r.bb_lower),
-      rsi14: num(r.rsi14), macd_hist: num(r.macd_hist),
+      rsi14: num(r.rsi14),
       kd_k: num(r.kd_k), kd_d: num(r.kd_d),
       bb_width: num(r.bb_width),
     }))
@@ -166,7 +167,7 @@ function detectBlackCandleAccum(rows, chipData) {
   const latest = rows.at(-1);
   const prev = rows.at(-2) || {};
   const cl = chipData?.latest_chip || {};
-  const instBuy = Number(cl.institution_total_buy || 0) > 0;
+  const instBuy = (Number(cl.foreign_buy || 0) + Number(cl.investment_trust_buy || 0) + Number(cl.dealer_buy || 0)) > 0;
   const isBlack = latest.close < latest.open;
   const closeAbovePrev = latest.close > (prev.close || 0);
   const isAccum = isBlack && closeAbovePrev && instBuy;
@@ -713,6 +714,7 @@ function SideNav({ page, setPage, open, setOpen, user, userRole, onSignIn, onSig
     { id:"dashboard", icon:"📈", label:"個股分析" },
     { id:"ai",        icon:"🤖", label:"AI 選股",    needAuth:true },
     { id:"watchlist", icon:"⭐", label:"存股清單",   needAuth:true },
+    { id:"batch",     icon:"📋", label:"批次工具",   needRole:"admin" },
     { id:"admin",     icon:"🛠", label:"帳號管理",   needRole:"admin" },
   ].filter(it => {
     if (it.needRole && userRole !== it.needRole) return false;
@@ -1472,6 +1474,7 @@ export default function App() {
       )}
       {page==="ai"       ? <AIChatPage /> :
        page==="watchlist"? <WatchlistPage user={user} setPage={setPage} setStock={setStock} setInput={setInput} setLoadKey={setLoadKey} /> :
+       page==="batch"    ? <BatchPage /> :
        page==="admin"    ? <AdminPage /> : (
       <div style={{ flex:1, minWidth:0, overflow:"auto", ...pageStyle }}>
 
@@ -1505,11 +1508,15 @@ export default function App() {
             <input value={input} onFocus={()=>setOpenSuggest(true)}
               onChange={e=>{setInput(e.target.value); setOpenSuggest(true);}}
               onKeyDown={e=>{if(e.key==="Enter")submit();}}
+              onBlur={()=>setTimeout(()=>setOpenSuggest(false),150)}
               placeholder="輸入股票代號或名稱" style={inputStyle} />
             {openSuggest&&suggestions.length>0&&(
               <div style={suggestStyle}>
-                {suggestions.map(item=>(
-                  <div key={item.code} onMouseDown={()=>{setStock(item);setInput(item.code);setOpenSuggest(false);}} style={suggestItemStyle}>
+                {suggestions.map((item,idx)=>(
+                  <div key={item.code} onMouseDown={()=>{setStock(item);setInput(item.code);setOpenSuggest(false);}}
+                    style={{...suggestItemStyle, background: idx===0?"rgba(37,99,235,.15)":"transparent"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="rgba(37,99,235,.1)"}
+                    onMouseLeave={(e,i=idx)=>e.currentTarget.style.background=i===0?"rgba(37,99,235,.15)":"transparent"}>
                     <b style={{ color:"#facc15" }}>{item.code}</b> {item.name}
                     <span style={{ color:"#94a3b8", marginLeft:8 }}>{item.market}</span>
                   </div>

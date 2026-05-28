@@ -34,7 +34,7 @@ def _load_dotenv():
             if not line or line.startswith("#") or "=" not in line:
                 continue
             k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+            os.environ[k.strip()] = v.strip().strip('"').strip("'")
 
 _load_dotenv()
 
@@ -266,9 +266,9 @@ def main():
         print("❌ 無法取得股票清單，請檢查網路或 API 狀態")
         sys.exit(1)
 
-    # missing-only 模式：一次查詢過濾，只留有缺資料的股票
+    # missing-only 模式：一次查詢過濾，只留 K線 不足的股票（籌碼由 local_chip_backfill.py 負責）
     if args.missing_only and not args.force:
-        stocks = get_missing_stocks(stocks, args.min_rows)
+        stocks = get_missing_stocks(stocks, args.min_rows, min_chip_rows=0)
         if not stocks:
             print("✅ 所有股票資料都已足夠，不需補充！")
             sys.exit(0)

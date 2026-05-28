@@ -1,0 +1,7 @@
+{
+  "tool_name": "PowerShell",
+  "tool_input_preview": "{\"command\":\"Set-Location \\\"D:\\\\個人資料\\\\投資理財\\\\股票網站分析\\\\Stock-analysis-\\\"\\nnode --stack-trace-limit=50 node_modules/vite/bin/vite.js build 2>&1\\nWrite-Host \\\"EXIT: $LASTEXITCODE\\\"\",\"timeout\":180000,\"descri...",
+  "error": "Exit code 9\n\u001b[36mvite v5.4.11 \u001b[32mbuilding for production...\u001b[36m\u001b[39m\ntransforming...\n\u001b[32m✓\u001b[39m 82 modules transformed.\nEXIT: -1073740791",
+  "timestamp": "2026-05-28T03:57:28.415Z",
+  "retry_count": 3
+}

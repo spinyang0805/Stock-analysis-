@@ -93,7 +93,7 @@ flowchart TD
 4. 呼叫 `/api/kline/{stock}`。
 5. 呼叫 `/api/analysis/{stock}`。
 6. 將 API K線資料 normalize 成 lightweight-charts 可用格式。
-7. 顯示 K線、成交量、RSI、MACD、MA、布林。
+7. 顯示 K線、成交量、RSI、KD、MA、布林。
 8. 顯示資料狀態、Decision Score、技術指標。
 
 ### 4.3 前端版本規則
