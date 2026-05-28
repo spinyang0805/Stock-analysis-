@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
-    "lightweight-charts": "latest",
+    "lightweight-charts": "^4.2.3",
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
