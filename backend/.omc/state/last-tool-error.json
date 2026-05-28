@@ -1,0 +1,7 @@
+{
+  "tool_name": "PowerShell",
+  "tool_input_preview": "{\"command\":\"Set-Location \\\"D:\\\\個人資料\\\\投資理財\\\\股票網站分析\\\\Stock-analysis-\\\\backend\\\"\\nfly deploy 2>&1 | Select-String \\\"Done|succeeded|failed|error|visit|DNS\\\" | Select-Object -First 15\\nWrite-Host \\\"FLY: $L...",
+  "error": "Exit code 255\n#1 transferring dockerfile: 237B 0.9s done\r\n#1 DONE 0.9s\r\n#2 DONE 0.3s\r\n#3 transferring context: 2B 0.6s done\r\n#3 DONE 0.6s\r\n#4 resolve docker.io/library/python:3.11-slim@sha256:a3ab0b966bc4e91546a033e22093cb840908979487a9fc0e6e38295747e49ac0 done\r\n#4 DONE 0.0s\r\n#5 transferring context: 14.01kB 0.9s done\r\n#5 DONE 0.9s\r\n#9 DONE 0.0s\r\n#10 exporting layers 0.0s done\r\n#10 exporting manifest sha256:38045e2aba37a76a41e816cada41f92e3c248cecc10b228d9a28b8ab2723091b done\r\n#10 exporting conf...",
+  "timestamp": "2026-05-28T05:00:16.388Z",
+  "retry_count": 1
+}

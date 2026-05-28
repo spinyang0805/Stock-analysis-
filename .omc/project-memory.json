@@ -1,0 +1,212 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1779940811634,
+  "projectRoot": "D:\\個人資料\\投資理財\\股票網站分析\\Stock-analysis-",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "vite",
+        "version": "5.4.11",
+        "category": "build"
+      },
+      {
+        "name": "react",
+        "version": "latest",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "latest",
+        "category": "frontend"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "vite --host 0.0.0.0",
+      "build": "vite build",
+      "preview": "vite preview --host 0.0.0.0"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "src"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "backend": {
+      "path": "backend",
+      "purpose": null,
+      "fileCount": 24,
+      "lastAccessed": 1779940811487,
+      "keyFiles": [
+        "analysis_engine.py",
+        "auto_routes.py",
+        "backfill_log.txt",
+        "chip_routes.py",
+        "dashboard_service.py"
+      ]
+    },
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 1,
+      "lastAccessed": 1779940811488,
+      "keyFiles": [
+        "index.html"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 9,
+      "lastAccessed": 1779940811524,
+      "keyFiles": [
+        "AGENT_HANDOVER.md",
+        "AI_PROMPT.md",
+        "API_REFERENCE.md",
+        "BACKEND_ARCHITECTURE.md",
+        "BUSINESS_RULE_ENGINE.md"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 7,
+      "lastAccessed": 1779940811525,
+      "keyFiles": [
+        "App.jsx",
+        "BatchPage.jsx",
+        "DatabaseMaintenancePage.jsx",
+        "DataTablesPage.jsx",
+        "main.jsx"
+      ]
+    },
+    "dist\\assets": {
+      "path": "dist\\assets",
+      "purpose": "Static assets",
+      "fileCount": 1,
+      "lastAccessed": 1779940811528,
+      "keyFiles": [
+        "index-RNHXKwnG.js"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "backend\\main.py",
+      "accessCount": 11,
+      "lastAccessed": 1779943609905,
+      "type": "file"
+    },
+    {
+      "path": "src\\App.jsx",
+      "accessCount": 7,
+      "lastAccessed": 1779943364642,
+      "type": "directory"
+    },
+    {
+      "path": "vite.config.js",
+      "accessCount": 4,
+      "lastAccessed": 1779941394022,
+      "type": "file"
+    },
+    {
+      "path": "backend\\batch_api.py",
+      "accessCount": 3,
+      "lastAccessed": 1779944355999,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 2,
+      "lastAccessed": 1779941482032,
+      "type": "directory"
+    },
+    {
+      "path": "backend\\firebase_cache.py",
+      "accessCount": 2,
+      "lastAccessed": 1779943547230,
+      "type": "file"
+    },
+    {
+      "path": "src\\BatchPage.jsx",
+      "accessCount": 2,
+      "lastAccessed": 1779943711941,
+      "type": "file"
+    },
+    {
+      "path": "render.yaml",
+      "accessCount": 1,
+      "lastAccessed": 1779941488479,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 1,
+      "lastAccessed": 1779941520075,
+      "type": "file"
+    },
+    {
+      "path": "backend",
+      "accessCount": 1,
+      "lastAccessed": 1779942303015,
+      "type": "directory"
+    },
+    {
+      "path": "backend\\analysis_engine.py",
+      "accessCount": 1,
+      "lastAccessed": 1779942332885,
+      "type": "directory"
+    },
+    {
+      "path": "backend\\chip_routes.py",
+      "accessCount": 1,
+      "lastAccessed": 1779943308813,
+      "type": "file"
+    },
+    {
+      "path": "backend\\jobs.py",
+      "accessCount": 1,
+      "lastAccessed": 1779943309499,
+      "type": "file"
+    },
+    {
+      "path": "backend\\firebase.py",
+      "accessCount": 1,
+      "lastAccessed": 1779943531763,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
