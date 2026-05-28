@@ -111,11 +111,22 @@ def install(app):
         date = today_str()
         results = {}
 
-        # TWSE T86
+        # TWSE T86 — try today, fall back up to 5 trading days
         try:
-            payload, err = fetch_json(TWSE_T86, params={"response": "json", "date": date, "selectType": "ALL"})
-            rows = payload.get("data") or []
-            results["twse_t86"] = {"ok": bool(rows), "rows": len(rows), "date": date, "error": err}
+            from jobs import recent_trading_dates as _rtd
+            t86_ok, t86_rows, t86_date, t86_err = False, 0, date, None
+            for d in list(_rtd(5)):
+                payload, err = fetch_json(TWSE_T86, params={"response": "json", "date": d, "selectType": "ALL"})
+                rows = payload.get("data") or []
+                if rows:
+                    t86_ok, t86_rows, t86_date, t86_err = True, len(rows), d, err
+                    break
+                t86_err = err
+            results["twse_t86"] = {
+                "ok": t86_ok, "rows": t86_rows, "date": t86_date,
+                "error": t86_err,
+                "note": "T86 posts after 4pm TW time; showing most recent available" if not t86_ok else None,
+            }
         except Exception as exc:
             results["twse_t86"] = {"ok": False, "rows": 0, "error": str(exc)}
 
