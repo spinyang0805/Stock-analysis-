@@ -154,13 +154,14 @@ def save_fundamentals(stock_id: str, payload: Dict[str, Any]) -> bool:
         return False
     sql = """
         INSERT INTO fundamentals
-            (stock_id, pe_ratio, dividend_yield, pb_ratio,
+            (stock_id, pe_ratio, dividend_yield, pb_ratio, eps,
              revenue, revenue_mom, revenue_yoy, revenue_date, valuation_date, source)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         ON CONFLICT (stock_id) DO UPDATE SET
             pe_ratio       = COALESCE(EXCLUDED.pe_ratio,       fundamentals.pe_ratio),
             dividend_yield = COALESCE(EXCLUDED.dividend_yield, fundamentals.dividend_yield),
             pb_ratio       = COALESCE(EXCLUDED.pb_ratio,       fundamentals.pb_ratio),
+            eps            = COALESCE(EXCLUDED.eps,            fundamentals.eps),
             revenue        = COALESCE(EXCLUDED.revenue,        fundamentals.revenue),
             revenue_mom    = COALESCE(EXCLUDED.revenue_mom,    fundamentals.revenue_mom),
             revenue_yoy    = COALESCE(EXCLUDED.revenue_yoy,    fundamentals.revenue_yoy),
@@ -172,6 +173,7 @@ def save_fundamentals(stock_id: str, payload: Dict[str, Any]) -> bool:
     _, err = _run(sql, (
         stock_id,
         payload.get("pe_ratio"), payload.get("dividend_yield"), payload.get("pb_ratio"),
+        payload.get("eps"),
         payload.get("revenue"), payload.get("revenue_mom"), payload.get("revenue_yoy"),
         payload.get("revenue_date"), payload.get("valuation_date"), payload.get("source"),
     ))

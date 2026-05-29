@@ -219,10 +219,15 @@ function FundamentalsSection({ jobs, poll, logs, setLogs }) {
         </div>
         {valResult && (
           <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:12 }}>
-            <div style={{ background:"#1e293b", borderRadius:8, padding:"6px 12px" }}>
-              <div style={{ color:"#64748b" }}>TWSE 上市寫入</div>
-              <div style={{ color:"#22c55e", fontWeight:700, fontSize:16 }}>{valResult.twse_valuation_written ?? "—"}</div>
-            </div>
+            {[
+              ["TWSE 上市寫入", valResult.twse_valuation_written],
+              ["TPEx 上櫃寫入", valResult.tpex_valuation_written],
+            ].map(([l, v]) => (
+              <div key={l} style={{ background:"#1e293b", borderRadius:8, padding:"6px 12px" }}>
+                <div style={{ color:"#64748b" }}>{l}</div>
+                <div style={{ color:"#22c55e", fontWeight:700, fontSize:16 }}>{v ?? "—"}</div>
+              </div>
+            ))}
             {(valResult.errors||[]).slice(0,3).map((e,i) => (
               <div key={i} style={{ color:"#ef4444", fontSize:11, alignSelf:"center" }}>{e}</div>
             ))}

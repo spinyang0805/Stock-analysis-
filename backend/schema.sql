@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS fundamentals (
     pe_ratio       FLOAT,
     dividend_yield FLOAT,
     pb_ratio       FLOAT,
+    eps            FLOAT,
     revenue        BIGINT,
     revenue_mom    FLOAT,
     revenue_yoy    FLOAT,

@@ -29,7 +29,8 @@ TPEX_ALL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyCloseQuotes"
 TPEX_STOCK_DAY = "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"
 TPEX_INSTITUTIONAL = "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade"
 TPEX_MARGIN = "https://www.tpex.org.tw/www/zh-tw/margin/balance"
-TWSE_BWIBBU = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_d"
+TWSE_BWIBBU  = "https://www.twse.com.tw/exchangeReport/BWIBBU_d"   # www domain works from Fly.io
+TPEX_PE_BOOK = "https://www.tpex.org.tw/www/zh-tw/afterTrading/peQryDate"
 MOPS_REVENUE = "https://mops.twse.com.tw/mops/web/ajax_t05st10"
 
 HOT_STOCKS = ["2330", "2317", "3702", "2454", "2382"]
@@ -476,12 +477,39 @@ def write_margin_chips(start_date: str, result: dict):
     return 0
 
 
+def _parse_bwibbu_row(row):
+    """Parse valuation row from TWSE BWIBBU_d or TPEx peQryDate.
+    Both APIs return arrays: [code, name, close, yield%, year, pe, pb, quarter]
+    Returns (code, payload_dict) or (None, {}) on invalid row.
+    """
+    if not row or len(row) < 7:
+        return None, {}
+    code = str(row[0]).strip()
+    if not code or not code[0].isdigit():
+        return None, {}
+    def _fv(v):
+        try:
+            s = str(v).replace(",", "").strip()
+            return float(s) if s not in ("", "-", "--", "N/A") else None
+        except Exception:
+            return None
+    close = _fv(row[2])
+    dy    = _fv(row[3])
+    pe    = _fv(row[5])
+    pb    = _fv(row[6])
+    eps   = round(close / pe, 2) if close and pe and pe > 0 else None
+    return code, {
+        "pe_ratio": pe, "dividend_yield": dy, "pb_ratio": pb,
+        "eps": eps,
+    }
+
+
 def write_twse_valuation(result: dict):
-    """Fetch BWIBBU_d and write PE/PB/殖利率 for all TWSE listed stocks (one API call)."""
+    """Fetch BWIBBU_d and write PE/PB/殖利率/EPS for all TWSE listed stocks."""
     from firebase_cache import save_fundamentals
     today = today_str()
     try:
-        r = requests.get(TWSE_BWIBBU, headers={"Accept": "application/json"}, timeout=20)
+        r = requests.get(TWSE_BWIBBU, params={"response": "json"}, headers=HEADERS, timeout=20)
         r.raise_for_status()
         data = r.json()
     except Exception as exc:
@@ -489,32 +517,53 @@ def write_twse_valuation(result: dict):
         return 0
 
     written = 0
-    for row in data:
-        code = str(row.get("Code") or row.get("證券代號") or "").strip()
+    for row in data.get("data", []):
+        code, vals = _parse_bwibbu_row(row)
         if not code:
             continue
-        def _fv(key, alt=None, _row=row):
-            v = _row.get(key) or (_row.get(alt) if alt else None)
-            try:
-                return float(str(v).replace(",", "")) if v not in (None, "", "-", "--") else None
-            except Exception:
-                return None
-        pe = _fv("PeRatio", "本益比")
-        dy = _fv("DividendYield", "殖利率")
-        pb = _fv("PbRatio", "股價淨值比")
-        if pe is None and dy is None and pb is None:
-            continue
-        if save_fundamentals(code, {
-            "pe_ratio": pe, "dividend_yield": dy, "pb_ratio": pb,
-            "valuation_date": today, "source": "twse_bwibbu",
-        }):
+        if save_fundamentals(code, {**vals, "valuation_date": today, "source": "twse_bwibbu"}):
             written += 1
     result["twse_valuation_written"] = written
     return written
 
 
+def write_tpex_valuation(result: dict):
+    """Fetch TPEx peQryDate and write PE/PB/殖利率/EPS for all TPEx stocks."""
+    from firebase_cache import save_fundamentals
+    today = today_str()
+    written = 0
+    for d in list(recent_trading_dates(5)):
+        roc_date = f"{int(d[:4]) - 1911}/{d[4:6]}/{d[6:8]}"
+        try:
+            r = requests.get(
+                TPEX_PE_BOOK,
+                params={"response": "json", "date": roc_date},
+                headers=TPEX_HEADERS,
+                timeout=20,
+            )
+            r.raise_for_status()
+            data = r.json()
+            tables = data.get("tables", [])
+            rows = tables[0].get("data", []) if tables else []
+            if not rows:
+                continue
+            for row in rows:
+                code, vals = _parse_bwibbu_row(row)
+                if not code:
+                    continue
+                if save_fundamentals(code, {**vals, "valuation_date": today, "source": "tpex_pebook"}):
+                    written += 1
+            result["tpex_valuation_written"] = written
+            return written
+        except Exception as exc:
+            result.setdefault("errors", []).append(f"TPEx PE {roc_date}: {exc}")
+    result["tpex_valuation_written"] = written
+    return written
+
+
 def write_mops_revenue_all(result: dict, months_back: int = 0):
-    """Fetch MOPS monthly revenue for all stocks (上市+上櫃) and write to fundamentals."""
+    """Fetch MOPS monthly revenue for all stocks (上市+上櫃) and write to fundamentals.
+    Uses a requests.Session to carry cookies (bypasses MOPS WAF)."""
     from firebase_cache import save_fundamentals
     now = datetime.now()
     m = now.month - months_back
@@ -525,18 +574,36 @@ def write_mops_revenue_all(result: dict, months_back: int = 0):
     roc_year = y - 1911
     revenue_date = f"{y}-{m:02d}"
 
+    # Warm up session with cookies so MOPS WAF lets the POST through
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    try:
+        session.get("https://mops.twse.com.tw/mops/web/t05st10", timeout=15)
+    except Exception:
+        pass
+
+    mops_headers = {
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": "https://mops.twse.com.tw/mops/web/t05st10",
+        "Origin": "https://mops.twse.com.tw",
+    }
+
     total_written = 0
     result.setdefault("errors", [])
     for typek, label in [("sii", "上市"), ("otc", "上櫃")]:
         try:
-            r = requests.post(
+            r = session.post(
                 MOPS_REVENUE,
                 data={"firstin": "1", "off": "1", "TYPEK": typek,
                       "year": str(roc_year), "mon": f"{m:02d}"},
-                headers={"User-Agent": "Mozilla/5.0", "Referer": "https://mops.twse.com.tw/"},
-                timeout=25,
+                headers=mops_headers,
+                timeout=30,
             )
             r.raise_for_status()
+            if r.text.strip().startswith("<"):
+                result["errors"].append(f"MOPS {label}: 安全機制封鎖（非 JSON 回應）")
+                continue
             data = r.json()
             written = 0
             for row in data.get("aaData", []):

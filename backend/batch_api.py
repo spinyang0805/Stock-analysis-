@@ -33,6 +33,7 @@ from jobs import (
     write_tpex_insti_chips,
     write_tpex_margin_chips,
     write_twse_valuation,
+    write_tpex_valuation,
     write_mops_revenue_all,
 )
 
@@ -274,12 +275,14 @@ def install(app):
     # ── 7. Fundamentals: valuation (sync) ──────────────────────────────────────
     @app.get("/api/batch/fundamentals/valuation")
     def batch_fundamentals_valuation():
-        """Write today's PE/PB/殖利率 for all TWSE listed stocks (BWIBBU_d, one API call)."""
+        """Write today's PE/PB/殖利率/EPS for all TWSE+TPEx stocks (sync, ~5-10s)."""
         result = {"errors": []}
         write_twse_valuation(result)
+        write_tpex_valuation(result)
         return _json({
             "status": "ok" if not result.get("errors") else "partial",
             "twse_valuation_written": result.get("twse_valuation_written", 0),
+            "tpex_valuation_written": result.get("tpex_valuation_written", 0),
             "errors": result.get("errors", [])[:10],
             "done_at": datetime.now(TW_TZ).isoformat(),
         })
