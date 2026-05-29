@@ -355,7 +355,27 @@ def install(app):
         result = _start_job(job_id, _run_revenue)
         return _json({**result, "months_back": months_back})
 
-    # ── 9. Job status ───────────────────────────────────────────────────────
+    # ── 10. Fundamentals DB query (verify data) ────────────────────────────
+    @app.get("/api/batch/fundamentals/query")
+    def batch_fundamentals_query(stock: str = None, limit: int = 10):
+        """Read from fundamentals table to verify data was written."""
+        from firebase_cache import _run as _db_run
+        if stock:
+            rows, err = _db_run(
+                "SELECT * FROM fundamentals WHERE stock_id=%s", (stock,), fetch="all"
+            )
+        else:
+            rows, err = _db_run(
+                "SELECT stock_id, pe_ratio, pb_ratio, eps, dividend_yield, revenue, revenue_yoy, revenue_mom, source, updated_at FROM fundamentals ORDER BY updated_at DESC LIMIT %s",
+                (limit,), fetch="all"
+            )
+        if err:
+            return _json({"error": str(err)})
+        count_row, _ = _db_run("SELECT COUNT(*) FROM fundamentals", fetch="one")
+        total = count_row[0] if count_row else 0
+        return _json({"total_in_db": total, "rows": rows or [], "error": err})
+
+    # ── 11. Job status ───────────────────────────────────────────────────────
     @app.get("/api/batch/job/{job_id}")
     def batch_job_status(job_id: str):
         with _JOBS_LOCK:
