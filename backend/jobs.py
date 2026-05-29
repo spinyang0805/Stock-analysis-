@@ -29,7 +29,7 @@ TPEX_ALL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyCloseQuotes"
 TPEX_STOCK_DAY = "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"
 TPEX_INSTITUTIONAL = "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade"
 TPEX_MARGIN = "https://www.tpex.org.tw/www/zh-tw/margin/balance"
-TWSE_BWIBBU  = "https://www.twse.com.tw/exchangeReport/BWIBBU_d"   # www domain works from Fly.io
+TWSE_BWIBBU  = "https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d"  # rwd path works from Fly.io
 TPEX_PE_BOOK = "https://www.tpex.org.tw/www/zh-tw/afterTrading/peQryDate"
 MOPS_REVENUE = "https://mops.twse.com.tw/mops/web/ajax_t05st10"
 
