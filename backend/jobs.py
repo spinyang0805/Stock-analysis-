@@ -591,7 +591,13 @@ def write_yfinance_fundamentals(codes: list, market: str, result: dict,
     for code in codes:
         try:
             ticker = yf.Ticker(f"{code}{suffix}")
-            info = ticker.info or {}
+            try:
+                raw = ticker.info
+                info = raw if isinstance(raw, dict) else {}
+            except Exception:
+                skipped += 1
+                time.sleep(sleep_sec)
+                continue
             pe  = info.get("trailingPE") or info.get("forwardPE")
             pb  = info.get("priceToBook")
             eps = info.get("trailingEps")
