@@ -235,8 +235,11 @@ function FundamentalsSection({ jobs, poll, logs, setLogs }) {
         )}
       </div>
 
+      {/* yfinance batch */}
+      <YfinanceFundSection jobs={jobs} poll={poll} logs={logs} setLogs={setLogs} />
+
       {/* Monthly revenue */}
-      <div>
+      <div style={{ borderTop:"1px solid #1e293b", paddingTop:14, marginTop:4 }}>
         <div style={{ fontWeight:700, fontSize:13, color:"#94a3b8", marginBottom:8 }}>
           月營收寫入（MOPS 公開資訊觀測站，上市 + 上櫃，背景執行）
         </div>
@@ -255,6 +258,73 @@ function FundamentalsSection({ jobs, poll, logs, setLogs }) {
         </div>
         {revenueJob && <JobCard job={revenueJob} />}
       </div>
+    </div>
+  );
+}
+
+// ── Yfinance fundamentals sub-section (embedded inside FundamentalsSection) ──
+function YfinanceFundSection({ jobs, poll, logs, setLogs }) {
+  const [market, setMarket] = useState("上市");
+  const [offset, setOffset] = useState(0);
+  const [limit, setLimit] = useState(100);
+  const [jobId, setJobId] = useState(null);
+  const [nextOffset, setNextOffset] = useState(null);
+  const job = jobId ? jobs[jobId] : null;
+
+  async function run() {
+    addLog(setLogs, `yfinance 估值：${market} offset=${offset} limit=${limit}`);
+    try {
+      const url = `${API}/api/batch/fundamentals/yfinance?market=${encodeURIComponent(market)}&offset=${offset}&limit=${limit}`;
+      const res = await fetch(url, { cache:"no-store" });
+      const j = await res.json();
+      setJobId(j.job_id);
+      if (j.next_offset != null) setNextOffset(j.next_offset);
+      poll(j.job_id, (done) => {
+        const r = done.result || {};
+        const written = r[`yfinance_${market}_written`] ?? r.yfinance_written ?? "?";
+        addLog(setLogs, `yfinance 完成：${market} 寫入 ${written} 筆，next=${r.next_offset ?? "結束"}`);
+        if (r.next_offset != null) setNextOffset(r.next_offset);
+      });
+    } catch (e) {
+      addLog(setLogs, `yfinance 失敗：${e.message}`);
+    }
+  }
+
+  return (
+    <div style={{ borderBottom:"1px solid #1e293b", paddingBottom:14, marginBottom:14 }}>
+      <div style={{ fontWeight:700, fontSize:13, color:"#94a3b8", marginBottom:6 }}>
+        yfinance 批次估值（PE/PB/EPS/殖利率，不限台灣IP，背景執行）
+      </div>
+      <div style={{ fontSize:11, color:"#475569", marginBottom:8 }}>
+        ⚠ 每股約 0.25s，100筆 ≈ 25s。TWSE 被封 IP 時使用此備援。
+      </div>
+      <div style={S.row}>
+        <div style={S.col}>
+          <span style={S.label}>市場</span>
+          <select style={S.select} value={market} onChange={(e) => { setMarket(e.target.value); setOffset(0); setNextOffset(null); }}>
+            <option value="上市">上市 (.TW)</option>
+            <option value="上櫃">上櫃 (.TWO)</option>
+          </select>
+        </div>
+        <div style={S.col}>
+          <span style={S.label}>起始位置</span>
+          <input style={{ ...S.input, width:70 }} type="number" min={0} value={offset} onChange={(e) => setOffset(Number(e.target.value))} />
+        </div>
+        <div style={S.col}>
+          <span style={S.label}>每批筆數 (max 200)</span>
+          <input style={{ ...S.input, width:70 }} type="number" min={1} max={200} value={limit} onChange={(e) => setLimit(Number(e.target.value))} />
+        </div>
+        <button style={S.btn("#0f766e", job?.status === "running")} disabled={job?.status === "running"} onClick={run}>
+          {job?.status === "running" ? "執行中…" : "yfinance 批次"}
+        </button>
+      </div>
+      {nextOffset != null && (
+        <div style={{ fontSize:12, color:"#f59e0b", marginBottom:6 }}>
+          下一批：{nextOffset}
+          <button style={{ ...S.btn("#92400e"), marginLeft:8, padding:"4px 10px", fontSize:11 }} onClick={() => setOffset(nextOffset)}>套用</button>
+        </div>
+      )}
+      {job && <JobCard job={job} />}
     </div>
   );
 }

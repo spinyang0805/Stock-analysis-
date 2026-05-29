@@ -35,6 +35,7 @@ from jobs import (
     write_twse_valuation,
     write_tpex_valuation,
     write_mops_revenue_all,
+    write_yfinance_fundamentals,
 )
 
 TW_TZ = pytz.timezone("Asia/Taipei")
@@ -287,7 +288,28 @@ def install(app):
             "done_at": datetime.now(TW_TZ).isoformat(),
         })
 
-    # ── 8. Fundamentals: monthly revenue (background) ──────────────────────────
+    # ── 8. Fundamentals: yfinance batch (background, works from any IP) ────────
+    @app.get("/api/batch/fundamentals/yfinance")
+    def batch_fundamentals_yfinance(market: str = "上市", offset: int = 0, limit: int = 100):
+        """Fetch PE/PB/EPS/殖利率 via yfinance for universe stocks. Works from any IP."""
+        universe = _universe(market=market)
+        cap = min(max(1, limit), 200)
+        batch = [str(item.get("code") or "").strip() for item in universe[offset:offset + cap] if item.get("code")]
+        next_offset = offset + len(batch) if offset + len(batch) < len(universe) else None
+        job_id = f"yf-fund-{market}-{offset}-{int(time.time())}"
+
+        def _run_yf():
+            r = {"errors": []}
+            write_yfinance_fundamentals(batch, market, r, sleep_sec=0.25)
+            r.update({"total_universe": len(universe), "batch_size": len(batch),
+                       "offset": offset, "next_offset": next_offset})
+            return r
+
+        result = _start_job(job_id, _run_yf)
+        return _json({**result, "market": market, "batch_size": len(batch),
+                      "total_universe": len(universe), "next_offset": next_offset})
+
+    # ── 9. Fundamentals: monthly revenue (background) ──────────────────────────
     @app.get("/api/batch/fundamentals/revenue")
     def batch_fundamentals_revenue(months_back: int = 0):
         """Write MOPS monthly revenue for all 上市+上櫃 stocks (background job)."""

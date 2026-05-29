@@ -505,30 +505,37 @@ def _parse_bwibbu_row(row):
 
 
 def write_twse_valuation(result: dict):
-    """Fetch BWIBBU_d and write PE/PB/殖利率/EPS for all TWSE listed stocks."""
+    """Fetch BWIBBU_d (TWSE) + peQryDate (TPEx) for PE/PB/殖利率/EPS.
+    Primary: TWSE rwd API.  Fallback: yfinance (works from any IP)."""
     from firebase_cache import save_fundamentals
     today = today_str()
+    twse_written = 0
+
+    # ── Try TWSE BWIBBU_d ──────────────────────────────────────────────────────
+    twse_ok = False
     try:
-        r = requests.get(TWSE_BWIBBU, params={"response": "json"}, headers=HEADERS, timeout=20)
+        r = requests.get(
+            TWSE_BWIBBU, params={"response": "json"}, headers=HEADERS, timeout=20,
+        )
         r.raise_for_status()
         data = r.json()
+        rows = data.get("data", [])
+        if rows:
+            for row in rows:
+                code, vals = _parse_bwibbu_row(row)
+                if code and save_fundamentals(code, {**vals, "valuation_date": today, "source": "twse_bwibbu"}):
+                    twse_written += 1
+            twse_ok = True
     except Exception as exc:
-        result.setdefault("errors", []).append(f"BWIBBU_d fetch: {exc}")
-        return 0
+        result.setdefault("errors", []).append(f"BWIBBU_d: {exc}")
 
-    written = 0
-    for row in data.get("data", []):
-        code, vals = _parse_bwibbu_row(row)
-        if not code:
-            continue
-        if save_fundamentals(code, {**vals, "valuation_date": today, "source": "twse_bwibbu"}):
-            written += 1
-    result["twse_valuation_written"] = written
-    return written
+    result["twse_valuation_written"] = twse_written
+    result["twse_source"] = "twse_bwibbu" if twse_ok else "skipped"
+    return twse_written
 
 
 def write_tpex_valuation(result: dict):
-    """Fetch TPEx peQryDate and write PE/PB/殖利率/EPS for all TPEx stocks."""
+    """Fetch TPEx peQryDate for PE/PB/殖利率/EPS (works from any IP)."""
     from firebase_cache import save_fundamentals
     today = today_str()
     written = 0
@@ -549,15 +556,55 @@ def write_tpex_valuation(result: dict):
                 continue
             for row in rows:
                 code, vals = _parse_bwibbu_row(row)
-                if not code:
-                    continue
-                if save_fundamentals(code, {**vals, "valuation_date": today, "source": "tpex_pebook"}):
+                if code and save_fundamentals(code, {**vals, "valuation_date": today, "source": "tpex_pebook"}):
                     written += 1
             result["tpex_valuation_written"] = written
             return written
         except Exception as exc:
             result.setdefault("errors", []).append(f"TPEx PE {roc_date}: {exc}")
     result["tpex_valuation_written"] = written
+    return written
+
+
+def write_yfinance_fundamentals(codes: list, market: str, result: dict,
+                                 sleep_sec: float = 0.3):
+    """Batch-fetch PE/PB/EPS/殖利率 via yfinance for a list of codes.
+    Suffix: TWSE → .TW, TPEx → .TWO"""
+    try:
+        import yfinance as yf
+    except ImportError:
+        result.setdefault("errors", []).append("yfinance not installed")
+        return 0
+
+    from firebase_cache import save_fundamentals
+    today = today_str()
+    suffix = ".TWO" if market.upper() in ("TPEX", "上櫃") else ".TW"
+    written, skipped = 0, 0
+
+    for code in codes:
+        try:
+            ticker = yf.Ticker(f"{code}{suffix}")
+            info = ticker.info or {}
+            pe  = info.get("trailingPE") or info.get("forwardPE")
+            pb  = info.get("priceToBook")
+            eps = info.get("trailingEps")
+            dy  = info.get("dividendYield")
+            if dy is not None:
+                dy = round(dy * 100, 2)   # yfinance returns 0.035, we want 3.5%
+            if pe is None and pb is None and eps is None:
+                skipped += 1
+                continue
+            if save_fundamentals(code, {
+                "pe_ratio": pe, "pb_ratio": pb, "eps": eps, "dividend_yield": dy,
+                "valuation_date": today, "source": f"yfinance{suffix}",
+            }):
+                written += 1
+        except Exception as exc:
+            result.setdefault("errors", []).append(f"yf {code}: {exc}")
+        time.sleep(sleep_sec)
+
+    result[f"yfinance_{market}_written"] = written
+    result[f"yfinance_{market}_skipped"] = skipped
     return written
 
 
