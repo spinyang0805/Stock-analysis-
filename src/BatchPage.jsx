@@ -166,6 +166,94 @@ function ConnTestSection() {
   );
 }
 
+// ── Section 1b : Fundamentals ────────────────────────────────────────────────
+function FundamentalsSection({ jobs, poll, logs, setLogs }) {
+  const [valBusy, setValBusy] = useState(false);
+  const [valResult, setValResult] = useState(null);
+
+  const [revenueMonthsBack, setRevenueMonthsBack] = useState(0);
+  const [revenueJobId, setRevenueJobId] = useState(null);
+  const revenueJob = revenueJobId ? jobs[revenueJobId] : null;
+
+  async function runValuation() {
+    setValBusy(true);
+    addLog(setLogs, "估值寫入：開始 (TWSE BWIBBU_d PE/PB/殖利率)");
+    try {
+      const res = await fetch(`${API}/api/batch/fundamentals/valuation`, { cache:"no-store" });
+      const j = await res.json();
+      setValResult(j);
+      addLog(setLogs, `估值完成：TWSE ${j.twse_valuation_written} 筆，錯誤 ${(j.errors||[]).length}`);
+    } catch (e) {
+      addLog(setLogs, `估值失敗：${e.message}`);
+    } finally { setValBusy(false); }
+  }
+
+  async function runRevenue() {
+    addLog(setLogs, `月營收寫入：啟動 (往前 ${revenueMonthsBack} 個月)`);
+    try {
+      const res = await fetch(`${API}/api/batch/fundamentals/revenue?months_back=${revenueMonthsBack}`, { cache:"no-store" });
+      const j = await res.json();
+      setRevenueJobId(j.job_id);
+      poll(j.job_id, (done) => {
+        const r = done.result || {};
+        addLog(setLogs, `月營收完成：上市 ${r["上市_revenue_written"] ?? "?"} 筆，上櫃 ${r["上櫃_revenue_written"] ?? "?"} 筆，月份 ${r.revenue_date}`);
+      });
+    } catch (e) {
+      addLog(setLogs, `月營收失敗：${e.message}`);
+    }
+  }
+
+  return (
+    <div style={S.card}>
+      <h3 style={S.cardTitle}>📊 基本面資料 (fundamentals)</h3>
+
+      {/* Valuation */}
+      <div style={{ borderBottom:"1px solid #1e293b", paddingBottom:14, marginBottom:14 }}>
+        <div style={{ fontWeight:700, fontSize:13, color:"#94a3b8", marginBottom:8 }}>
+          估值寫入（TWSE 本益比 / 殖利率 / 股價淨值比）
+        </div>
+        <div style={S.row}>
+          <button style={S.btn("#0369a1", valBusy)} disabled={valBusy} onClick={runValuation}>
+            {valBusy ? "寫入中…" : "寫入今日估值"}
+          </button>
+        </div>
+        {valResult && (
+          <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:12 }}>
+            <div style={{ background:"#1e293b", borderRadius:8, padding:"6px 12px" }}>
+              <div style={{ color:"#64748b" }}>TWSE 上市寫入</div>
+              <div style={{ color:"#22c55e", fontWeight:700, fontSize:16 }}>{valResult.twse_valuation_written ?? "—"}</div>
+            </div>
+            {(valResult.errors||[]).slice(0,3).map((e,i) => (
+              <div key={i} style={{ color:"#ef4444", fontSize:11, alignSelf:"center" }}>{e}</div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Monthly revenue */}
+      <div>
+        <div style={{ fontWeight:700, fontSize:13, color:"#94a3b8", marginBottom:8 }}>
+          月營收寫入（MOPS 公開資訊觀測站，上市 + 上櫃，背景執行）
+        </div>
+        <div style={S.row}>
+          <div style={S.col}>
+            <span style={S.label}>月份選擇</span>
+            <select style={S.select} value={revenueMonthsBack} onChange={(e) => setRevenueMonthsBack(Number(e.target.value))}>
+              {[0,1,2,3].map(m => (
+                <option key={m} value={m}>{m === 0 ? "本月" : `往前 ${m} 個月`}</option>
+              ))}
+            </select>
+          </div>
+          <button style={S.btn("#7c3aed", revenueJob?.status === "running")} disabled={revenueJob?.status === "running"} onClick={runRevenue}>
+            {revenueJob?.status === "running" ? "寫入中…" : "寫入月營收"}
+          </button>
+        </div>
+        {revenueJob && <JobCard job={revenueJob} />}
+      </div>
+    </div>
+  );
+}
+
 // ── Section 2 : Chip Data ────────────────────────────────────────────────────
 function ChipSection({ jobs, poll, logs, setLogs }) {
   const [todayBusy, setTodayBusy] = useState(false);
@@ -564,6 +652,7 @@ export default function BatchPage() {
       <ActiveJobsBanner jobs={jobs} />
 
       <ConnTestSection />
+      <FundamentalsSection jobs={jobs} poll={poll} logs={logs} setLogs={setLogs} />
       <ChipSection  jobs={jobs} poll={poll} logs={logs} setLogs={setLogs} />
       <StockSection jobs={jobs} poll={poll} logs={logs} setLogs={setLogs} />
 

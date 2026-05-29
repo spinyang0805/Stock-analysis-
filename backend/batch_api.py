@@ -32,6 +32,8 @@ from jobs import (
     write_t86_chips,
     write_tpex_insti_chips,
     write_tpex_margin_chips,
+    write_twse_valuation,
+    write_mops_revenue_all,
 )
 
 TW_TZ = pytz.timezone("Asia/Taipei")
@@ -269,7 +271,34 @@ def install(app):
             "next_offset": next_offset,
         })
 
-    # ── 7. Job status ───────────────────────────────────────────────────────
+    # ── 7. Fundamentals: valuation (sync) ──────────────────────────────────────
+    @app.get("/api/batch/fundamentals/valuation")
+    def batch_fundamentals_valuation():
+        """Write today's PE/PB/殖利率 for all TWSE listed stocks (BWIBBU_d, one API call)."""
+        result = {"errors": []}
+        write_twse_valuation(result)
+        return _json({
+            "status": "ok" if not result.get("errors") else "partial",
+            "twse_valuation_written": result.get("twse_valuation_written", 0),
+            "errors": result.get("errors", [])[:10],
+            "done_at": datetime.now(TW_TZ).isoformat(),
+        })
+
+    # ── 8. Fundamentals: monthly revenue (background) ──────────────────────────
+    @app.get("/api/batch/fundamentals/revenue")
+    def batch_fundamentals_revenue(months_back: int = 0):
+        """Write MOPS monthly revenue for all 上市+上櫃 stocks (background job)."""
+        job_id = f"revenue-{months_back}m-{int(time.time())}"
+
+        def _run_revenue():
+            r = {"errors": []}
+            write_mops_revenue_all(r, months_back)
+            return r
+
+        result = _start_job(job_id, _run_revenue)
+        return _json({**result, "months_back": months_back})
+
+    # ── 9. Job status ───────────────────────────────────────────────────────
     @app.get("/api/batch/job/{job_id}")
     def batch_job_status(job_id: str):
         with _JOBS_LOCK:

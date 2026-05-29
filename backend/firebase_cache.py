@@ -149,6 +149,35 @@ def save_chip_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
     return err is None
 
 
+def save_fundamentals(stock_id: str, payload: Dict[str, Any]) -> bool:
+    if db is None:
+        return False
+    sql = """
+        INSERT INTO fundamentals
+            (stock_id, pe_ratio, dividend_yield, pb_ratio,
+             revenue, revenue_mom, revenue_yoy, revenue_date, valuation_date, source)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        ON CONFLICT (stock_id) DO UPDATE SET
+            pe_ratio       = COALESCE(EXCLUDED.pe_ratio,       fundamentals.pe_ratio),
+            dividend_yield = COALESCE(EXCLUDED.dividend_yield, fundamentals.dividend_yield),
+            pb_ratio       = COALESCE(EXCLUDED.pb_ratio,       fundamentals.pb_ratio),
+            revenue        = COALESCE(EXCLUDED.revenue,        fundamentals.revenue),
+            revenue_mom    = COALESCE(EXCLUDED.revenue_mom,    fundamentals.revenue_mom),
+            revenue_yoy    = COALESCE(EXCLUDED.revenue_yoy,    fundamentals.revenue_yoy),
+            revenue_date   = COALESCE(EXCLUDED.revenue_date,   fundamentals.revenue_date),
+            valuation_date = COALESCE(EXCLUDED.valuation_date, fundamentals.valuation_date),
+            source         = EXCLUDED.source,
+            updated_at     = NOW()
+    """
+    _, err = _run(sql, (
+        stock_id,
+        payload.get("pe_ratio"), payload.get("dividend_yield"), payload.get("pb_ratio"),
+        payload.get("revenue"), payload.get("revenue_mom"), payload.get("revenue_yoy"),
+        payload.get("revenue_date"), payload.get("valuation_date"), payload.get("source"),
+    ))
+    return err is None
+
+
 def save_job_log(job_id: str, payload: Dict[str, Any]) -> bool:
     if db is None:
         return False

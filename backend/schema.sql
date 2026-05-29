@@ -70,3 +70,18 @@ CREATE TABLE IF NOT EXISTS product_universe (
     industry   TEXT,
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 基本面資料：每股一筆，儲存最新估值 + 最新月營收
+CREATE TABLE IF NOT EXISTS fundamentals (
+    stock_id       TEXT PRIMARY KEY,
+    pe_ratio       FLOAT,
+    dividend_yield FLOAT,
+    pb_ratio       FLOAT,
+    revenue        BIGINT,
+    revenue_mom    FLOAT,
+    revenue_yoy    FLOAT,
+    revenue_date   TEXT,
+    valuation_date TEXT,
+    source         TEXT,
+    updated_at     TIMESTAMPTZ DEFAULT NOW()
+);

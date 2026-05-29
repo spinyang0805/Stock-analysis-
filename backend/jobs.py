@@ -29,6 +29,8 @@ TPEX_ALL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyCloseQuotes"
 TPEX_STOCK_DAY = "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"
 TPEX_INSTITUTIONAL = "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade"
 TPEX_MARGIN = "https://www.tpex.org.tw/www/zh-tw/margin/balance"
+TWSE_BWIBBU = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_d"
+MOPS_REVENUE = "https://mops.twse.com.tw/mops/web/ajax_t05st10"
 
 HOT_STOCKS = ["2330", "2317", "3702", "2454", "2382"]
 
@@ -264,13 +266,27 @@ def _fetch_yfinance_tpex_month(stock_id: str, year: int, month: int, product_typ
         hist = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=True)
         if hist is None or hist.empty:
             return 0, [f"yfinance no data: {ticker} {year}-{month:02d}"]
+        # yfinance 2.x returns MultiIndex columns for single ticker — flatten
+        if hasattr(hist.columns, "levels"):
+            hist.columns = hist.columns.get_level_values(0)
         written, errors = 0, []
         for idx, row in hist.iterrows():
             try:
                 date_str = idx.strftime("%Y%m%d")
-                def _v(col):
-                    val = row.get(col)
-                    return float(val) if val is not None and float(val) == float(val) else None
+                def _v(col, _row=row):
+                    val = _row.get(col)
+                    if val is None:
+                        return None
+                    # unwrap Series/array to scalar
+                    if hasattr(val, "iloc"):
+                        val = val.iloc[0]
+                    elif hasattr(val, "item"):
+                        val = val.item()
+                    try:
+                        f = float(val)
+                        return f if f == f else None  # NaN check
+                    except Exception:
+                        return None
                 doc = {
                     "market": "TPEx", "product_type": product_type,
                     "open": _v("Open"), "high": _v("High"),
@@ -458,6 +474,103 @@ def write_margin_chips(start_date: str, result: dict):
         result["margin_date"] = d
         return written
     return 0
+
+
+def write_twse_valuation(result: dict):
+    """Fetch BWIBBU_d and write PE/PB/殖利率 for all TWSE listed stocks (one API call)."""
+    from firebase_cache import save_fundamentals
+    today = today_str()
+    try:
+        r = requests.get(TWSE_BWIBBU, headers={"Accept": "application/json"}, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+    except Exception as exc:
+        result.setdefault("errors", []).append(f"BWIBBU_d fetch: {exc}")
+        return 0
+
+    written = 0
+    for row in data:
+        code = str(row.get("Code") or row.get("證券代號") or "").strip()
+        if not code:
+            continue
+        def _fv(key, alt=None, _row=row):
+            v = _row.get(key) or (_row.get(alt) if alt else None)
+            try:
+                return float(str(v).replace(",", "")) if v not in (None, "", "-", "--") else None
+            except Exception:
+                return None
+        pe = _fv("PeRatio", "本益比")
+        dy = _fv("DividendYield", "殖利率")
+        pb = _fv("PbRatio", "股價淨值比")
+        if pe is None and dy is None and pb is None:
+            continue
+        if save_fundamentals(code, {
+            "pe_ratio": pe, "dividend_yield": dy, "pb_ratio": pb,
+            "valuation_date": today, "source": "twse_bwibbu",
+        }):
+            written += 1
+    result["twse_valuation_written"] = written
+    return written
+
+
+def write_mops_revenue_all(result: dict, months_back: int = 0):
+    """Fetch MOPS monthly revenue for all stocks (上市+上櫃) and write to fundamentals."""
+    from firebase_cache import save_fundamentals
+    now = datetime.now()
+    m = now.month - months_back
+    y = now.year
+    while m <= 0:
+        m += 12
+        y -= 1
+    roc_year = y - 1911
+    revenue_date = f"{y}-{m:02d}"
+
+    total_written = 0
+    result.setdefault("errors", [])
+    for typek, label in [("sii", "上市"), ("otc", "上櫃")]:
+        try:
+            r = requests.post(
+                MOPS_REVENUE,
+                data={"firstin": "1", "off": "1", "TYPEK": typek,
+                      "year": str(roc_year), "mon": f"{m:02d}"},
+                headers={"User-Agent": "Mozilla/5.0", "Referer": "https://mops.twse.com.tw/"},
+                timeout=25,
+            )
+            r.raise_for_status()
+            data = r.json()
+            written = 0
+            for row in data.get("aaData", []):
+                if not row or len(row) < 6:
+                    continue
+                code = str(row[0]).strip()
+                if not code or not code[0].isdigit():
+                    continue
+                def _num(s):
+                    try:
+                        return float(str(s).replace(",", ""))
+                    except Exception:
+                        return None
+                rev      = _num(row[2])
+                rev_last = _num(row[3])
+                rev_yoy  = _num(row[5])
+                if rev is None:
+                    continue
+                mom = round((rev / rev_last - 1) * 100, 2) if rev_last else None
+                yoy = round((rev / rev_yoy  - 1) * 100, 2) if rev_yoy  else None
+                if save_fundamentals(code, {
+                    "revenue": int(rev), "revenue_mom": mom, "revenue_yoy": yoy,
+                    "revenue_date": revenue_date, "source": f"mops_{typek}",
+                }):
+                    written += 1
+            result[f"{label}_revenue_written"] = written
+            total_written += written
+            time.sleep(0.5)
+        except Exception as exc:
+            result["errors"].append(f"MOPS {label}: {exc}")
+
+    result["revenue_date"] = revenue_date
+    result["total_revenue_written"] = total_written
+    return total_written
 
 
 def _parse_tpex_insti_row(row):
