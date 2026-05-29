@@ -119,6 +119,8 @@ def _ensure_fundamentals_schema():
             )
         """)
         _db_run("ALTER TABLE fundamentals ADD COLUMN IF NOT EXISTS eps FLOAT")
+        # Clear obviously wrong dividend yields (>99% = data error from ETF tickers)
+        _db_run("UPDATE fundamentals SET dividend_yield = NULL WHERE dividend_yield > 99")
     except Exception as exc:
         print(f"[batch_api] fundamentals schema setup: {exc}")
 
