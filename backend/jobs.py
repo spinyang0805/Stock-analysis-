@@ -597,7 +597,10 @@ def write_yfinance_fundamentals(codes: list, market: str, result: dict,
             eps = info.get("trailingEps")
             dy  = info.get("dividendYield")
             if dy is not None:
-                dy = round(dy * 100, 2)   # yfinance returns 0.035, we want 3.5%
+                if 0 < dy <= 1.0:
+                    dy = round(dy * 100, 2)  # decimal form: 0.035 → 3.5%
+                else:
+                    dy = None  # >1 means yfinance returned wrong field for this ticker
             if pe is None and pb is None and eps is None:
                 skipped += 1
                 continue
