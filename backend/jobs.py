@@ -554,10 +554,17 @@ def write_tpex_valuation(result: dict):
             rows = tables[0].get("data", []) if tables else []
             if not rows:
                 continue
+            first_fail = True
             for row in rows:
                 code, vals = _parse_bwibbu_row(row)
-                if code and save_fundamentals(code, {**vals, "valuation_date": today, "source": "tpex_pebook"}):
+                if not code:
+                    continue
+                ok = save_fundamentals(code, {**vals, "valuation_date": today, "source": "tpex_pebook"})
+                if ok:
                     written += 1
+                elif first_fail:
+                    result.setdefault("errors", []).append("TPEx save failed (fundamentals table/eps column missing?)")
+                    first_fail = False
             result["tpex_valuation_written"] = written
             return written
         except Exception as exc:
@@ -594,11 +601,14 @@ def write_yfinance_fundamentals(codes: list, market: str, result: dict,
             if pe is None and pb is None and eps is None:
                 skipped += 1
                 continue
-            if save_fundamentals(code, {
+            ok = save_fundamentals(code, {
                 "pe_ratio": pe, "pb_ratio": pb, "eps": eps, "dividend_yield": dy,
                 "valuation_date": today, "source": f"yfinance{suffix}",
-            }):
+            })
+            if ok:
                 written += 1
+            else:
+                result.setdefault("errors", []).append(f"DB save failed: {code} (table missing or eps column not added)")
         except Exception as exc:
             result.setdefault("errors", []).append(f"yf {code}: {exc}")
         time.sleep(sleep_sec)

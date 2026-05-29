@@ -106,7 +106,25 @@ def _start_job(job_id: str, fn, *args, **kwargs):
 
 
 # ── Route installer ─────────────────────────────────────────────────────────
+def _ensure_fundamentals_schema():
+    """Create fundamentals table and ensure eps column exists (idempotent)."""
+    try:
+        from firebase_cache import _run as _db_run
+        _db_run("""
+            CREATE TABLE IF NOT EXISTS fundamentals (
+                stock_id TEXT PRIMARY KEY, pe_ratio FLOAT, dividend_yield FLOAT,
+                pb_ratio FLOAT, eps FLOAT, revenue BIGINT, revenue_mom FLOAT,
+                revenue_yoy FLOAT, revenue_date TEXT, valuation_date TEXT,
+                source TEXT, updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        _db_run("ALTER TABLE fundamentals ADD COLUMN IF NOT EXISTS eps FLOAT")
+    except Exception as exc:
+        print(f"[batch_api] fundamentals schema setup: {exc}")
+
+
 def install(app):
+    _ensure_fundamentals_schema()
 
     # ── 1. Connectivity test ────────────────────────────────────────────────
     @app.get("/api/batch/test")
@@ -292,22 +310,36 @@ def install(app):
     @app.get("/api/batch/fundamentals/yfinance")
     def batch_fundamentals_yfinance(market: str = "上市", offset: int = 0, limit: int = 100):
         """Fetch PE/PB/EPS/殖利率 via yfinance for universe stocks. Works from any IP."""
-        universe = _universe(market=market)
+        from firebase_cache import _run as _db_run
+
+        # Get codes from stock_daily (authoritative, has all stocks) filtered by market
+        market_filter = "TPEx" if market in ("上櫃", "TPEx") else "TWSE"
+        rows, _ = _db_run(
+            "SELECT DISTINCT stock_id FROM stock_daily WHERE market=%s ORDER BY stock_id",
+            (market_filter,), fetch="all",
+        )
+        all_codes = [r[0] for r in (rows or [])]
+
+        # Fallback to product_universe if stock_daily is empty
+        if not all_codes:
+            universe = _universe(market=market)
+            all_codes = [str(item.get("code") or "").strip() for item in universe if item.get("code")]
+
         cap = min(max(1, limit), 200)
-        batch = [str(item.get("code") or "").strip() for item in universe[offset:offset + cap] if item.get("code")]
-        next_offset = offset + len(batch) if offset + len(batch) < len(universe) else None
-        job_id = f"yf-fund-{market}-{offset}-{int(time.time())}"
+        batch = all_codes[offset:offset + cap]
+        next_offset = offset + len(batch) if offset + len(batch) < len(all_codes) else None
+        job_id = f"yf-fund-{market_filter}-{offset}-{int(time.time())}"
 
         def _run_yf():
             r = {"errors": []}
             write_yfinance_fundamentals(batch, market, r, sleep_sec=0.25)
-            r.update({"total_universe": len(universe), "batch_size": len(batch),
+            r.update({"total_universe": len(all_codes), "batch_size": len(batch),
                        "offset": offset, "next_offset": next_offset})
             return r
 
         result = _start_job(job_id, _run_yf)
         return _json({**result, "market": market, "batch_size": len(batch),
-                      "total_universe": len(universe), "next_offset": next_offset})
+                      "total_universe": len(all_codes), "next_offset": next_offset})
 
     # ── 9. Fundamentals: monthly revenue (background) ──────────────────────────
     @app.get("/api/batch/fundamentals/revenue")
