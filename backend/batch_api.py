@@ -298,17 +298,18 @@ def install(app):
         months: int = 12,
     ):
         """Backfill K-line for a slice of the universe (capped at 100 per call).
-        Uses stock_daily as authoritative source; falls back to product_universe."""
+        Uses the larger of: stock_daily count vs product_universe count.
+        TWSE openapi is blocked from Fly.io so stock_daily (1432) wins over product_universe (7).
+        TPEx openapi works so product_universe (888) wins over stock_daily (partial)."""
         from firebase_cache import _run as _db_run
         mkt = "TPEx" if market in ("上櫃", "TPEx") else "TWSE"
         db_rows, _ = _db_run(
             "SELECT DISTINCT stock_id FROM stock_daily WHERE market=%s ORDER BY stock_id",
             (mkt,), fetch="all",
         )
-        if db_rows and len(db_rows) > 20:
-            universe = [{"code": r[0], "market": market} for r in db_rows]
-        else:
-            universe = _universe(product_type=product_type, market=market)
+        db_universe = [{"code": r[0], "market": market} for r in (db_rows or [])]
+        prod_universe = _universe(product_type=product_type, market=market)
+        universe = db_universe if len(db_universe) > len(prod_universe) else prod_universe
         cap = min(max(1, limit), 100)
         batch = universe[offset:offset + cap]
         next_offset = offset + len(batch) if offset + len(batch) < len(universe) else None
