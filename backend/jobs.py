@@ -205,6 +205,56 @@ def latest_tpex_daily_rows(max_lookback_days: int = 10):
     return today_str(), [], [], errors
 
 
+def _fetch_yfinance_twse_month(stock_id: str, year: int, month: int, product_type: str = "股票"):
+    """Fallback: fetch TWSE monthly K-line via yfinance (.TW suffix)."""
+    import calendar as _cal
+    import datetime as _dt
+    try:
+        import yfinance as yf
+    except ImportError:
+        return 0, ["yfinance not installed"]
+    try:
+        start = _dt.date(year, month, 1).isoformat()
+        last_day = _cal.monthrange(year, month)[1]
+        end = _dt.date(year, month, last_day).isoformat()
+        ticker = f"{stock_id}.TW"
+        hist = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=True)
+        if hist is None or hist.empty:
+            return 0, []
+        if hasattr(hist.columns, "levels"):
+            hist.columns = hist.columns.get_level_values(0)
+        written, errors = 0, []
+        for idx, row in hist.iterrows():
+            try:
+                date_str = idx.strftime("%Y%m%d")
+                def _v(col, _row=row):
+                    val = _row.get(col)
+                    if val is None:
+                        return None
+                    if hasattr(val, "iloc"):
+                        val = val.iloc[0]
+                    elif hasattr(val, "item"):
+                        val = val.item()
+                    try:
+                        f = float(val)
+                        return f if f == f else None
+                    except Exception:
+                        return None
+                doc = {
+                    "market": "TWSE", "product_type": product_type,
+                    "open": _v("Open"), "high": _v("High"),
+                    "low": _v("Low"), "close": _v("Close"),
+                    "volume": _v("Volume"), "source": "yfinance_twse",
+                }
+                if save_stock_daily(stock_id, date_str, doc):
+                    written += 1
+            except Exception as exc:
+                errors.append(f"yf row {stock_id}: {exc}")
+        return written, errors
+    except Exception as exc:
+        return 0, [f"yfinance error {stock_id}: {exc}"]
+
+
 def fetch_twse_stock_month(stock_id: str, year: int, month: int, product_type: str = "股票"):
     errors = []
     written = 0
@@ -217,7 +267,9 @@ def fetch_twse_stock_month(stock_id: str, year: int, month: int, product_type: s
         if isinstance(payload, dict) and payload.get("stat") == "OK" and payload.get("data"):
             break
     if not isinstance(payload, dict) or payload.get("stat") != "OK":
-        return 0, errors
+        # TWSE API blocked (e.g. from Fly.io) — fall back to yfinance
+        w2, e2 = _fetch_yfinance_twse_month(stock_id, year, month, product_type)
+        return w2, errors + e2
     fields = _fields(payload)
     date_i    = _idx(fields, "日期", default=0)
     volume_i  = _idx(fields, "成交", "股數", default=1)
