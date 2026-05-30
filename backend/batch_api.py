@@ -448,10 +448,9 @@ def install(app):
         """
         One-shot endpoint: triggers all daily data updates in sequence.
         Steps:
-          1. Stock daily (TWSE + TPEx, last N trading days)
-          2. Chip today (TWSE T86 + margin + TPEx insti + TPEx margin)
-          3. Fundamentals valuation (TWSE BWIBBU_d PE/PB/yield)
-        All run sequentially in a single background thread so one job_id covers everything.
+          1. run_daily_update — stock_daily (TWSE+TPEx) + chip (T86+margin+TPEx) internally
+          2. Fundamentals valuation (TWSE BWIBBU_d PE/PB/yield + TPEx PE book)
+        Note: chip is handled inside run_daily_update; do NOT call chip functions separately.
         Safe to call via curl/script without the React UI.
         """
         job_id = f"daily-all-{today_str()}-{int(time.time())}"
@@ -461,44 +460,25 @@ def install(app):
                 "steps": [],
                 "errors": [],
                 "stock_daily": {},
-                "chip_today": {},
                 "valuation": {},
             }
 
-            # Step 1: stock daily
+            # Step 1: stock daily + chip (run_daily_update handles both internally)
             try:
                 r = run_daily_update(lookback_days)
                 result["stock_daily"] = r
-                result["steps"].append(f"stock_daily: {r.get('stocks', '?')} stocks, dates={r.get('dates_written', [])}")
+                result["steps"].append(
+                    f"stock_daily+chip: {r.get('stocks','?')} stocks"
+                    f" TWSE_chip={r.get('chips',0)} TPEx_chip={r.get('tpex_chips',0)}"
+                    f" dates={r.get('dates_written',[])}"
+                )
+                if r.get("errors"):
+                    result["errors"].extend(r["errors"][:5])
             except Exception as exc:
                 result["errors"].append(f"stock_daily: {exc}")
                 result["steps"].append(f"stock_daily: ERROR {exc}")
 
-            # Step 2: chip today
-            try:
-                chip_r = {"chips": 0, "margin_rows": 0, "tpex_chips": 0, "tpex_margin_rows": 0, "errors": []}
-                for fn, label in [
-                    (write_t86_chips, "TWSE T86"),
-                    (write_margin_chips, "TWSE margin"),
-                    (write_tpex_insti_chips, "TPEx insti"),
-                    (write_tpex_margin_chips, "TPEx margin"),
-                ]:
-                    try:
-                        fn(today_str(), chip_r)
-                    except Exception as exc:
-                        chip_r["errors"].append(f"{label}: {exc}")
-                result["chip_today"] = chip_r
-                result["steps"].append(
-                    f"chip_today: TWSE={chip_r.get('chips',0)} TPEx={chip_r.get('tpex_chips',0)}"
-                    f" errors={len(chip_r.get('errors',[]))}"
-                )
-                if chip_r.get("errors"):
-                    result["errors"].extend(chip_r["errors"])
-            except Exception as exc:
-                result["errors"].append(f"chip_today: {exc}")
-                result["steps"].append(f"chip_today: ERROR {exc}")
-
-            # Step 3: fundamentals valuation
+            # Step 2: fundamentals valuation
             try:
                 val_r = {"errors": []}
                 write_twse_valuation(val_r)
