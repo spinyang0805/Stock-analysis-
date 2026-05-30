@@ -441,3 +441,84 @@ def install(app):
         with _JOBS_LOCK:
             jobs = sorted(_JOBS.values(), key=lambda j: j.get("started_at", ""), reverse=True)
         return _json({"count": len(jobs), "jobs": jobs[:20]})
+
+    # ── 12. One-shot daily full update (background) ──────────────────────────
+    @app.get("/api/batch/run_daily_all")
+    def batch_run_daily_all(lookback_days: int = 5):
+        """
+        One-shot endpoint: triggers all daily data updates in sequence.
+        Steps:
+          1. Stock daily (TWSE + TPEx, last N trading days)
+          2. Chip today (TWSE T86 + margin + TPEx insti + TPEx margin)
+          3. Fundamentals valuation (TWSE BWIBBU_d PE/PB/yield)
+        All run sequentially in a single background thread so one job_id covers everything.
+        Safe to call via curl/script without the React UI.
+        """
+        job_id = f"daily-all-{today_str()}-{int(time.time())}"
+
+        def _run_all():
+            result = {
+                "steps": [],
+                "errors": [],
+                "stock_daily": {},
+                "chip_today": {},
+                "valuation": {},
+            }
+
+            # Step 1: stock daily
+            try:
+                r = run_daily_update(lookback_days)
+                result["stock_daily"] = r
+                result["steps"].append(f"stock_daily: {r.get('stocks', '?')} stocks, dates={r.get('dates_written', [])}")
+            except Exception as exc:
+                result["errors"].append(f"stock_daily: {exc}")
+                result["steps"].append(f"stock_daily: ERROR {exc}")
+
+            # Step 2: chip today
+            try:
+                chip_r = {"chips": 0, "margin_rows": 0, "tpex_chips": 0, "tpex_margin_rows": 0, "errors": []}
+                for fn, label in [
+                    (write_t86_chips, "TWSE T86"),
+                    (write_margin_chips, "TWSE margin"),
+                    (write_tpex_insti_chips, "TPEx insti"),
+                    (write_tpex_margin_chips, "TPEx margin"),
+                ]:
+                    try:
+                        fn(today_str(), chip_r)
+                    except Exception as exc:
+                        chip_r["errors"].append(f"{label}: {exc}")
+                result["chip_today"] = chip_r
+                result["steps"].append(
+                    f"chip_today: TWSE={chip_r.get('chips',0)} TPEx={chip_r.get('tpex_chips',0)}"
+                    f" errors={len(chip_r.get('errors',[]))}"
+                )
+                if chip_r.get("errors"):
+                    result["errors"].extend(chip_r["errors"])
+            except Exception as exc:
+                result["errors"].append(f"chip_today: {exc}")
+                result["steps"].append(f"chip_today: ERROR {exc}")
+
+            # Step 3: fundamentals valuation
+            try:
+                val_r = {"errors": []}
+                write_twse_valuation(val_r)
+                write_tpex_valuation(val_r)
+                result["valuation"] = val_r
+                result["steps"].append(
+                    f"valuation: TWSE={val_r.get('twse_valuation_written',0)}"
+                    f" TPEx={val_r.get('tpex_valuation_written',0)}"
+                    f" errors={len(val_r.get('errors',[]))}"
+                )
+                if val_r.get("errors"):
+                    result["errors"].extend(val_r["errors"])
+            except Exception as exc:
+                result["errors"].append(f"valuation: {exc}")
+                result["steps"].append(f"valuation: ERROR {exc}")
+
+            result["finished_at"] = datetime.now(TW_TZ).isoformat()
+            save_job_log(job_id, result)
+            return result
+
+        r = _start_job(job_id, _run_all)
+        return _json({**r, "job_id": job_id, "lookback_days": lookback_days,
+                      "note": "Runs stock_daily → chip_today → valuation in sequence"})

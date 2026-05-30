@@ -111,6 +111,77 @@ function AllJobsSection({ jobs }) {
   );
 }
 
+// ── Section 0 : One-shot daily update ───────────────────────────────────────
+function DailyAllSection({ jobs, poll, logs, setLogs }) {
+  const [lookback, setLookback] = useState(5);
+  const [jobId, setJobId] = useState(null);
+  const job = jobId ? jobs[jobId] : null;
+  const busy = job?.status === "running";
+
+  async function run() {
+    addLog(setLogs, `一鍵每日更新：啟動 lookback=${lookback}天`);
+    try {
+      const res = await fetch(`${API}/api/batch/run_daily_all?lookback_days=${lookback}`, { cache: "no-store" });
+      const j = await res.json();
+      setJobId(j.job_id);
+      poll(j.job_id, (done) => {
+        const r = done.result || {};
+        const steps = (r.steps || []).join(" | ");
+        addLog(setLogs, `一鍵完成：${steps || done.status}`);
+      });
+    } catch (e) {
+      addLog(setLogs, `一鍵失敗：${e.message}`);
+    }
+  }
+
+  const r = job?.result || {};
+  const steps = r.steps || [];
+
+  return (
+    <div style={{
+      ...S.card,
+      border: "1px solid rgba(34,197,94,.35)",
+      background: "rgba(20,83,45,.08)",
+    }}>
+      <h3 style={{ ...S.cardTitle, color: "#4ade80" }}>⚡ 一鍵每日更新</h3>
+      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
+        依序執行：① K線/股價 → ② 今日籌碼 → ③ 估值（PE/PB/殖利率）
+      </div>
+      <div style={S.row}>
+        <div style={S.col}>
+          <span style={S.label}>回溯天數</span>
+          <input
+            style={{ ...S.input, width: 70 }}
+            type="number" min={1} max={20}
+            value={lookback}
+            onChange={(e) => setLookback(Number(e.target.value))}
+          />
+        </div>
+        <button
+          style={{
+            ...S.btn("#15803d", busy),
+            fontSize: 15, padding: "10px 24px",
+          }}
+          disabled={busy}
+          onClick={run}
+        >
+          {busy ? "更新中…" : "▶ 執行每日更新"}
+        </button>
+      </div>
+      {steps.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+          {steps.map((s, i) => (
+            <div key={i} style={{ fontSize: 12, color: "#94a3b8" }}>
+              {i + 1}. {s}
+            </div>
+          ))}
+        </div>
+      )}
+      {job && <JobCard job={job} />}
+    </div>
+  );
+}
+
 // ── Section 1 : Connection Tests ─────────────────────────────────────────────
 function ConnTestSection() {
   const [busy, setBusy] = useState(false);
@@ -726,6 +797,7 @@ export default function BatchPage() {
 
       <ActiveJobsBanner jobs={jobs} />
 
+      <DailyAllSection jobs={jobs} poll={poll} logs={logs} setLogs={setLogs} />
       <ConnTestSection />
       <FundamentalsSection jobs={jobs} poll={poll} logs={logs} setLogs={setLogs} />
       <ChipSection  jobs={jobs} poll={poll} logs={logs} setLogs={setLogs} />
