@@ -128,6 +128,47 @@ def _ensure_fundamentals_schema():
 def install(app):
     _ensure_fundamentals_schema()
 
+    # ── 0. DB stats overview ────────────────────────────────────────────────
+    @app.get("/api/batch/stats")
+    def batch_stats():
+        """One-shot overview of all tables: counts, date ranges, missing data."""
+        from firebase_cache import _run as _db_run
+        stats = {}
+
+        queries = {
+            "stock_daily": [
+                ("SELECT COUNT(*) FROM stock_daily", "total_rows"),
+                ("SELECT COUNT(DISTINCT stock_id) FROM stock_daily", "stocks"),
+                ("SELECT COUNT(DISTINCT stock_id) FROM stock_daily WHERE market='TWSE'", "twse_stocks"),
+                ("SELECT COUNT(DISTINCT stock_id) FROM stock_daily WHERE market='TPEx'", "tpex_stocks"),
+                ("SELECT MIN(date), MAX(date) FROM stock_daily", "date_range"),
+            ],
+            "chip_daily": [
+                ("SELECT COUNT(*) FROM chip_daily", "total_rows"),
+                ("SELECT COUNT(DISTINCT stock_id) FROM chip_daily", "stocks"),
+                ("SELECT MIN(date), MAX(date) FROM chip_daily", "date_range"),
+            ],
+            "fundamentals": [
+                ("SELECT COUNT(*) FROM fundamentals", "total_rows"),
+                ("SELECT COUNT(*) FROM fundamentals WHERE pe_ratio IS NOT NULL", "with_pe"),
+                ("SELECT COUNT(*) FROM fundamentals WHERE eps IS NOT NULL", "with_eps"),
+                ("SELECT COUNT(*) FROM fundamentals WHERE revenue IS NOT NULL", "with_revenue"),
+                ("SELECT COUNT(*) FROM fundamentals WHERE source LIKE 'yfinance%'", "from_yfinance"),
+                ("SELECT COUNT(*) FROM fundamentals WHERE source='tpex_pebook'", "from_tpex"),
+            ],
+        }
+
+        for table, qs in queries.items():
+            stats[table] = {}
+            for sql, label in qs:
+                row, err = _db_run(sql, fetch="one")
+                if err:
+                    stats[table][label] = f"error: {err}"
+                elif row:
+                    stats[table][label] = list(row) if len(row) > 1 else row[0]
+
+        return _json({"stats": stats, "checked_at": datetime.now(TW_TZ).isoformat()})
+
     # ── 1. Connectivity test ────────────────────────────────────────────────
     @app.get("/api/batch/test")
     def batch_test():
