@@ -153,15 +153,17 @@ def install(app):
                 ("SELECT COUNT(*) FROM fundamentals WHERE pe_ratio IS NOT NULL", "with_pe"),
                 ("SELECT COUNT(*) FROM fundamentals WHERE eps IS NOT NULL", "with_eps"),
                 ("SELECT COUNT(*) FROM fundamentals WHERE revenue IS NOT NULL", "with_revenue"),
-                ("SELECT COUNT(*) FROM fundamentals WHERE source LIKE 'yfinance%'", "from_yfinance"),
+                ("SELECT COUNT(*) FROM fundamentals WHERE source LIKE %s", "from_yfinance", ("yfinance%",)),
                 ("SELECT COUNT(*) FROM fundamentals WHERE source='tpex_pebook'", "from_tpex"),
             ],
         }
 
         for table, qs in queries.items():
             stats[table] = {}
-            for sql, label in qs:
-                row, err = _db_run(sql, fetch="one")
+            for entry in qs:
+                sql, label = entry[0], entry[1]
+                params = entry[2] if len(entry) > 2 else None
+                row, err = _db_run(sql, params, fetch="one") if params else _db_run(sql, fetch="one")
                 if err:
                     stats[table][label] = f"error: {err}"
                 elif row:
