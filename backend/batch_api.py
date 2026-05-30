@@ -297,8 +297,18 @@ def install(app):
         limit: int = 50,
         months: int = 12,
     ):
-        """Backfill K-line for a slice of the universe (capped at 100 per call)."""
-        universe = _universe(product_type=product_type, market=market)
+        """Backfill K-line for a slice of the universe (capped at 100 per call).
+        Uses stock_daily as authoritative source; falls back to product_universe."""
+        from firebase_cache import _run as _db_run
+        mkt = "TPEx" if market in ("上櫃", "TPEx") else "TWSE"
+        db_rows, _ = _db_run(
+            "SELECT DISTINCT stock_id FROM stock_daily WHERE market=%s ORDER BY stock_id",
+            (mkt,), fetch="all",
+        )
+        if db_rows and len(db_rows) > 20:
+            universe = [{"code": r[0], "market": market} for r in db_rows]
+        else:
+            universe = _universe(product_type=product_type, market=market)
         cap = min(max(1, limit), 100)
         batch = universe[offset:offset + cap]
         next_offset = offset + len(batch) if offset + len(batch) < len(universe) else None
@@ -306,7 +316,6 @@ def install(app):
 
         def _run_batch():
             res = {"written_days": 0, "stocks_done": 0, "errors": []}
-            mkt = "TPEx" if market in ("上櫃", "TPEx") else "TWSE"
             for item in batch:
                 code = str(item.get("code") or "").strip()
                 if not code:
