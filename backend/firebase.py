@@ -1,5 +1,24 @@
 import os
+import socket
 from psycopg2 import pool as pg_pool
+
+# Cache DNS results so reconnects don't fail on intermittent DNS issues
+_dns_cache: dict = {}
+_orig_getaddrinfo = socket.getaddrinfo
+
+def _cached_getaddrinfo(host, port, *args, **kwargs):
+    key = (host, port)
+    if key not in _dns_cache:
+        try:
+            result = _orig_getaddrinfo(host, port, *args, **kwargs)
+            _dns_cache[key] = result
+        except OSError:
+            if key in _dns_cache:
+                return _dns_cache[key]
+            raise
+    return _dns_cache[key]
+
+socket.getaddrinfo = _cached_getaddrinfo
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 _pool = None

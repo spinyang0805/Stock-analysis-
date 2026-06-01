@@ -13,10 +13,12 @@ HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
     "Connection": "keep-alive",
+    "Referer": "https://www.twse.com.tw/zh/trading/foreign/t86.html",
+    "Origin": "https://www.twse.com.tw",
 }
 TPEX_HEADERS = {
     **HEADERS,
-    "Referer": "https://www.tpex.org.tw/",
+    "Referer": "https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html",
     "Origin": "https://www.tpex.org.tw",
 }
 
