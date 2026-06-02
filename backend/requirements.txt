@@ -6,3 +6,4 @@ requests
 yfinance
 psycopg2-binary
 pytz
+playwright
