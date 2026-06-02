@@ -1,7 +1,7 @@
 {
-  "tool_name": "Read",
-  "tool_input_preview": "{\"file_path\":\"C:\\\\Users\\\\fenc34117\\\\.claude\\\\projects\\\\D------------------\\\\memory\\\\MEMORY.md\"}",
-  "error": "File does not exist. Note: your current working directory is D:\\個人資料\\投資理財\\股票網站分析\\Stock-analysis-\\backend.",
-  "timestamp": "2026-05-28T05:03:25.369Z",
+  "tool_name": "PowerShell",
+  "tool_input_preview": "{\"command\":\"cd \\\"D:\\\\個人資料\\\\投資理財\\\\股票網站分析\\\\Stock-analysis-\\\\backend\\\"; python -X utf8 test_mops.py 2>&1 | Select-Object -First 40\",\"timeout\":60000,\"description\":\"Print raw MOPS table text to debug parsi...",
+  "error": "Exit code 255\n2330 raw table:\r\n項目\t營業收入淨額\r\n本月：\t410,725,118\r\n去年同期：\t349,566,940\r\n增減金額：\t61,158,178\r\n增減百分比：\t17.50\r\n本年累計：\t1,544,828,558\r\n去年累計：\t1,188,820,604\r\n增減金額：\t356,007,954\r\n增減百分比：\t29.95\r\n備註/營收變化原因說明：\t\r\n---\r\n2330: {}\r\n2317 raw table:\r\n項目\t營業收入淨額\r\n本月：\t832,097,956\r\n去年同期：\t641,365,597\r\n增減金額：\t190,732,359\r\n增減百分比：\t29.74\r\n本年累計：\t2,961,688,439\r\n去年累計：\t2,283,538,810\r\n增減金額：\t678,149,629\r\n增減百分比：\t29.70\r\n備註/營收變化原因說明：\t\r\n---\r\n2317: {}\r\n2454 raw table:\r\n項目\t營業收入淨額\r\n本月：\t46,736,664\r\n去年同期：\t48,754,424\r\n增減金額：\t-2,017,760\r\n增減百...",
+  "timestamp": "2026-06-01T16:20:12.988Z",
   "retry_count": 1
 }

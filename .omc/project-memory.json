@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1780067534195,
+  "lastScanned": 1780362036036,
   "projectRoot": "D:\\個人資料\\投資理財\\股票網站分析\\Stock-analysis-",
   "techStack": {
     "languages": [
@@ -67,8 +67,8 @@
     "backend": {
       "path": "backend",
       "purpose": null,
-      "fileCount": 25,
-      "lastAccessed": 1780067534102,
+      "fileCount": 26,
+      "lastAccessed": 1780362035958,
       "keyFiles": [
         "analysis_engine.py",
         "auto_routes.py",
@@ -81,7 +81,7 @@
       "path": "dist",
       "purpose": "Distribution/build output",
       "fileCount": 1,
-      "lastAccessed": 1780067534103,
+      "lastAccessed": 1780362035959,
       "keyFiles": [
         "index.html"
       ]
@@ -90,7 +90,7 @@
       "path": "docs",
       "purpose": "Documentation",
       "fileCount": 9,
-      "lastAccessed": 1780067534130,
+      "lastAccessed": 1780362035988,
       "keyFiles": [
         "AGENT_HANDOVER.md",
         "AI_PROMPT.md",
@@ -103,7 +103,7 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 7,
-      "lastAccessed": 1780067534131,
+      "lastAccessed": 1780362035989,
       "keyFiles": [
         "App.jsx",
         "BatchPage.jsx",
@@ -116,7 +116,7 @@
       "path": "dist\\assets",
       "purpose": "Static assets",
       "fileCount": 1,
-      "lastAccessed": 1780067534133,
+      "lastAccessed": 1780362035991,
       "keyFiles": [
         "index-RNHXKwnG.js"
       ]
@@ -124,10 +124,40 @@
   },
   "hotPaths": [
     {
-      "path": "backend\\main.py",
-      "accessCount": 11,
-      "lastAccessed": 1779943609905,
+      "path": "backend\\batch_api.py",
+      "accessCount": 37,
+      "lastAccessed": 1780137194622,
       "type": "file"
+    },
+    {
+      "path": "backend\\jobs.py",
+      "accessCount": 37,
+      "lastAccessed": 1780302447377,
+      "type": "file"
+    },
+    {
+      "path": "backend\\main.py",
+      "accessCount": 17,
+      "lastAccessed": 1780104883235,
+      "type": "file"
+    },
+    {
+      "path": "src\\BatchPage.jsx",
+      "accessCount": 12,
+      "lastAccessed": 1780133196255,
+      "type": "file"
+    },
+    {
+      "path": "backend\\test_mops.py",
+      "accessCount": 11,
+      "lastAccessed": 1780330849646,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 8,
+      "lastAccessed": 1780133104338,
+      "type": "directory"
     },
     {
       "path": "src\\App.jsx",
@@ -136,33 +166,99 @@
       "type": "directory"
     },
     {
+      "path": "backend\\firebase_cache.py",
+      "accessCount": 7,
+      "lastAccessed": 1780075688783,
+      "type": "file"
+    },
+    {
+      "path": "backend\\.env",
+      "accessCount": 6,
+      "lastAccessed": 1780299943885,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\629c373d-098f-404d-8dae-30b8b2a46cfc\\tasks\\bghcrml9j.output",
+      "accessCount": 5,
+      "lastAccessed": 1780211778557,
+      "type": "file"
+    },
+    {
       "path": "vite.config.js",
       "accessCount": 4,
       "lastAccessed": 1779941394022,
       "type": "file"
     },
     {
-      "path": "src\\BatchPage.jsx",
-      "accessCount": 4,
-      "lastAccessed": 1779962298494,
-      "type": "file"
-    },
-    {
-      "path": "backend\\batch_api.py",
+      "path": "backend\\schema.sql",
       "accessCount": 3,
-      "lastAccessed": 1779944355999,
+      "lastAccessed": 1780069282637,
       "type": "file"
     },
     {
-      "path": "",
-      "accessCount": 2,
-      "lastAccessed": 1779941482032,
-      "type": "directory"
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\825bc31c-87d6-448f-b389-04d723d70954\\tasks\\b15pp0qjg.output",
+      "accessCount": 3,
+      "lastAccessed": 1780073936980,
+      "type": "file"
     },
     {
-      "path": "backend\\firebase_cache.py",
+      "path": "C:\\Users\\fenc34117\\.claude\\projects\\D------------------\\memory\\MEMORY.md",
+      "accessCount": 3,
+      "lastAccessed": 1780075553208,
+      "type": "file"
+    },
+    {
+      "path": "backend\\stock_list.py",
+      "accessCount": 3,
+      "lastAccessed": 1780104907230,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\629c373d-098f-404d-8dae-30b8b2a46cfc\\tasks\\bekhiq5dv.output",
+      "accessCount": 3,
+      "lastAccessed": 1780240281404,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\629c373d-098f-404d-8dae-30b8b2a46cfc\\tasks\\bviqz0yun.output",
+      "accessCount": 3,
+      "lastAccessed": 1780240877808,
+      "type": "file"
+    },
+    {
+      "path": "backend\\firebase.py",
+      "accessCount": 3,
+      "lastAccessed": 1780299954135,
+      "type": "file"
+    },
+    {
+      "path": "backend\\local_mops_revenue.py",
+      "accessCount": 3,
+      "lastAccessed": 1780330830140,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\629c373d-098f-404d-8dae-30b8b2a46cfc\\tasks\\b7wt7896b.output",
       "accessCount": 2,
-      "lastAccessed": 1779943547230,
+      "lastAccessed": 1780299465969,
+      "type": "file"
+    },
+    {
+      "path": "backend\\local_chip_backfill.py",
+      "accessCount": 2,
+      "lastAccessed": 1780300173987,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\629c373d-098f-404d-8dae-30b8b2a46cfc\\tasks\\beto057d1.output",
+      "accessCount": 2,
+      "lastAccessed": 1780302227783,
+      "type": "file"
+    },
+    {
+      "path": "backend\\requirements.txt",
+      "accessCount": 2,
+      "lastAccessed": 1780361692604,
       "type": "file"
     },
     {
@@ -196,27 +292,117 @@
       "type": "file"
     },
     {
-      "path": "backend\\jobs.py",
-      "accessCount": 1,
-      "lastAccessed": 1779943309499,
-      "type": "file"
-    },
-    {
-      "path": "backend\\firebase.py",
-      "accessCount": 1,
-      "lastAccessed": 1779943531763,
-      "type": "file"
-    },
-    {
       "path": "C:\\Users\\fenc34117\\.claude\\projects\\D------------------\\memory\\project_stock_website.md",
       "accessCount": 1,
       "lastAccessed": 1779944596708,
       "type": "file"
     },
     {
-      "path": "C:\\Users\\fenc34117\\.claude\\projects\\D------------------\\memory\\MEMORY.md",
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\825bc31c-87d6-448f-b389-04d723d70954\\tasks\\brb47aplh.output",
       "accessCount": 1,
-      "lastAccessed": 1779944611348,
+      "lastAccessed": 1780068553347,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\825bc31c-87d6-448f-b389-04d723d70954\\tasks\\b8wo2qimt.output",
+      "accessCount": 1,
+      "lastAccessed": 1780069578484,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\825bc31c-87d6-448f-b389-04d723d70954\\tasks\\beh77hyf7.output",
+      "accessCount": 1,
+      "lastAccessed": 1780069905821,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\825bc31c-87d6-448f-b389-04d723d70954\\tasks\\bc1sp54t8.output",
+      "accessCount": 1,
+      "lastAccessed": 1780070466267,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\825bc31c-87d6-448f-b389-04d723d70954\\tasks\\bvi6fncbh.output",
+      "accessCount": 1,
+      "lastAccessed": 1780070809618,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\825bc31c-87d6-448f-b389-04d723d70954\\tasks\\bdt2qs083.output",
+      "accessCount": 1,
+      "lastAccessed": 1780074377965,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\825bc31c-87d6-448f-b389-04d723d70954\\tasks\\b5vnbeq4z.output",
+      "accessCount": 1,
+      "lastAccessed": 1780074567531,
+      "type": "file"
+    },
+    {
+      "path": "backend\\fly.toml",
+      "accessCount": 1,
+      "lastAccessed": 1780074635365,
+      "type": "file"
+    },
+    {
+      "path": "fly.toml",
+      "accessCount": 1,
+      "lastAccessed": 1780074635729,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\825bc31c-87d6-448f-b389-04d723d70954\\tasks\\bja9hlew5.output",
+      "accessCount": 1,
+      "lastAccessed": 1780074714776,
+      "type": "file"
+    },
+    {
+      "path": "backend\\Dockerfile",
+      "accessCount": 1,
+      "lastAccessed": 1780074722668,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\fenc34117\\.claude\\projects\\D------------------\\memory\\feedback_fly_deploy.md",
+      "accessCount": 1,
+      "lastAccessed": 1780075542437,
+      "type": "file"
+    },
+    {
+      "path": "index.html",
+      "accessCount": 1,
+      "lastAccessed": 1780133098049,
+      "type": "file"
+    },
+    {
+      "path": "src\\DatabaseMaintenancePage.jsx",
+      "accessCount": 1,
+      "lastAccessed": 1780133112078,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\825bc31c-87d6-448f-b389-04d723d70954\\tasks\\bkoky0on0.output",
+      "accessCount": 1,
+      "lastAccessed": 1780137858117,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\825bc31c-87d6-448f-b389-04d723d70954\\tasks\\b5lc0mwpu.output",
+      "accessCount": 1,
+      "lastAccessed": 1780137922948,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\825bc31c-87d6-448f-b389-04d723d70954\\tasks\\bg40l2fiv.output",
+      "accessCount": 1,
+      "lastAccessed": 1780139753836,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\FENC34~1\\AppData\\Local\\Temp\\claude\\D------------------\\629c373d-098f-404d-8dae-30b8b2a46cfc\\tasks\\bxxocp7hv.output",
+      "accessCount": 1,
+      "lastAccessed": 1780307001127,
       "type": "file"
     }
   ],

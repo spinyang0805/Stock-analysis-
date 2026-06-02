@@ -1,7 +1,7 @@
 {
-  "tool_name": "PowerShell",
-  "tool_input_preview": "{\"command\":\"Set-Location \\\"D:\\\\個人資料\\\\投資理財\\\\股票網站分析\\\\Stock-analysis-\\\"\\nGet-ChildItem \\\"node_modules\\\\lightweight-charts\\\\dist\\\" -Name | Select-Object -First 20\\nnode -e \\\"const p=require('./node_module...",
-  "error": "Exit code 1\nlightweight-charts.development.mjs\r\nlightweight-charts.production.mjs\r\nlightweight-charts.standalone.development.js\r\nlightweight-charts.standalone.development.mjs\r\nlightweight-charts.standalone.production.js\r\nlightweight-charts.standalone.production.mjs\r\ntypings.d.ts\r\n[eval]:1\r\nconst p=require('./node_modules/lightweight-charts/package.json'); console.log(JSON.stringify(p.exports?.'.') || p.main)\r\n                                                                                       ...",
-  "timestamp": "2026-05-28T04:23:17.369Z",
-  "retry_count": 2
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"curl -s \\\"https://stock-analysis-tw.fly.dev/api/batch/fundamentals/query?limit=5\\\" | python -m json.tool 2>&1\",\"description\":\"Verify backend is up and query fundamentals DB\"}",
+  "error": "Exit code 1\nExtra data: line 1 column 5 (char 4)",
+  "timestamp": "2026-05-29T17:11:40.714Z",
+  "retry_count": 1
 }
