@@ -118,8 +118,27 @@ def save_stock_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
     return err is None
 
 
+_CHIP_ALLOWED: set | None = None
+
+def _get_chip_allowed() -> set:
+    """Lazily load product_universe codes; cached for the process lifetime."""
+    global _CHIP_ALLOWED
+    if _CHIP_ALLOWED is not None:
+        return _CHIP_ALLOWED
+    rows, err = _run("SELECT code FROM product_universe", fetch="all")
+    if not err and rows:
+        _CHIP_ALLOWED = {r[0] for r in rows}
+    else:
+        _CHIP_ALLOWED = set()
+    return _CHIP_ALLOWED
+
+
 def save_chip_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
     if db is None:
+        return False
+    allowed = _get_chip_allowed()
+    # Skip warrants / leveraged products not in product_universe
+    if allowed and stock_id not in allowed and not stock_id.startswith("00"):
         return False
     sql = """
         INSERT INTO chip_daily
