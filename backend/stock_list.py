@@ -178,15 +178,15 @@ def search_products(query: str, limit: int = 12) -> List[Dict[str, str]]:
         return []
 
     exact = []
-    partial = []
+    code_prefix = []
+    name_match = []
     for item in get_all_products():
         code = item["code"].lower()
         name = item["name"].lower()
-        market = item.get("market", "").lower()
-        typ = item.get("type", "").lower()
-        haystack = f"{code} {name} {market} {typ}"
         if q == code or q == name:
             exact.append(item)
-        elif q in haystack:
-            partial.append(item)
-    return (exact + partial)[:limit]
+        elif code.startswith(q):
+            code_prefix.append(item)
+        elif q in name or q in code:
+            name_match.append(item)
+    return (exact + code_prefix + name_match)[:limit]
