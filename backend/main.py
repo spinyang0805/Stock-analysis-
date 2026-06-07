@@ -963,35 +963,49 @@ def get_prices(stocks: str = ""):
 
 @app.get("/api/fundamentals/{stock}")
 def fundamentals(stock: str):
-    import requests as req
     code = normalize_stock(stock)
-    valuation = _get_twse_valuation()
-    val = valuation.get(code, {})
-    if not val:
-        return JSONResponse({"error": "查無估值資料（僅支援上市股票）", "stock": code},
-                            media_type="application/json; charset=utf-8")
-    pe = val.get("pe_ratio")
-    # Estimate EPS from current price / PE
-    eps_est = None
-    try:
-        price_rows, _ = _run_sql_one(code)
-        if price_rows and pe and pe > 0:
-            price = float(price_rows[0])
-            eps_est = round(price / pe, 2)
-    except Exception:
-        pass
-    rev = _fetch_mops_revenue(code)
-    payload = {
-        "stock": code,
-        "pe_ratio":       val.get("pe_ratio"),
-        "dividend_yield": val.get("dividend_yield"),
-        "pb_ratio":       val.get("pb_ratio"),
-        "eps_est":        eps_est,
-        "revenue_yoy":    rev.get("revenue_yoy"),
-        "revenue_mom":    rev.get("revenue_mom"),
-        "data_date":      datetime.now().strftime("%Y-%m-%d"),
-    }
-    return JSONResponse(payload, media_type="application/json; charset=utf-8")
+    from firebase_cache import _run
+    row, err = _run(
+        """SELECT pe_ratio, dividend_yield, pb_ratio, eps, roe, roa,
+                  gross_margin, operating_margin, net_margin,
+                  debt_ratio, current_ratio, shares_outstanding, market_cap,
+                  book_value_per_share, cash_dividend,
+                  revenue, revenue_yoy, revenue_mom, revenue_date,
+                  valuation_date, updated_at
+           FROM fundamentals WHERE stock_id = %s""",
+        (code,), fetch="one",
+    )
+    if err or not row:
+        # Fallback: try live TWSE valuation
+        valuation = _get_twse_valuation()
+        val = valuation.get(code, {})
+        if not val:
+            return JSONResponse({"error": "查無基本面資料", "stock": code},
+                                media_type="application/json; charset=utf-8")
+        return JSONResponse({
+            "stock": code,
+            "pe_ratio": val.get("pe_ratio"),
+            "dividend_yield": val.get("dividend_yield"),
+            "pb_ratio": val.get("pb_ratio"),
+            "data_date": datetime.now().strftime("%Y-%m-%d"),
+        }, media_type="application/json; charset=utf-8")
+
+    cols = ["pe_ratio","dividend_yield","pb_ratio","eps","roe","roa",
+            "gross_margin","operating_margin","net_margin",
+            "debt_ratio","current_ratio","shares_outstanding","market_cap",
+            "book_value_per_share","cash_dividend",
+            "revenue","revenue_yoy","revenue_mom","revenue_date",
+            "valuation_date","updated_at"]
+    from decimal import Decimal
+    def _json_safe(v):
+        if isinstance(v, Decimal): return float(v)
+        return v
+    data = {k: _json_safe(v) for k, v in zip(cols, row)}
+    data["stock"] = code
+    data["eps_est"] = data.get("eps")
+    data["data_date"] = data.get("valuation_date") or datetime.now().strftime("%Y-%m-%d")
+    data["updated_at"] = str(data["updated_at"]) if data["updated_at"] else None
+    return JSONResponse(data, media_type="application/json; charset=utf-8")
 
 
 def _run_sql_one(code: str):
