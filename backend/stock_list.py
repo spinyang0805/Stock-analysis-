@@ -105,20 +105,18 @@ def _dedupe(items: List[Dict[str, str]]) -> List[Dict[str, str]]:
 
 def _firebase_products(limit: int = 5000) -> List[Dict[str, str]]:
     try:
-        from firebase import db
-        if db is None:
-            return []
-        items = []
-        for collection in ["product_universe", "stock_daily"]:
-            for doc in db.collection(collection).limit(limit).stream():
-                data = doc.to_dict() or {}
-                latest = data.get("latest") or {}
-                code = str(data.get("code") or data.get("stock_id") or doc.id).strip().upper()
-                name = data.get("name") or latest.get("name") or code
-                market = _norm_market(data.get("market") or latest.get("market"))
-                product_type = data.get("type") or latest.get("product_type") or _infer_type(code, name)
-                items.append({"code": code, "name": name, "market": market, "type": product_type, "industry": data.get("industry") or product_type})
-        return items
+        from firebase_cache import get_all_products_from_db
+        rows = get_all_products_from_db(limit=limit)
+        return [
+            {
+                "code": r["code"],
+                "name": r.get("name") or r["code"],
+                "market": _norm_market(r.get("market")),
+                "type": r.get("type") or _infer_type(r["code"], r.get("name", "")),
+                "industry": r.get("industry") or r.get("type") or "股票",
+            }
+            for r in rows if r.get("code")
+        ]
     except Exception:
         return []
 
@@ -159,10 +157,10 @@ def _etfs() -> List[Dict[str, str]]:
 @lru_cache(maxsize=1)
 def get_all_products() -> List[Dict[str, str]]:
     items = []
+    items.extend(_firebase_products())  # Supabase DB first — most reliable
     items.extend(_listed_stocks())
     items.extend(_tpex_stocks())
     items.extend(_etfs())
-    items.extend(_firebase_products())
     items.extend(SEED_PRODUCTS)
     return _dedupe(items)
 
