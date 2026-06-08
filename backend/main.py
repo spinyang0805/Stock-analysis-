@@ -1242,7 +1242,11 @@ async def ai_stock_picker(request: Request):
             "7. 格式：每支股票一行，含代號、名稱（若知道）、理由。"
         ),
     }
-    full_messages = [system_msg] + [m for m in messages if m.get("role") != "system"]
+    # Keep only last 6 user/assistant turns to avoid token overflow (GROQ 8192 limit)
+    non_system = [m for m in messages if m.get("role") != "system"]
+    if len(non_system) > 6:
+        non_system = non_system[-6:]
+    full_messages = [system_msg] + non_system
 
     for _ in range(3):  # max 3 tool-call rounds
         try:
