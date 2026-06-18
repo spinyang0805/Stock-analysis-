@@ -37,11 +37,11 @@ _load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    print("\n❌ DATABASE_URL 環境變數未設定")
+    print("\n[ERR] DATABASE_URL 環境變數未設定")
     print("   Windows: set DATABASE_URL=postgresql://user:pass@host:5432/dbname")
     sys.exit(1)
 
-print(f"\n🔗 資料庫：{DATABASE_URL[:50]}{'...' if len(DATABASE_URL) > 50 else ''}")
+print(f"\n[DB] 資料庫：{DATABASE_URL[:50]}{'...' if len(DATABASE_URL) > 50 else ''}")
 
 try:
     from firebase import db
@@ -53,18 +53,18 @@ try:
         recent_trading_dates, today_str,
     )
 except Exception as e:
-    print(f"❌ 匯入模組失敗: {e}")
+    print(f"[ERR] 匯入模組失敗: {e}")
     sys.exit(1)
 
 if db is None:
-    print("❌ 資料庫連線失敗")
+    print("[ERR] 資料庫連線失敗")
     sys.exit(1)
 
 _STOP = False
 
 def _handle_sigint(sig, frame):
     global _STOP
-    print("\n⚠️  收到中斷，正在完成本批次後停止...")
+    print("\n[WARN]  收到中斷，正在完成本批次後停止...")
     _STOP = True
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
@@ -97,7 +97,7 @@ def run_chip_backfill(months: int = 12, sleep: float = 0.3):
         print(f"  {date_text:<10}  {int(t86 or 0):>10}  {int(margin or 0):>10}  {int(tpex_t or 0):>12}  {int(tpex_m or 0):>10}  {err_str}", flush=True)
         time.sleep(sleep)
 
-    print(f"\n  ✅ 籌碼回補完成")
+    print(f"\n  [OK] 籌碼回補完成")
     print(f"     TWSE三大法人合計: {total_t86} 筆")
     print(f"     TWSE融資券合計:   {total_margin} 筆")
     print(f"     TPEx三大法人合計: {total_tpex_t86} 筆")
@@ -125,7 +125,7 @@ def _ensure_fundamentals_table():
     """
     _, err = _run(sql)
     if err:
-        print(f"  ⚠️ 建表失敗: {err}")
+        print(f"  [WARN] 建表失敗: {err}")
         return False
     return True
 
@@ -159,7 +159,7 @@ def _fetch_twse_valuation():
             }
         return result
     except Exception as e:
-        print(f"  ⚠️ TWSE valuation API 失敗: {e}")
+        print(f"  [WARN] TWSE valuation API 失敗: {e}")
         return {}
 
 
@@ -203,7 +203,7 @@ def _fetch_mops_revenue(stock_id: str, offset_months: int = 0):
                 }
         return result
     except Exception as e:
-        print(f"  ⚠️ MOPS revenue API 失敗 (offset={offset_months}): {e}")
+        print(f"  [WARN] MOPS revenue API 失敗 (offset={offset_months}): {e}")
         return {}
 
 
@@ -252,12 +252,12 @@ def run_fundamentals_backfill(sleep: float = 0.05):
             rev.get("revenue"), rev.get("revenue_mom"), rev.get("revenue_yoy"), rev.get("revenue_date"),
         ))
         if err:
-            print(f"  ⚠️ {code}: {err}")
+            print(f"  [WARN] {code}: {err}")
         else:
             written += 1
         time.sleep(sleep)
 
-    print(f"\n  ✅ 基本面回補完成：寫入 {written} 筆，略過 {skipped} 筆")
+    print(f"\n  [OK] 基本面回補完成：寫入 {written} 筆，略過 {skipped} 筆")
 
 
 # ──── 主程式 ──────────────────────────────────────────
@@ -270,7 +270,7 @@ def main():
     args = parser.parse_args()
 
     print("\n" + "=" * 65)
-    print("  📊 本機籌碼 + 基本面資料回補工具")
+    print("  [CHART] 本機籌碼 + 基本面資料回補工具")
     print(f"  籌碼月數: {args.months}  |  間隔: {args.sleep}s")
     print("=" * 65)
 
@@ -280,7 +280,7 @@ def main():
     if not args.chip_only:
         run_fundamentals_backfill()
 
-    print("\n✅ 全部完成！\n")
+    print("\n[OK] 全部完成！\n")
 
 
 if __name__ == "__main__":
