@@ -658,6 +658,16 @@ def trigger_chip_history_backfill(months: int = 12, max_days: int = None):
     return start_thread(f"chip-history-{days}d", run_chip_history_backfill, months, days)
 
 
+@app.get("/api/realtime/{stock}")
+def realtime_quote(stock: str):
+    """Light realtime quote (TWSE MIS) — used by the static-data frontend during trading hours."""
+    code = normalize_stock(stock)
+    if fetch_realtime_board is None:
+        return JSONResponse({"error": "realtime unavailable"}, status_code=503, media_type="application/json; charset=utf-8")
+    board = fetch_realtime_board(code) or {}
+    return JSONResponse(jsonable_encoder(board), media_type="application/json; charset=utf-8")
+
+
 @app.get("/api/chip/{stock}")
 def chip(stock: str):
     code = normalize_stock(stock)

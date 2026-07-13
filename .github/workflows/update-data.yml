@@ -57,5 +57,6 @@ jobs:
             echo "No data changes"
           else
             git commit -m "data: daily update $(date +%Y-%m-%d)"
+            git pull --rebase origin main
             git push
           fi

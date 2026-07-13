@@ -1382,6 +1382,15 @@ export default function App() {
 
   /* ── Live candle update ────────────────────────────────────────── */
   const fetchRealtimeDirect = useCallback(async (code) => {
+    // 1) 後端輕量報價（含五檔委買賣；MIS 對瀏覽器沒開 CORS 時的主要來源）
+    try {
+      const res = await fetch(`${API}/api/realtime/${encodeURIComponent(code)}`, { cache:"no-store" });
+      if (res.ok) {
+        const q = await res.json();
+        if (q?.source === "TWSE MIS" && q.price != null) return q;
+      }
+    } catch {}
+    // 2) 瀏覽器直抓 TWSE MIS（若 TWSE 允許跨域則最快）
     for (const prefix of ["tse","otc"]) {
       try {
         const url=`https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${prefix}_${code}.tw&json=1&delay=0&_=${Date.now()}`;
