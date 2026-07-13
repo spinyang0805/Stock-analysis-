@@ -1025,6 +1025,32 @@ def fundamentals(stock: str):
     return JSONResponse(data, media_type="application/json; charset=utf-8")
 
 
+@app.get("/api/financials/{stock}")
+def financials_yearly(stock: str):
+    """歷年（~5年）股利 / 殖利率 / 營收 / 淨利 / EPS（fetch_financials_yearly.py 寫入）。"""
+    code = normalize_stock(stock)
+    from firebase_cache import _run
+    rows, err = _run(
+        """SELECT year, revenue, net_income, eps, dividend, dividend_yield, year_end_close, updated_at
+           FROM financials_yearly WHERE stock_id = %s ORDER BY year""",
+        (code,), fetch="all",
+    )
+    if err or not rows:
+        return JSONResponse({"stock": code, "years": [], "error": err or "查無歷年財務資料"},
+                            media_type="application/json; charset=utf-8")
+    years = [{
+        "year": r[0],
+        "revenue": int(r[1]) if r[1] is not None else None,
+        "net_income": int(r[2]) if r[2] is not None else None,
+        "eps": float(r[3]) if r[3] is not None else None,
+        "dividend": float(r[4]) if r[4] is not None else None,
+        "dividend_yield": float(r[5]) if r[5] is not None else None,
+        "year_end_close": float(r[6]) if r[6] is not None else None,
+    } for r in rows]
+    return JSONResponse({"stock": code, "years": years, "updated_at": str(rows[-1][7]) if rows[-1][7] else None},
+                        media_type="application/json; charset=utf-8")
+
+
 def _run_sql_one(code: str):
     """Quick helper: get latest close price."""
     from firebase_cache import _run

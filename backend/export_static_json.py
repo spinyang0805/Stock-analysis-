@@ -126,6 +126,10 @@ def fetch_bundle_api(session, item):
     chip = api_get(session, f"/api/chip/{code}?auto_init=false")
     analysis = api_get(session, f"/api/analysis/{code}")
     fundamentals = api_get(session, f"/api/fundamentals/{code}")
+    try:
+        financials = api_get(session, f"/api/financials/{code}", tries=1)
+    except Exception:
+        financials = None  # endpoint 未部署或無資料時省略
     # Strip response-cache noise; realtime is per-request state, not archive data
     for payload in (kline, chip, analysis):
         payload.pop("cache_hit", None)
@@ -138,7 +142,8 @@ def fetch_bundle_api(session, item):
             meta.update({"name": item.get("name") or code,
                          "market": item.get("market") or meta.get("market") or "--",
                          "industry": item.get("industry") or meta.get("industry") or "--"})
-    return {"kline": kline, "chip": chip, "analysis": analysis, "fundamentals": fundamentals}
+    return {"kline": kline, "chip": chip, "analysis": analysis,
+            "fundamentals": fundamentals, "financials": financials}
 
 
 # ── Source: direct DB ────────────────────────────────────────────────────────
@@ -168,12 +173,29 @@ def fetch_bundle_db(item):
         f"SELECT {', '.join(pb.FUNDAMENTALS_COLS)} FROM fundamentals WHERE stock_id = %s",
         (code,), fetch="one",
     )
+    fin_rows, fin_err = _run(
+        """SELECT year, revenue, net_income, eps, dividend, dividend_yield, year_end_close
+           FROM financials_yearly WHERE stock_id = %s ORDER BY year""",
+        (code,), fetch="all",
+    )
+    financials = None
+    if not fin_err and fin_rows:
+        financials = {"stock": code, "years": [{
+            "year": r[0],
+            "revenue": int(r[1]) if r[1] is not None else None,
+            "net_income": int(r[2]) if r[2] is not None else None,
+            "eps": float(r[3]) if r[3] is not None else None,
+            "dividend": float(r[4]) if r[4] is not None else None,
+            "dividend_yield": float(r[5]) if r[5] is not None else None,
+            "year_end_close": float(r[6]) if r[6] is not None else None,
+        } for r in fin_rows]}
     info = {"name": item.get("name"), "market": item.get("market"), "industry": item.get("industry")}
     return {
         "kline": pb.build_kline_payload(code, daily_rows, info),
         "chip": pb.build_chip_payload(code, chip_rows),
         "analysis": pb.build_analysis_payload(code, daily_rows, chip_rows, info),
         "fundamentals": pb.build_fundamentals_payload(code, fund_row),
+        "financials": financials,
     }
 
 

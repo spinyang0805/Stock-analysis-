@@ -963,6 +963,78 @@ function FundamentalsCard({ stockCode, preloaded }) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   FinancialsCard — 歷年股利 / 殖利率 / 營收 / 淨利
+   ══════════════════════════════════════════════════════════════════ */
+function FinancialsCard({ stockCode, preloaded }) {
+  const [fetched, setFetched] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const data = preloaded ?? fetched;
+
+  useEffect(()=>{
+    if (!stockCode || preloaded) { setFetched(null); return; }
+    setFetched(null); setLoading(true);
+    fetch(`${API}/api/financials/${encodeURIComponent(stockCode)}`,{cache:"no-store"})
+      .then(r=>r.json()).then(j=>setFetched(j)).catch(()=>{}).finally(()=>setLoading(false));
+  },[stockCode, preloaded]);
+
+  const years = (data?.years || []).slice(-5);
+  const toE = v => v==null ? null : v/1e8; // 億
+  const maxRev = Math.max(1, ...years.map(y=>Math.abs(toE(y.revenue)||0)));
+  const maxNet = Math.max(1, ...years.map(y=>Math.abs(toE(y.net_income)||0)));
+
+  return (
+    <Card title="歷年財務（近5年）" icon="📚">
+      {loading && <div style={{color:"#64748b",fontSize:13}}>載入中...</div>}
+      {!loading && !years.length && <div style={{color:"#475569",fontSize:12}}>歷年財務資料暫無（每週日自動更新）</div>}
+      {years.length>0 && (
+        <>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:300}}>
+              <thead>
+                <tr style={{color:"#64748b",fontSize:11,borderBottom:"1px solid #1e293b"}}>
+                  {["年度","營收(億)","淨利(億)","EPS","股利(元)","殖利率"].map(h=>(
+                    <th key={h} style={{padding:"4px 6px",textAlign:"right",fontWeight:600,whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {years.map(y=>(
+                  <tr key={y.year} style={{borderBottom:"1px solid rgba(148,163,184,.08)"}}>
+                    <td style={{padding:"5px 6px",textAlign:"right",color:"#facc15",fontWeight:700}}>{y.year}{y.year===new Date().getFullYear()?"*":""}</td>
+                    <td style={{padding:"5px 6px",textAlign:"right"}}>{y.revenue!=null?fmt(toE(y.revenue),0):"--"}</td>
+                    <td style={{padding:"5px 6px",textAlign:"right",color:(y.net_income??0)>=0?"#f1f5f9":"#22c55e"}}>{y.net_income!=null?fmt(toE(y.net_income),0):"--"}</td>
+                    <td style={{padding:"5px 6px",textAlign:"right"}}>{y.eps!=null?fmt(y.eps,2):"--"}</td>
+                    <td style={{padding:"5px 6px",textAlign:"right",color:"#f59e0b"}}>{y.dividend!=null?fmt(y.dividend,2):"--"}</td>
+                    <td style={{padding:"5px 6px",textAlign:"right",color:"#38bdf8"}}>{y.dividend_yield!=null?`${fmt(y.dividend_yield,2)}%`:"--"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {/* 營收/淨利 迷你長條 */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:8}}>
+            {[["營收",y=>toE(y.revenue),maxRev,"#38bdf8"],["淨利",y=>toE(y.net_income),maxNet,"#f59e0b"]].map(([label,get,max,color])=>(
+              <div key={label}>
+                <div style={{fontSize:10,color:"#64748b",marginBottom:3}}>{label}趨勢</div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:3,height:36}}>
+                  {years.map(y=>{
+                    const v=get(y);
+                    return <div key={y.year} title={`${y.year}: ${v!=null?fmt(v,0):"--"}億`}
+                      style={{flex:1,height:v!=null?`${Math.max(8,Math.abs(v)/max*100)}%`:2,
+                        background:v==null?"#1e293b":v>=0?color:"#22c55e",borderRadius:2,opacity:.85}} />;
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{color:"#475569",fontSize:10,marginTop:6}}>來源：yfinance 年報・殖利率＝當年股利/年終收盤・*今年為年中部分資料</div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
    AddToWatchlistModal
    ══════════════════════════════════════════════════════════════════ */
 function AddToWatchlistModal({ stock, user, onClose }) {
@@ -1243,6 +1315,7 @@ export default function App() {
   const [chip,            setChip]           = useState(null);
   const [analysis,        setAnalysis]       = useState(null);
   const [fundamentals,    setFundamentals]   = useState(null);
+  const [financials,      setFinancials]     = useState(null);
   const [realtime,        setRealtime]       = useState(null);
   const [status,          setStatus]         = useState("載入中...");
   const [lastRefresh,     setLastRefresh]    = useState(null);
@@ -1448,7 +1521,7 @@ export default function App() {
   useEffect(() => {
     let alive=true;
     setStatus(`⏳ 查詢 ${stock.code} 中...`);
-    setRows([]); setPayload(null); setChip(null); setAnalysis(null); setFundamentals(null); setRealtime(null); setHovered(null); setBackfillAttempt(0);
+    setRows([]); setPayload(null); setChip(null); setAnalysis(null); setFundamentals(null); setFinancials(null); setRealtime(null); setHovered(null); setBackfillAttempt(0);
     (async () => {
       const bundle = await fetchStockBundle(stock.code);
       if (!alive) return;
@@ -1457,6 +1530,7 @@ export default function App() {
         setPayload(bundle.kline); setRows(nextRows);
         setChip(bundle.chip || null); setAnalysis(bundle.analysis || null);
         setFundamentals(bundle.fundamentals || null);
+        setFinancials(bundle.financials || null);
         setLastRefresh(new Date());
         setStatus(`已載入 ${nextRows.length} 筆資料（${String(bundle.updated_at||"").slice(0,10)} 更新）`);
         return;
@@ -1645,6 +1719,7 @@ export default function App() {
         </div>
 
         <FundamentalsCard stockCode={stock.code} preloaded={fundamentals} />
+        <FinancialsCard stockCode={stock.code} preloaded={financials} />
         <TechRadarCard rows={rows} chipData={chip} />
         <MaStatusCard rows={rows} />
         <VolPriceCard rows={rows} />

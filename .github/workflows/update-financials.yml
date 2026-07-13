@@ -1,0 +1,45 @@
+name: Update yearly financials
+
+on:
+  schedule:
+    # 每週日台灣時間 11:00（03:00 UTC）— 年報/股利變動慢，週更即可
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "只抓前 N 檔（0 = 全部）"
+        default: "0"
+      only:
+        description: "指定代號（逗號分隔，留空 = 全部）"
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-financials
+  cancel-in-progress: false
+
+jobs:
+  financials:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install pandas numpy requests psycopg2-binary pytz yfinance
+
+      - name: Fetch yearly financials (yfinance → DB)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python backend/fetch_financials_yearly.py \
+            --limit "${{ github.event.inputs.limit || '0' }}" \
+            --only "${{ github.event.inputs.only || '' }}"
+      # JSON 匯出由每日 update-data workflow 接手（讀同一張表）
