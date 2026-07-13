@@ -14,7 +14,6 @@ import argparse
 import os
 import sys
 import time
-from datetime import datetime
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BACKEND_DIR)
@@ -50,44 +49,45 @@ def cleanup_mislabeled_dates():
               + (f" (error: {err})" if err else ""))
 
 
-def heal_stale_stocks(limit: int, months: int = 2, lag_days: int = 2):
-    """Backfill stocks whose latest stock_daily date lags their market's max date."""
+def heal_stale_stocks(limit: int, months: int = 2, min_recent_rows: int = 25):
+    """Backfill stocks with too few rows in the recent window.
+
+    以「近 45 天列數」判斷而非最新日期 — 只看最新日期會漏掉中段缺口
+    （例如 TPEx 2026-06 整月斷更後補上今日，最新日期正常但六月全空）。
+    完整股票近 45 天約 28~30 個交易日；< min_recent_rows 視為有缺口。
+    """
     from firebase_cache import _run
     from jobs import run_on_demand_backfill
 
     rows, err = _run(
         """
-        WITH latest AS (
-          SELECT stock_id, market, MAX(date) AS last_date
+        WITH recent AS (
+          SELECT stock_id, COUNT(*) AS cnt
           FROM stock_daily
-          GROUP BY stock_id, market
+          WHERE date >= to_char(CURRENT_DATE - 45, 'YYYYMMDD')
+          GROUP BY stock_id
         ),
-        market_max AS (
-          SELECT market, MAX(last_date) AS market_last FROM latest GROUP BY market
+        mkt AS (
+          SELECT DISTINCT ON (stock_id) stock_id, market
+          FROM stock_daily ORDER BY stock_id, date DESC
         )
-        SELECT l.stock_id, l.market, l.last_date, m.market_last
-        FROM latest l JOIN market_max m ON m.market = l.market
-        WHERE l.last_date < m.market_last
-          AND l.stock_id IN (SELECT code FROM product_universe)
-        ORDER BY l.last_date ASC
+        SELECT p.code, COALESCE(r.cnt, 0) AS cnt, COALESCE(m.market, '上市') AS market
+        FROM product_universe p
+        LEFT JOIN recent r ON r.stock_id = p.code
+        LEFT JOIN mkt m ON m.stock_id = p.code
+        WHERE COALESCE(r.cnt, 0) < %s
+        ORDER BY COALESCE(r.cnt, 0) ASC
         """,
-        fetch="all",
+        (min_recent_rows,), fetch="all",
     )
     if err:
         print(f"[heal] scan failed: {err}")
         return
-    # Only heal stocks lagging more than lag_days behind (suspensions are normal)
-    stale = []
-    for stock_id, market, last_date, market_last in rows or []:
-        gap = (datetime.strptime(str(market_last), "%Y%m%d")
-               - datetime.strptime(str(last_date), "%Y%m%d")).days
-        if gap > lag_days:
-            stale.append((stock_id, market, last_date, gap))
-    stale = stale[:limit]
-    print(f"[heal] {len(stale)} stale stocks (showing 10): {stale[:10]}")
+    stale = [(r[0], r[2], r[1]) for r in rows or []][:limit]
+    print(f"[heal] {len(stale)} gappy stocks (showing 10): {stale[:10]}")
 
     healed, failed = 0, 0
-    for i, (stock_id, market, _, _) in enumerate(stale, 1):
+    for i, (stock_id, market, _) in enumerate(stale, 1):
         try:
             run_on_demand_backfill(stock_id, months, market or "TWSE")
             healed += 1
