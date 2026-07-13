@@ -32,6 +32,24 @@ def load_env_file():
                 os.environ.setdefault(key.strip(), value.strip())
 
 
+def cleanup_mislabeled_dates():
+    """Delete sparse mislabeled dates (weekends/holidays written by old TPEx fallback bug).
+
+    真正的交易日整市場有 1000+ 列；近 40 天內列數 < 100 的日期必為誤標殘留。
+    """
+    from firebase_cache import _run
+    for table in ("stock_daily", "chip_daily"):
+        deleted, err = _run(
+            f"""DELETE FROM {table} WHERE date IN (
+                  SELECT date FROM {table}
+                  WHERE date >= to_char(CURRENT_DATE - 40, 'YYYYMMDD')
+                  GROUP BY date HAVING COUNT(*) < 100
+                )""",
+        )
+        print(f"[cleanup] {table}: removed {deleted if not err else 0} mislabeled rows"
+              + (f" (error: {err})" if err else ""))
+
+
 def heal_stale_stocks(limit: int, months: int = 2, lag_days: int = 2):
     """Backfill stocks whose latest stock_daily date lags their market's max date."""
     from firebase_cache import _run
@@ -96,6 +114,8 @@ def main():
         return 1
 
     from jobs import run_daily_update, write_twse_valuation, write_tpex_valuation
+
+    cleanup_mislabeled_dates()
 
     print(f"[daily] run_daily_update(lookback_days={args.lookback}) ...")
     result = run_daily_update(args.lookback)

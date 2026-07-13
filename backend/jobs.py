@@ -38,6 +38,47 @@ MOPS_REVENUE = "https://mops.twse.com.tw/mops/web/ajax_t05st10"
 HOT_STOCKS = ["2330", "2317", "3702", "2454", "2382"]
 
 
+def _csv_to_payload(text: str) -> dict:
+    """Convert a TWSE/TPEx CSV response into the legacy JSON payload shape
+    {"fields": [...], "data": [[...], ...]} so downstream parsers keep working.
+
+    TWSE 於 2026-07-10 起 rwd 端點改回 CSV（response=json 失效）。
+    CSV 可能有標題列/彙總段，取第一個含「代號」的列當表頭。
+    """
+    import csv
+    import io
+    text = (text or "").lstrip("﻿")
+    if not text.strip() or text.lstrip().startswith(("<", "{", "[")):
+        return {}
+    try:
+        all_rows = [r for r in csv.reader(io.StringIO(text)) if r and any(str(c).strip() for c in r)]
+    except Exception:
+        return {}
+    header_idx = None
+    for i, row in enumerate(all_rows):
+        if any("代號" in str(c) for c in row):
+            header_idx = i
+            break
+    if header_idx is None:
+        return {}
+    fields = [str(c).strip() for c in all_rows[header_idx]]
+    ncol = len(fields)
+    data = [r for r in all_rows[header_idx + 1:]
+            if len(r) >= ncol - 1 and len([c for c in r if str(c).strip()]) > 1]
+    return {"fields": fields, "data": data, "stat": "OK", "_source_format": "csv"}
+
+
+def _parse_response(res):
+    """Parse a TWSE/TPEx response: JSON first, CSV fallback."""
+    try:
+        return res.json()
+    except ValueError:
+        payload = _csv_to_payload(res.text)
+        if payload:
+            return payload
+        raise
+
+
 def fetch_json(url, params=None, headers=None, retries=2):
     h = headers or HEADERS
     last_err = None
@@ -48,7 +89,7 @@ def fetch_json(url, params=None, headers=None, retries=2):
                 time.sleep(1.5 * (attempt + 1))
                 continue
             res.raise_for_status()
-            return res.json(), None
+            return _parse_response(res), None
         except requests.exceptions.SSLError as ssl_exc:
             try:
                 res = requests.get(url, params=params, headers=h, timeout=REQUEST_TIMEOUT, verify=False)
@@ -56,7 +97,7 @@ def fetch_json(url, params=None, headers=None, retries=2):
                     time.sleep(1.5 * (attempt + 1))
                     continue
                 res.raise_for_status()
-                return res.json(), f"SSL fallback: {ssl_exc}"
+                return _parse_response(res), f"SSL fallback: {ssl_exc}"
             except Exception as exc:
                 last_err = str(exc)
         except Exception as exc:
@@ -930,6 +971,17 @@ def _parse_tpex_row(row, fields):
     }
 
 
+def _roc_any_to_yyyymmdd(text: str) -> str | None:
+    text = str(text or "").strip()
+    if "/" in text:
+        return roc_to_yyyymmdd(text)
+    if text.isdigit() and len(text) == 7:  # e.g. 1150713
+        return f"{int(text[:3]) + 1911}{text[3:]}"
+    if text.isdigit() and len(text) == 8:
+        return text
+    return None
+
+
 def _write_twse_day(date_text: str, result: dict):
     """Fetch and write TWSE all-market data for a single trading date."""
     payload, err = fetch_json(TWSE_ALL, params={"response": "json", "date": date_text})
@@ -937,6 +989,15 @@ def _write_twse_day(date_text: str, result: dict):
         result["errors"].append(f"TWSE {date_text}: {err}")
     rows = _rows(payload)
     fields = _fields(payload)
+    # CSV 版多了「日期」欄且伺服器可能忽略 date 參數只回最新交易日 —
+    # 以資料列自己的日期為準，與請求日不符就跳過，避免誤標寫入。
+    date_i = _idx(fields, "日期")
+    if rows and date_i is not None:
+        row_date = _roc_any_to_yyyymmdd(_row_value(rows[0], date_i))
+        if row_date and row_date != date_text:
+            result["errors"].append(
+                f"TWSE {date_text}: server returned data for {row_date}, skipped to avoid mislabeling")
+            return 0, False
     written = 0
     for row in rows:
         try:

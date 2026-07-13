@@ -24,6 +24,8 @@ jobs:
   financials:
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    env:
+      PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v4
 
