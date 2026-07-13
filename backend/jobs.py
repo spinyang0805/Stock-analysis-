@@ -949,34 +949,67 @@ def _write_twse_day(date_text: str, result: dict):
     return written, bool(rows)
 
 
+def _tpex_payload_date(payload) -> str | None:
+    """Extract the trading date TPEx reports inside its own response (ROC formats)."""
+    if not isinstance(payload, dict):
+        return None
+    candidates = [payload.get("date"), payload.get("reportDate")]
+    tables = payload.get("tables")
+    if isinstance(tables, list) and tables:
+        candidates.extend([(tables[0] or {}).get("date"), (tables[0] or {}).get("reportDate")])
+    for value in candidates:
+        text = str(value or "").strip()
+        if not text:
+            continue
+        if "/" in text:
+            return roc_to_yyyymmdd(text)
+        if text.isdigit() and len(text) == 7:  # e.g. 1150710
+            return f"{int(text[:3]) + 1911}{text[3:]}"
+        if text.isdigit() and len(text) == 8:
+            return text
+    return None
+
+
 def _write_tpex_day(date_text: str, result: dict):
     """Fetch and write TPEx all-market data for a single trading date."""
-    rows, fields, found = [], [], False
+    rows, fields, payload = [], [], {}
     for params in [
         {"response": "json", "date": roc_date_slash(date_text)},
         {"response": "json", "date": date_text},
         {"response": "json"},
     ]:
-        payload, err = fetch_json(TPEX_ALL, params=params)
+        # TPEx rejects requests without its own Referer/Origin — must use TPEX_HEADERS
+        payload, err = fetch_json(TPEX_ALL, params=params, headers=TPEX_HEADERS)
         if err:
             result["errors"].append(f"TPEx {date_text}: {err}")
         rows = _rows(payload)
         fields = _fields(payload)
+        if not fields:
+            _, fields = _table_rows(payload)
         if rows:
-            found = True
             break
+    if not rows:
+        return 0, False
+    # Trust the date TPEx reports itself. When asked for a date with no data the
+    # API silently falls back to the latest trading day — writing those rows
+    # under the requested date corrupts the DB with mislabeled duplicates.
+    actual_date = _tpex_payload_date(payload) or date_text
+    if actual_date != date_text:
+        result["errors"].append(
+            f"TPEx {date_text}: server returned data for {actual_date}, skipped to avoid mislabeling")
+        return 0, False
     written = 0
     for row in rows:
         try:
             stock_id, doc = _parse_tpex_row(row, fields)
             if not stock_id or not stock_id[:1].isdigit():
                 continue
-            doc["data_date"] = date_text
-            if save_stock_daily(stock_id, date_text, doc):
+            doc["data_date"] = actual_date
+            if save_stock_daily(stock_id, actual_date, doc):
                 written += 1
         except Exception as exc:
             result["errors"].append(f"TPEx row {date_text}: {exc}")
-    return written, found
+    return written, True
 
 
 def run_daily_update(lookback_days: int = 5):

@@ -551,6 +551,13 @@ def products(product_type: str = "股票", market: str = "all", limit: int = 500
     return JSONResponse({"count": len(items), "items": items[:200], "note": "items response is capped at 200 preview rows"}, media_type="application/json; charset=utf-8")
 
 
+@app.get("/api/products/all")
+def products_all(product_type: str = "all", market: str = "all", limit: int = 5000):
+    """Full uncapped product list — used by export_static_json.py to build stocklist.json."""
+    items = product_universe(product_type=product_type, market=market)[:limit]
+    return JSONResponse({"count": len(items), "items": items}, media_type="application/json; charset=utf-8")
+
+
 @app.get("/api/firebase/test")
 def firebase_test():
     if db is None:

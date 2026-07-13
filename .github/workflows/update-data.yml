@@ -1,0 +1,61 @@
+name: Update stock data (JSON)
+
+on:
+  schedule:
+    # 平日台灣時間 15:40（07:40 UTC）收盤後更新
+    - cron: "40 7 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      lookback:
+        description: "回補最近 N 個交易日"
+        default: "5"
+      heal:
+        description: "個股缺口自癒（true/false）"
+        default: "true"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install pandas numpy requests psycopg2-binary pytz fastapi yfinance
+
+      - name: Update DB (TWSE + TPEx daily K / chips / valuation)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python backend/daily_job.py \
+            --lookback "${{ github.event.inputs.lookback || '5' }}" \
+            $([ "${{ github.event.inputs.heal || 'true' }}" = "true" ] && echo --heal)
+
+      - name: Export static JSON
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python backend/export_static_json.py --source db --workers 8
+
+      - name: Commit & push data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/data
+          if git diff --cached --quiet; then
+            echo "No data changes"
+          else
+            git commit -m "data: daily update $(date +%Y-%m-%d)"
+            git push
+          fi

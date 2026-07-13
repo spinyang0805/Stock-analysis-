@@ -5,8 +5,41 @@ import BatchPage from "./BatchPage.jsx";
 
 const { createChart, CandlestickSeries, LineSeries, HistogramSeries } = LightweightCharts;
 const API = "https://stock-analysis-tw.fly.dev";
-const APP_VERSION = "v21-dashboard";
+const DATA = "/data"; // 靜態 JSON（隨前端一起部署，見 backend/export_static_json.py）
+const APP_VERSION = "v22-static-data";
 const POLL_MS = 10_000;
+
+/* ── 靜態資料層：優先讀 /data 下的 JSON，讀不到再退回 API ─────────── */
+async function fetchStaticJson(path) {
+  try {
+    const res = await fetch(`${DATA}${path}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
+}
+// 個股 bundle：{ kline, chip, analysis, fundamentals }
+function fetchStockBundle(code) {
+  return fetchStaticJson(`/stocks/${encodeURIComponent(code)}.json`);
+}
+let _stockListCache = null;
+async function loadStockList() {
+  if (!_stockListCache) _stockListCache = await fetchStaticJson("/stocklist.json");
+  return Array.isArray(_stockListCache) ? _stockListCache : null;
+}
+// 與後端 search_products 相同的排序：完全相符 > 代號開頭 > 名稱/代號包含
+function searchStockList(list, query, limit = 8) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return [];
+  const exact = [], prefix = [], includes = [];
+  for (const item of list) {
+    const code = String(item.code || "").toLowerCase();
+    const name = String(item.name || "").toLowerCase();
+    if (q === code || q === name) exact.push(item);
+    else if (code.startsWith(q)) prefix.push(item);
+    else if (name.includes(q) || code.includes(q)) includes.push(item);
+  }
+  return [...exact, ...prefix, ...includes].slice(0, limit);
+}
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
 function isTradingSession() {
@@ -883,16 +916,18 @@ function AIChatPage() {
 /* ══════════════════════════════════════════════════════════════════
    FundamentalsCard
    ══════════════════════════════════════════════════════════════════ */
-function FundamentalsCard({ stockCode }) {
-  const [data, setData] = useState(null);
+function FundamentalsCard({ stockCode, preloaded }) {
+  // preloaded 來自靜態 bundle；沒有時（API fallback）自行抓取
+  const [fetched, setFetched] = useState(null);
   const [loading, setLoading] = useState(false);
+  const data = preloaded ?? fetched;
 
   useEffect(()=>{
-    if (!stockCode) return;
-    setData(null); setLoading(true);
+    if (!stockCode || preloaded) { setFetched(null); return; }
+    setFetched(null); setLoading(true);
     fetch(`${API}/api/fundamentals/${encodeURIComponent(stockCode)}`,{cache:"no-store"})
-      .then(r=>r.json()).then(j=>setData(j)).catch(()=>{}).finally(()=>setLoading(false));
-  },[stockCode]);
+      .then(r=>r.json()).then(j=>setFetched(j)).catch(()=>{}).finally(()=>setLoading(false));
+  },[stockCode, preloaded]);
 
   const pct=(v,d=1)=>v!=null?`${v>=0?"+":""}${fmt(v,d)}%`:"--";
 
@@ -1000,6 +1035,12 @@ function WatchlistPage({ user, setPage, setStock, setInput, setLoadKey }) {
   }, [user]);
 
   async function loadPrices(codes) {
+    // 先讀靜態 prices.json（全市場最新收盤），讀不到才回退 API
+    const all = await fetchStaticJson("/prices.json");
+    if (all && typeof all === "object") {
+      setPrices(Object.fromEntries(codes.map(c => [c, all[c]]).filter(([,v]) => v != null)));
+      return;
+    }
     try {
       const r = await fetch(`${API}/api/prices?stocks=${codes.join(",")}`, { cache:"no-store" });
       const j = await r.json();
@@ -1201,6 +1242,7 @@ export default function App() {
   const [rows,            setRows]           = useState([]);
   const [chip,            setChip]           = useState(null);
   const [analysis,        setAnalysis]       = useState(null);
+  const [fundamentals,    setFundamentals]   = useState(null);
   const [realtime,        setRealtime]       = useState(null);
   const [status,          setStatus]         = useState("載入中...");
   const [lastRefresh,     setLastRefresh]    = useState(null);
@@ -1307,12 +1349,14 @@ export default function App() {
     };
   }, []);
 
-  /* ── Search ────────────────────────────────────────────────────── */
+  /* ── Search（靜態 stocklist 客戶端過濾，讀不到才回退 API）────────── */
   useEffect(() => {
     const q = input.trim();
     if (!q) { setSuggestions([]); return; }
     clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(async () => {
+      const list = await loadStockList();
+      if (list) { setSuggestions(searchStockList(list, q)); return; }
       try {
         const res = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}`, { cache:"no-store" });
         if (res.ok) { const j=await res.json(); setSuggestions(Array.isArray(j)?j.slice(0,8):[]); }
@@ -1391,20 +1435,36 @@ export default function App() {
     } catch(e) { if(!isRefresh) setStatus(`查詢失敗：${e?.message}`); }
   }, []);
 
-  /* ── Initial load ──────────────────────────────────────────────── */
+  /* ── Initial load：先讀靜態 bundle，一次拿 K線+籌碼+分析+基本面 ── */
   useEffect(() => {
     let alive=true;
     setStatus(`⏳ 查詢 ${stock.code} 中...`);
-    setRows([]); setPayload(null); setChip(null); setAnalysis(null); setRealtime(null); setHovered(null); setBackfillAttempt(0);
-    fetchKline(stock.code);
-    Promise.allSettled([
-      fetch(`${API}/api/chip/${encodeURIComponent(stock.code)}?auto_init=false`, {cache:"no-store"}),
-      fetch(`${API}/api/analysis/${encodeURIComponent(stock.code)}`, {cache:"no-store"}),
-    ]).then(([chipRes,anaRes])=>{
+    setRows([]); setPayload(null); setChip(null); setAnalysis(null); setFundamentals(null); setRealtime(null); setHovered(null); setBackfillAttempt(0);
+    (async () => {
+      const bundle = await fetchStockBundle(stock.code);
       if (!alive) return;
-      if (chipRes.status==="fulfilled"&&chipRes.value.ok) chipRes.value.json().then(j=>{if(alive)setChip(j);}).catch(()=>{});
-      if (anaRes.status==="fulfilled"&&anaRes.value.ok) anaRes.value.json().then(j=>{if(alive)setAnalysis(j);}).catch(()=>{});
-    });
+      if (bundle?.kline?.data?.length) {
+        const nextRows = normalizeRows(bundle.kline);
+        setPayload(bundle.kline); setRows(nextRows);
+        setChip(bundle.chip || null); setAnalysis(bundle.analysis || null);
+        setFundamentals(bundle.fundamentals || null);
+        setLastRefresh(new Date());
+        setStatus(`已載入 ${nextRows.length} 筆資料（${String(bundle.updated_at||"").slice(0,10)} 更新）`);
+        return;
+      }
+      // 靜態檔沒有這檔股票 → 回退 API（含背景 backfill 機制）
+      fetchKline(stock.code);
+      Promise.allSettled([
+        fetch(`${API}/api/chip/${encodeURIComponent(stock.code)}?auto_init=false`, {cache:"no-store"}),
+        fetch(`${API}/api/analysis/${encodeURIComponent(stock.code)}`, {cache:"no-store"}),
+        fetch(`${API}/api/fundamentals/${encodeURIComponent(stock.code)}`, {cache:"no-store"}),
+      ]).then(([chipRes,anaRes,fundRes])=>{
+        if (!alive) return;
+        if (chipRes.status==="fulfilled"&&chipRes.value.ok) chipRes.value.json().then(j=>{if(alive)setChip(j);}).catch(()=>{});
+        if (anaRes.status==="fulfilled"&&anaRes.value.ok) anaRes.value.json().then(j=>{if(alive)setAnalysis(j);}).catch(()=>{});
+        if (fundRes.status==="fulfilled"&&fundRes.value.ok) fundRes.value.json().then(j=>{if(alive)setFundamentals(j);}).catch(()=>{});
+      });
+    })();
     return ()=>{alive=false;};
   }, [stock.code, loadKey, fetchKline]);
 
@@ -1575,7 +1635,7 @@ export default function App() {
           )}
         </div>
 
-        <FundamentalsCard stockCode={stock.code} />
+        <FundamentalsCard stockCode={stock.code} preloaded={fundamentals} />
         <TechRadarCard rows={rows} chipData={chip} />
         <MaStatusCard rows={rows} />
         <VolPriceCard rows={rows} />
