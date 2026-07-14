@@ -27,7 +27,8 @@ TWSE_T86 = "https://www.twse.com.tw/rwd/zh/fund/T86"
 TWSE_MARGIN = "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN"
 TWSE_STOCK_DAY = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY"
 TWSE_STOCK_DAY_LEGACY = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
-TPEX_ALL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyCloseQuotes"
+TPEX_ALL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
+TPEX_ALL_LEGACY = "https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyCloseQuotes"  # dead since ~2026-07, kept as last-resort fallback
 TPEX_STOCK_DAY = "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"
 TPEX_INSTITUTIONAL = "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade"
 TPEX_MARGIN = "https://www.tpex.org.tw/www/zh-tw/margin/balance"
@@ -230,6 +231,12 @@ def latest_twse_daily_rows(max_lookback_days: int = 10):
 
 def latest_tpex_daily_rows(max_lookback_days: int = 10):
     errors = []
+    payload, err = fetch_json(TPEX_ALL, headers=TPEX_HEADERS)
+    if err:
+        errors.append(f"TPEx openapi: {err}")
+    date_val, rows, fields = _tpex_openapi_to_rows(payload)
+    if rows:
+        return date_val or today_str(), rows, fields, errors
     for d in recent_dates(max_lookback_days):
         for params in [
             {"response": "json", "l": "zh-tw", "date": roc_date_slash(d)},
@@ -238,11 +245,11 @@ def latest_tpex_daily_rows(max_lookback_days: int = 10):
             {"response": "json", "date": d},
             {"response": "json"},
         ]:
-            payload, err = fetch_json(TPEX_ALL, params=params, headers=TPEX_HEADERS)
-            if err:
-                errors.append(f"TPEx {d}: {err}")
-            rows = _rows(payload)
-            fields = _fields(payload)
+            legacy_payload, err2 = fetch_json(TPEX_ALL_LEGACY, params=params, headers=TPEX_HEADERS)
+            if err2:
+                errors.append(f"TPEx {d}: {err2}")
+            rows = _rows(legacy_payload)
+            fields = _fields(legacy_payload)
             if rows:
                 return d, rows, fields, errors
     return today_str(), [], [], errors
@@ -402,24 +409,27 @@ def fetch_tpex_stock_month(stock_id: str, year: int, month: int, product_type: s
     errors = []
     written = 0
     roc_ym = f"{year - 1911}/{month:02d}"
+    # probe run 29302130207 確認：正確參數是 code=<代號>&date=<西元年>/<月>/<日>
+    # （日期需帶完整 D，且年份是西元不是民國；stockNo/民國年/純年月都回「參數輸入錯誤」）
     params_candidates = [
+        {"response": "json", "code": stock_id, "date": f"{year}/{month:02d}/01"},
+        {"response": "json", "code": stock_id, "date": f"{year}/{month:02d}/15"},
         {"response": "json", "l": "zh-tw", "d": roc_ym, "s": f"{stock_id},asc,0"},
-        {"response": "json", "l": "zh-tw", "date": roc_ym, "stockNo": stock_id},
         {"response": "json", "date": roc_ym, "stockNo": stock_id},
-        {"response": "json", "date": f"{year}{month:02d}", "stockNo": stock_id},
-        {"response": "json", "date": f"{roc_ym}/01", "stockNo": stock_id},
     ]
     payload = {}
     err = None
+    rows, fields = [], []
     for params in params_candidates:
         payload, err = fetch_json(TPEX_STOCK_DAY, params=params, headers=TPEX_HEADERS)
-        rows = _rows(payload)
+        # response 把資料包在 tables[0] 裡，_fields()/_rows() 不會往裡挖 —
+        # 用 _table_rows() 才拿得到正確欄位名，否則 _idx() 全部落回硬編預設值，
+        # 讀出來的欄位會整組錯位（例如把成交筆數當成成交股數）
+        rows, fields = _table_rows(payload)
         if rows:
             break
     if err:
         errors.append(f"TPEx month error {stock_id}: {err}")
-    rows = _rows(payload)
-    fields = _fields(payload)
     if not rows:
         # TPEx API unavailable — fall back to yfinance
         w2, e2 = _fetch_yfinance_tpex_month(stock_id, year, month, product_type)
@@ -432,7 +442,8 @@ def fetch_tpex_stock_month(stock_id: str, year: int, month: int, product_type: s
     high_i = _idx(fields, "最高", default=5)
     low_i = _idx(fields, "最低", default=6)
     volume_i = _idx(fields, "成交", default=8)
-    turnover_i = _idx(fields, "金額", default=None)
+    # 確定端點回的欄位是「成交仟元」不是「金額」（probe run 29302130207）
+    turnover_i = _idx(fields, "金額", default=None) or _idx(fields, "仟元", default=None)
     trades_i = _idx(fields, "筆數", default=None)
 
     for row in rows:
@@ -1031,30 +1042,71 @@ def _tpex_payload_date(payload) -> str | None:
     return None
 
 
+def _tpex_openapi_to_rows(payload):
+    """Convert TPEx OpenAPI mainboard_daily_close_quotes response (JSON array
+    of dicts, English field names) into the legacy (date, rows, fields) shape
+    so `_parse_tpex_row` can stay unchanged. No date param on this endpoint —
+    it always returns the latest trading day, same limitation as TWSE
+    STOCK_DAY_ALL (probe run 29302130207)."""
+    if not isinstance(payload, list) or not payload:
+        return None, [], []
+    fields = ["代號", "名稱", "收盤", "漲跌", "開盤", "最高", "最低", "成交股數", "成交金額", "成交筆數"]
+    rows = []
+    date_val = None
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        code = str(item.get("SecuritiesCompanyCode") or "").strip()
+        if not code:
+            continue
+        if date_val is None:
+            date_val = _roc_any_to_yyyymmdd(str(item.get("Date") or ""))
+        rows.append([
+            code, item.get("CompanyName"), item.get("Close"), item.get("Change"),
+            item.get("Open"), item.get("High"), item.get("Low"),
+            item.get("TradingShares"), item.get("TransactionAmount"), item.get("TransactionNumber"),
+        ])
+    return date_val, rows, fields
+
+
 def _write_tpex_day(date_text: str, result: dict):
-    """Fetch and write TPEx all-market data for a single trading date."""
-    rows, fields, payload = [], [], {}
-    for params in [
-        {"response": "json", "date": roc_date_slash(date_text)},
-        {"response": "json", "date": date_text},
-        {"response": "json"},
-    ]:
-        # TPEx rejects requests without its own Referer/Origin — must use TPEX_HEADERS
-        payload, err = fetch_json(TPEX_ALL, params=params, headers=TPEX_HEADERS)
-        if err:
-            result["errors"].append(f"TPEx {date_text}: {err}")
-        rows = _rows(payload)
-        fields = _fields(payload)
-        if not fields:
-            _, fields = _table_rows(payload)
-        if rows:
-            break
+    """Fetch and write TPEx all-market data for a single trading date.
+
+    Primary: TPEx OpenAPI mainboard_daily_close_quotes. Falls back to the
+    legacy www afterTrading/dailyCloseQuotes endpoint (dead as of 2026-07,
+    kept in case OpenAPI disappears too — see T1 in
+    .omc/plans/2026-07-14-pipeline-fix-spec.md).
+    """
+    payload, err = fetch_json(TPEX_ALL, headers=TPEX_HEADERS)
+    if err:
+        result["errors"].append(f"TPEx openapi {date_text}: {err}")
+    actual_date, rows, fields = _tpex_openapi_to_rows(payload)
+
+    if not rows:
+        for params in [
+            {"response": "json", "date": roc_date_slash(date_text)},
+            {"response": "json", "date": date_text},
+            {"response": "json"},
+        ]:
+            # TPEx rejects requests without its own Referer/Origin — must use TPEX_HEADERS
+            legacy_payload, err2 = fetch_json(TPEX_ALL_LEGACY, params=params, headers=TPEX_HEADERS)
+            if err2:
+                result["errors"].append(f"TPEx legacy {date_text}: {err2}")
+            legacy_rows = _rows(legacy_payload)
+            legacy_fields = _fields(legacy_payload)
+            if not legacy_fields:
+                _, legacy_fields = _table_rows(legacy_payload)
+            if legacy_rows:
+                rows, fields = legacy_rows, legacy_fields
+                actual_date = _tpex_payload_date(legacy_payload) or date_text
+                break
     if not rows:
         return 0, False
+
     # Trust the date TPEx reports itself. When asked for a date with no data the
     # API silently falls back to the latest trading day — writing those rows
     # under the requested date corrupts the DB with mislabeled duplicates.
-    actual_date = _tpex_payload_date(payload) or date_text
+    actual_date = actual_date or date_text
     if actual_date != date_text:
         result["errors"].append(
             f"TPEx {date_text}: server returned data for {actual_date}, skipped to avoid mislabeling")

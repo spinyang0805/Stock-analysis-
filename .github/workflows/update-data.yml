@@ -12,6 +12,9 @@ on:
       heal:
         description: "個股缺口自癒（true/false）"
         default: "true"
+      heal_budget_min:
+        description: "heal 時間預算（分鐘）— 超過就停止，確保 export/commit 一定跑得到"
+        default: "45"
 
 permissions:
   contents: write
@@ -43,6 +46,7 @@ jobs:
         run: |
           python backend/daily_job.py \
             --lookback "${{ github.event.inputs.lookback || '5' }}" \
+            --heal-budget-min "${{ github.event.inputs.heal_budget_min || '45' }}" \
             $([ "${{ github.event.inputs.heal || 'true' }}" = "true" ] && echo --heal)
 
       - name: Export static JSON
