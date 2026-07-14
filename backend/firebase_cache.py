@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List
 import pytz
+from psycopg2.extras import execute_values
 
 from firebase import db, get_conn, return_conn
 
@@ -118,6 +119,62 @@ def save_stock_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
     return err is None
 
 
+def save_stock_daily_bulk(rows: List[tuple]) -> int:
+    """Batch upsert for stock_daily. rows: list of (stock_id, date, payload_dict).
+
+    One connection checkout + one execute_values (internally paged at 500
+    rows/round-trip) + one commit for the whole batch, instead of 1-2 network
+    RTTs per row against the remote Supabase pooler (~1s/row — see T6 in
+    .omc/plans/2026-07-14-pipeline-fix-spec.md). Returns rows actually written
+    (post OHLC-validation filter), matching save_stock_daily's semantics.
+    """
+    if db is None or not rows:
+        return 0
+    values = []
+    for stock_id, date, payload in rows:
+        if not is_valid_stock_payload(payload):
+            continue
+        close = _float(payload.get("close"))
+        open_p = _float(payload.get("open")) or close
+        high = _float(payload.get("high")) or close
+        low = _float(payload.get("low")) or close
+        values.append((
+            stock_id, date, open_p, high, low, close,
+            payload.get("volume"), payload.get("turnover"), payload.get("change"), payload.get("trades"),
+            payload.get("market"), payload.get("product_type"), payload.get("name"), payload.get("source"),
+        ))
+    if not values:
+        return 0
+    sql = """
+        INSERT INTO stock_daily
+            (stock_id, date, open, high, low, close, volume, turnover,
+             change, trades, market, product_type, name, source)
+        VALUES %s
+        ON CONFLICT (stock_id, date) DO UPDATE SET
+            open=EXCLUDED.open, high=EXCLUDED.high, low=EXCLUDED.low, close=EXCLUDED.close,
+            volume=EXCLUDED.volume, turnover=EXCLUDED.turnover, change=EXCLUDED.change,
+            trades=EXCLUDED.trades, market=EXCLUDED.market, product_type=EXCLUDED.product_type,
+            name=EXCLUDED.name, source=EXCLUDED.source, updated_at=NOW()
+    """
+    conn = get_conn()
+    if conn is None:
+        return 0
+    try:
+        with conn.cursor() as cur:
+            execute_values(cur, sql, values, page_size=500)
+        conn.commit()
+        return len(values)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        print(f"SQL bulk error (stock_daily): {e} | rows={len(values)}")
+        return 0
+    finally:
+        return_conn(conn)
+
+
 _CHIP_ALLOWED: set | None = None
 
 def _get_chip_allowed() -> set:
@@ -168,6 +225,62 @@ def save_chip_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
     return err is None
 
 
+def save_chip_daily_bulk(rows: List[tuple]) -> int:
+    """Batch upsert for chip_daily. rows: list of (stock_id, date, payload_dict).
+    Same one-connection/one-commit batching as save_stock_daily_bulk (T6)."""
+    if db is None or not rows:
+        return 0
+    allowed = _get_chip_allowed()
+    values = []
+    for stock_id, date, payload in rows:
+        if allowed and stock_id not in allowed and not stock_id.startswith("00"):
+            continue
+        values.append((
+            stock_id, date,
+            payload.get("name"), payload.get("market"),
+            payload.get("foreign_buy"), payload.get("investment_trust_buy"),
+            payload.get("dealer_buy"), payload.get("institution_total_buy"),
+            payload.get("margin_balance") or payload.get("margin"),
+            payload.get("short_balance") or payload.get("short"),
+            payload.get("source"), payload.get("chip_date") or date,
+        ))
+    if not values:
+        return 0
+    sql = """
+        INSERT INTO chip_daily
+            (stock_id, date, name, market, foreign_buy, investment_trust_buy,
+             dealer_buy, institution_total_buy, margin_balance, short_balance, source, chip_date)
+        VALUES %s
+        ON CONFLICT (stock_id, date) DO UPDATE SET
+            name=COALESCE(EXCLUDED.name, chip_daily.name),
+            market=COALESCE(EXCLUDED.market, chip_daily.market),
+            foreign_buy=COALESCE(EXCLUDED.foreign_buy, chip_daily.foreign_buy),
+            investment_trust_buy=COALESCE(EXCLUDED.investment_trust_buy, chip_daily.investment_trust_buy),
+            dealer_buy=COALESCE(EXCLUDED.dealer_buy, chip_daily.dealer_buy),
+            institution_total_buy=COALESCE(EXCLUDED.institution_total_buy, chip_daily.institution_total_buy),
+            margin_balance=COALESCE(EXCLUDED.margin_balance, chip_daily.margin_balance),
+            short_balance=COALESCE(EXCLUDED.short_balance, chip_daily.short_balance),
+            source=EXCLUDED.source, updated_at=NOW()
+    """
+    conn = get_conn()
+    if conn is None:
+        return 0
+    try:
+        with conn.cursor() as cur:
+            execute_values(cur, sql, values, page_size=500)
+        conn.commit()
+        return len(values)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        print(f"SQL bulk error (chip_daily): {e} | rows={len(values)}")
+        return 0
+    finally:
+        return_conn(conn)
+
+
 def save_fundamentals(stock_id: str, payload: Dict[str, Any]) -> bool:
     if db is None:
         return False
@@ -197,6 +310,58 @@ def save_fundamentals(stock_id: str, payload: Dict[str, Any]) -> bool:
         payload.get("revenue_date"), payload.get("valuation_date"), payload.get("source"),
     ))
     return err is None
+
+
+def save_fundamentals_bulk(rows: List[tuple]) -> int:
+    """Batch upsert for fundamentals. rows: list of (stock_id, payload_dict).
+    Same one-connection/one-commit batching as save_stock_daily_bulk (T6)."""
+    if db is None or not rows:
+        return 0
+    values = [
+        (
+            stock_id,
+            payload.get("pe_ratio"), payload.get("dividend_yield"), payload.get("pb_ratio"),
+            payload.get("eps"),
+            payload.get("revenue"), payload.get("revenue_mom"), payload.get("revenue_yoy"),
+            payload.get("revenue_date"), payload.get("valuation_date"), payload.get("source"),
+        )
+        for stock_id, payload in rows
+    ]
+    sql = """
+        INSERT INTO fundamentals
+            (stock_id, pe_ratio, dividend_yield, pb_ratio, eps,
+             revenue, revenue_mom, revenue_yoy, revenue_date, valuation_date, source)
+        VALUES %s
+        ON CONFLICT (stock_id) DO UPDATE SET
+            pe_ratio       = COALESCE(EXCLUDED.pe_ratio,       fundamentals.pe_ratio),
+            dividend_yield = COALESCE(EXCLUDED.dividend_yield, fundamentals.dividend_yield),
+            pb_ratio       = COALESCE(EXCLUDED.pb_ratio,       fundamentals.pb_ratio),
+            eps            = COALESCE(EXCLUDED.eps,            fundamentals.eps),
+            revenue        = COALESCE(EXCLUDED.revenue,        fundamentals.revenue),
+            revenue_mom    = COALESCE(EXCLUDED.revenue_mom,    fundamentals.revenue_mom),
+            revenue_yoy    = COALESCE(EXCLUDED.revenue_yoy,    fundamentals.revenue_yoy),
+            revenue_date   = COALESCE(EXCLUDED.revenue_date,   fundamentals.revenue_date),
+            valuation_date = COALESCE(EXCLUDED.valuation_date, fundamentals.valuation_date),
+            source         = EXCLUDED.source,
+            updated_at     = NOW()
+    """
+    conn = get_conn()
+    if conn is None:
+        return 0
+    try:
+        with conn.cursor() as cur:
+            execute_values(cur, sql, values, page_size=500)
+        conn.commit()
+        return len(values)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        print(f"SQL bulk error (fundamentals): {e} | rows={len(values)}")
+        return 0
+    finally:
+        return_conn(conn)
 
 
 def save_job_log(job_id: str, payload: Dict[str, Any]) -> bool:

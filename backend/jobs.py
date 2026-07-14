@@ -3,7 +3,10 @@ import time
 import requests
 import urllib3
 
-from firebase_cache import save_stock_daily, save_chip_daily, save_job_log
+from firebase_cache import (
+    save_stock_daily, save_chip_daily, save_job_log,
+    save_stock_daily_bulk, save_chip_daily_bulk, save_fundamentals_bulk,
+)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -509,7 +512,7 @@ def write_t86_chips(start_date: str, result: dict):
         # "自營商買賣超股數" is a longer unique key that won't match index 4
         dealer_i = _idx(fields, "自營商買賣超股數", default=11)
         total_i = _idx(fields, "三大法人", "買賣超", default=18)
-        written = 0
+        bulk_rows = []
         for row in rows:
             try:
                 stock_id = str(_row_value(row, code_i)).strip()
@@ -529,10 +532,10 @@ def write_t86_chips(start_date: str, result: dict):
                     "source": "TWSE T86",
                     "chip_date": d,
                 }
-                if save_chip_daily(stock_id, d, payload_doc):
-                    written += 1
+                bulk_rows.append((stock_id, d, payload_doc))
             except Exception as exc:
                 result["errors"].append(f"T86 row {d}: {exc}")
+        written = save_chip_daily_bulk(bulk_rows)
         result["chips"] += written
         result["t86_date"] = d
         return written
@@ -557,7 +560,7 @@ def write_margin_chips(start_date: str, result: dict):
         short_i = _idx(fields, "融券", "今日餘額", default=None)
         if short_i is None:
             short_i = _idx(fields, "融券", "餘額", default=12)
-        written = 0
+        bulk_rows = []
         for row in rows:
             try:
                 stock_id = str(_row_value(row, code_i)).strip()
@@ -573,10 +576,10 @@ def write_margin_chips(start_date: str, result: dict):
                     "source": "TWSE MI_MARGN",
                     "margin_date": d,
                 }
-                if save_chip_daily(stock_id, d, payload_doc):
-                    written += 1
+                bulk_rows.append((stock_id, d, payload_doc))
             except Exception as exc:
                 result["errors"].append(f"margin row {d}: {exc}")
+        written = save_chip_daily_bulk(bulk_rows)
         result["margin_rows"] = written
         result["margin_date"] = d
         return written
@@ -613,7 +616,6 @@ def _parse_bwibbu_row(row):
 def write_twse_valuation(result: dict):
     """Fetch BWIBBU_d (TWSE) + peQryDate (TPEx) for PE/PB/殖利率/EPS.
     Primary: TWSE rwd API.  Fallback: yfinance (works from any IP)."""
-    from firebase_cache import save_fundamentals
     today = today_str()
     twse_written = 0
 
@@ -627,10 +629,12 @@ def write_twse_valuation(result: dict):
         data = r.json()
         rows = data.get("data", [])
         if rows:
+            bulk_rows = []
             for row in rows:
                 code, vals = _parse_bwibbu_row(row)
-                if code and save_fundamentals(code, {**vals, "valuation_date": today, "source": "twse_bwibbu"}):
-                    twse_written += 1
+                if code:
+                    bulk_rows.append((code, {**vals, "valuation_date": today, "source": "twse_bwibbu"}))
+            twse_written = save_fundamentals_bulk(bulk_rows)
             twse_ok = True
     except Exception as exc:
         result.setdefault("errors", []).append(f"BWIBBU_d: {exc}")
@@ -642,7 +646,6 @@ def write_twse_valuation(result: dict):
 
 def write_tpex_valuation(result: dict):
     """Fetch TPEx peQryDate for PE/PB/殖利率/EPS (works from any IP)."""
-    from firebase_cache import save_fundamentals
     today = today_str()
     written = 0
     for d in list(recent_trading_dates(5)):
@@ -660,17 +663,15 @@ def write_tpex_valuation(result: dict):
             rows = tables[0].get("data", []) if tables else []
             if not rows:
                 continue
-            first_fail = True
+            bulk_rows = []
             for row in rows:
                 code, vals = _parse_bwibbu_row(row)
                 if not code:
                     continue
-                ok = save_fundamentals(code, {**vals, "valuation_date": today, "source": "tpex_pebook"})
-                if ok:
-                    written += 1
-                elif first_fail:
-                    result.setdefault("errors", []).append("TPEx save failed (fundamentals table/eps column missing?)")
-                    first_fail = False
+                bulk_rows.append((code, {**vals, "valuation_date": today, "source": "tpex_pebook"}))
+            written = save_fundamentals_bulk(bulk_rows)
+            if bulk_rows and not written:
+                result.setdefault("errors", []).append("TPEx save failed (fundamentals table/eps column missing?)")
             result["tpex_valuation_written"] = written
             return written
         except Exception as exc:
@@ -843,14 +844,15 @@ def write_tpex_insti_chips(date_text: str, result: dict):
     rows, _ = _table_rows(payload)
     if not rows:
         return 0
-    written = 0
+    bulk_rows = []
     for row in rows:
         try:
             stock_id, payload_doc = _parse_tpex_insti_row(row)
-            if stock_id and save_chip_daily(stock_id, date_text, {**payload_doc, "chip_date": date_text}):
-                written += 1
+            if stock_id:
+                bulk_rows.append((stock_id, date_text, {**payload_doc, "chip_date": date_text}))
         except Exception as exc:
             result["errors"].append(f"TPEx insti row {date_text}: {exc}")
+    written = save_chip_daily_bulk(bulk_rows)
     result["tpex_chips"] = result.get("tpex_chips", 0) + written
     result["tpex_t86_date"] = date_text
     return written
@@ -867,7 +869,7 @@ def write_tpex_margin_chips(date_text: str, result: dict):
     name_i = _idx(fields, "名稱", default=1)
     margin_i = _idx(fields, "資餘額", default=6)
     short_i = _idx(fields, "券餘額", default=14)
-    written = 0
+    bulk_rows = []
     for row in rows:
         try:
             stock_id = str(_row_value(row, code_i)).strip()
@@ -884,10 +886,10 @@ def write_tpex_margin_chips(date_text: str, result: dict):
                 "source": "TPEx margin/balance",
                 "margin_date": date_text,
             }
-            if save_chip_daily(stock_id, date_text, payload_doc):
-                written += 1
+            bulk_rows.append((stock_id, date_text, payload_doc))
         except Exception as exc:
             result["errors"].append(f"TPEx margin row {date_text}: {exc}")
+    written = save_chip_daily_bulk(bulk_rows)
     result["tpex_margin_rows"] = result.get("tpex_margin_rows", 0) + written
     result["tpex_margin_date"] = date_text
     return written
@@ -1009,15 +1011,16 @@ def _write_twse_day(date_text: str, result: dict):
             result["errors"].append(
                 f"TWSE {date_text}: server returned data for {row_date}, skipped to avoid mislabeling")
             return 0, False
-    written = 0
+    bulk_rows = []
     for row in rows:
         try:
             stock_id, doc = _parse_twse_all_row(row, fields)
             doc["data_date"] = date_text
-            if stock_id and save_stock_daily(stock_id, date_text, doc):
-                written += 1
+            if stock_id:
+                bulk_rows.append((stock_id, date_text, doc))
         except Exception as exc:
             result["errors"].append(f"TWSE row {date_text}: {exc}")
+    written = save_stock_daily_bulk(bulk_rows)
     return written, bool(rows)
 
 
@@ -1111,17 +1114,17 @@ def _write_tpex_day(date_text: str, result: dict):
         result["errors"].append(
             f"TPEx {date_text}: server returned data for {actual_date}, skipped to avoid mislabeling")
         return 0, False
-    written = 0
+    bulk_rows = []
     for row in rows:
         try:
             stock_id, doc = _parse_tpex_row(row, fields)
             if not stock_id or not stock_id[:1].isdigit():
                 continue
             doc["data_date"] = actual_date
-            if save_stock_daily(stock_id, actual_date, doc):
-                written += 1
+            bulk_rows.append((stock_id, actual_date, doc))
         except Exception as exc:
             result["errors"].append(f"TPEx row {date_text}: {exc}")
+    written = save_stock_daily_bulk(bulk_rows)
     return written, True
 
 
