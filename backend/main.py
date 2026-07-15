@@ -856,7 +856,13 @@ def groq_analyze(stock: str):
             },
             timeout=30,
         )
-        resp.raise_for_status()
+        if not resp.ok:
+            try:
+                detail = (resp.json().get("error", {}) or {}).get("message") or resp.text[:300]
+            except Exception:
+                detail = resp.text[:300]
+            return JSONResponse({"error": f"Groq {resp.status_code}: {detail}", "stock": code},
+                                status_code=502, media_type="application/json; charset=utf-8")
         data = resp.json()
         text = data["choices"][0]["message"]["content"]
         usage = data.get("usage", {})
@@ -1291,7 +1297,8 @@ async def ai_stock_picker(request: Request):
         non_system = non_system[-6:]
     full_messages = [system_msg] + non_system
 
-    for _ in range(3):  # max 3 tool-call rounds
+    tool_choice = "auto"
+    for _ in range(4):  # max 3 tool-call rounds + 1 possible no-tools retry
         try:
             resp = req.post(
                 "https://api.groq.com/openai/v1/chat/completions",
@@ -1300,12 +1307,25 @@ async def ai_stock_picker(request: Request):
                     "model": "llama-3.3-70b-versatile",
                     "messages": full_messages,
                     "tools": _PICKER_TOOLS,
-                    "tool_choice": "auto",
+                    "tool_choice": tool_choice,
                     "max_tokens": 1500,
                     "temperature": 0.3,
                 },
                 timeout=30,
             )
+            if resp.status_code == 400:
+                try:
+                    err = resp.json().get("error", {}) or {}
+                except Exception:
+                    err = {}
+                # Groq 回 400 tool_use_failed = model 生成格式錯誤的 tool call
+                # — 改強制純文字回答重試一次
+                if err.get("code") == "tool_use_failed" and tool_choice != "none":
+                    tool_choice = "none"
+                    continue
+                detail = err.get("message") or resp.text[:300]
+                return JSONResponse({"reply": f"AI 服務錯誤：{detail}"},
+                                    media_type="application/json; charset=utf-8")
             resp.raise_for_status()
             data = resp.json()
             msg = data["choices"][0]["message"]
