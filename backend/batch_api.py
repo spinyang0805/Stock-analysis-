@@ -1,9 +1,10 @@
 """
-batch_api.py — Real-data batch operations for admin use.
+batch_api.py — Manual maintenance tools not covered by the daily GitHub
+Actions pipeline (.github/workflows/update-data.yml).
 Endpoints cover:
-  - Connectivity tests  (TWSE API, TPEx API, Firebase write)
-  - Chip data updates   (today's real data + history backfill)
-  - Stock daily updates (today + per-stock + universe batch)
+  - DB stats + connectivity tests
+  - Single-stock backfill (rescue a specific stock/date range)
+  - Fundamentals: yfinance batch, MOPS monthly revenue, query
   - Job status tracking
 """
 from datetime import datetime
@@ -16,24 +17,13 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from firebase import db
-from firebase_cache import save_job_log
 from jobs import (
-    HEADERS,
     TPEX_HEADERS,
     TPEX_INSTITUTIONAL,
     TWSE_T86,
     fetch_json,
-    recent_trading_dates,
-    run_chip_history_backfill,
-    run_daily_update,
     run_on_demand_backfill,
     today_str,
-    write_margin_chips,
-    write_t86_chips,
-    write_tpex_insti_chips,
-    write_tpex_margin_chips,
-    write_twse_valuation,
-    write_tpex_valuation,
     write_mops_revenue_all,
     write_yfinance_fundamentals,
 )
@@ -234,52 +224,7 @@ def install(app):
             "results": results,
         })
 
-    # ── 2. Today's real chip data ───────────────────────────────────────────
-    @app.get("/api/batch/chip/today")
-    def batch_chip_today(date: str = None):
-        """Write real chip data for a given date (default: today).
-        Calls TWSE T86 + margin + TPEx institutional + TPEx margin."""
-        target = date or today_str()
-        r = {"chips": 0, "margin_rows": 0, "tpex_chips": 0, "tpex_margin_rows": 0, "errors": []}
-        for fn, label in [
-            (write_t86_chips, "TWSE T86"),
-            (write_margin_chips, "TWSE margin"),
-            (write_tpex_insti_chips, "TPEx insti"),
-            (write_tpex_margin_chips, "TPEx margin"),
-        ]:
-            try:
-                fn(target, r)
-            except Exception as exc:
-                r["errors"].append(f"{label}: {exc}")
-
-        return _json({
-            "status": "ok" if not r["errors"] else "partial",
-            "date": target,
-            "twse_chips": r.get("chips", 0),
-            "twse_margin": r.get("margin_rows", 0),
-            "tpex_chips": r.get("tpex_chips", 0),
-            "tpex_margin": r.get("tpex_margin_rows", 0),
-            "errors": r.get("errors", [])[:10],
-        })
-
-    # ── 3. Chip history backfill (background) ───────────────────────────────
-    @app.get("/api/batch/chip/history")
-    def batch_chip_history(months: int = 3, max_days: int = None):
-        """Start background chip history backfill (TWSE + TPEx, all stocks, N months)."""
-        days = int(max_days or max(20, months * 22))
-        job_id = f"chip-history-{days}d-{int(time.time())}"
-        result = _start_job(job_id, run_chip_history_backfill, months, days)
-        return _json({**result, "months": months, "target_days": days})
-
-    # ── 4. Stock daily today (background) ──────────────────────────────────
-    @app.get("/api/batch/stock/today")
-    def batch_stock_today(lookback_days: int = 5):
-        """Update stock daily for the most recent N trading days (TWSE + TPEx)."""
-        job_id = f"stock-daily-{today_str()}-{int(time.time())}"
-        result = _start_job(job_id, run_daily_update, lookback_days)
-        return _json({**result, "lookback_days": lookback_days})
-
-    # ── 5. Single-stock backfill (background) ───────────────────────────────
+    # ── 2. Single-stock backfill (background) ───────────────────────────────
     @app.get("/api/batch/stock/backfill")
     def batch_stock_backfill(stock: str, months: int = 12, market: str = "TWSE"):
         """Backfill K-line for one stock (TWSE or TPEx)."""
@@ -288,80 +233,7 @@ def install(app):
         result = _start_job(job_id, run_on_demand_backfill, code, months, market)
         return _json({**result, "stock": code, "months": months, "market": market})
 
-    # ── 6. Universe batch backfill (background) ─────────────────────────────
-    @app.get("/api/batch/stock/universe")
-    def batch_stock_universe(
-        product_type: str = "股票",
-        market: str = "上市",
-        offset: int = 0,
-        limit: int = 50,
-        months: int = 12,
-    ):
-        """Backfill K-line for a slice of the universe (capped at 100 per call).
-        Uses the larger of: stock_daily count vs product_universe count.
-        TWSE openapi is blocked from Fly.io so stock_daily (1432) wins over product_universe (7).
-        TPEx openapi works so product_universe (888) wins over stock_daily (partial)."""
-        from firebase_cache import _run as _db_run
-        mkt = "TPEx" if market in ("上櫃", "TPEx") else "TWSE"
-        db_rows, _ = _db_run(
-            "SELECT DISTINCT stock_id FROM stock_daily WHERE market=%s ORDER BY stock_id",
-            (mkt,), fetch="all",
-        )
-        db_universe = [{"code": r[0], "market": market} for r in (db_rows or [])]
-        prod_universe = _universe(product_type=product_type, market=market)
-        universe = db_universe if len(db_universe) > len(prod_universe) else prod_universe
-        cap = min(max(1, limit), 100)
-        batch = universe[offset:offset + cap]
-        next_offset = offset + len(batch) if offset + len(batch) < len(universe) else None
-        job_id = f"universe-{market}-{offset}-{int(time.time())}"
-
-        def _run_batch():
-            res = {"written_days": 0, "stocks_done": 0, "errors": []}
-            for item in batch:
-                code = str(item.get("code") or "").strip()
-                if not code:
-                    continue
-                try:
-                    r = run_on_demand_backfill(code, months, mkt)
-                    res["written_days"] += r.get("written_days", 0)
-                    res["stocks_done"] += 1
-                except Exception as exc:
-                    res["errors"].append(f"{code}: {exc}")
-                time.sleep(0.15)
-            res.update({
-                "total_universe": len(universe),
-                "batch_size": len(batch),
-                "offset": offset,
-                "next_offset": next_offset,
-            })
-            save_job_log(job_id, res)
-            return res
-
-        result = _start_job(job_id, _run_batch)
-        return _json({
-            **result,
-            "total_universe": len(universe),
-            "batch_size": len(batch),
-            "offset": offset,
-            "next_offset": next_offset,
-        })
-
-    # ── 7. Fundamentals: valuation (sync) ──────────────────────────────────────
-    @app.get("/api/batch/fundamentals/valuation")
-    def batch_fundamentals_valuation():
-        """Write today's PE/PB/殖利率/EPS for all TWSE+TPEx stocks (sync, ~5-10s)."""
-        result = {"errors": []}
-        write_twse_valuation(result)
-        write_tpex_valuation(result)
-        return _json({
-            "status": "ok" if not result.get("errors") else "partial",
-            "twse_valuation_written": result.get("twse_valuation_written", 0),
-            "tpex_valuation_written": result.get("tpex_valuation_written", 0),
-            "errors": result.get("errors", [])[:10],
-            "done_at": datetime.now(TW_TZ).isoformat(),
-        })
-
-    # ── 8. Fundamentals: yfinance batch (background, works from any IP) ────────
+    # ── 3. Fundamentals: yfinance batch (background, works from any IP) ────────
     @app.get("/api/batch/fundamentals/yfinance")
     def batch_fundamentals_yfinance(market: str = "上市", offset: int = 0, limit: int = 100):
         """Fetch PE/PB/EPS/殖利率 via yfinance for universe stocks. Works from any IP."""
@@ -396,7 +268,7 @@ def install(app):
         return _json({**result, "market": market, "batch_size": len(batch),
                       "total_universe": len(all_codes), "next_offset": next_offset})
 
-    # ── 9. Fundamentals: monthly revenue (background) ──────────────────────────
+    # ── 4. Fundamentals: monthly revenue (background) ──────────────────────────
     @app.get("/api/batch/fundamentals/revenue")
     def batch_fundamentals_revenue(months_back: int = 0):
         """Write MOPS monthly revenue for all 上市+上櫃 stocks (background job)."""
@@ -410,7 +282,7 @@ def install(app):
         result = _start_job(job_id, _run_revenue)
         return _json({**result, "months_back": months_back})
 
-    # ── 10. Fundamentals DB query (verify data) ────────────────────────────
+    # ── 5. Fundamentals DB query (verify data) ────────────────────────────
     @app.get("/api/batch/fundamentals/query")
     def batch_fundamentals_query(stock: str = None, limit: int = 10):
         """Read from fundamentals table to verify data was written."""
@@ -430,7 +302,7 @@ def install(app):
         total = count_row[0] if count_row else 0
         return _json({"total_in_db": total, "rows": rows or [], "error": err})
 
-    # ── 11. Job status ───────────────────────────────────────────────────────
+    # ── 6. Job status ───────────────────────────────────────────────────────
     @app.get("/api/batch/job/{job_id}")
     def batch_job_status(job_id: str):
         with _JOBS_LOCK:
@@ -441,64 +313,3 @@ def install(app):
         with _JOBS_LOCK:
             jobs = sorted(_JOBS.values(), key=lambda j: j.get("started_at", ""), reverse=True)
         return _json({"count": len(jobs), "jobs": jobs[:20]})
-
-    # ── 12. One-shot daily full update (background) ──────────────────────────
-    @app.get("/api/batch/run_daily_all")
-    def batch_run_daily_all(lookback_days: int = 5):
-        """
-        One-shot endpoint: triggers all daily data updates in sequence.
-        Steps:
-          1. run_daily_update — stock_daily (TWSE+TPEx) + chip (T86+margin+TPEx) internally
-          2. Fundamentals valuation (TWSE BWIBBU_d PE/PB/yield + TPEx PE book)
-        Note: chip is handled inside run_daily_update; do NOT call chip functions separately.
-        Safe to call via curl/script without the React UI.
-        """
-        job_id = f"daily-all-{today_str()}-{int(time.time())}"
-
-        def _run_all():
-            result = {
-                "steps": [],
-                "errors": [],
-                "stock_daily": {},
-                "valuation": {},
-            }
-
-            # Step 1: stock daily + chip (run_daily_update handles both internally)
-            try:
-                r = run_daily_update(lookback_days)
-                result["stock_daily"] = r
-                result["steps"].append(
-                    f"stock_daily+chip: {r.get('stocks','?')} stocks"
-                    f" TWSE_chip={r.get('chips',0)} TPEx_chip={r.get('tpex_chips',0)}"
-                    f" dates={r.get('dates_written',[])}"
-                )
-                if r.get("errors"):
-                    result["errors"].extend(r["errors"][:5])
-            except Exception as exc:
-                result["errors"].append(f"stock_daily: {exc}")
-                result["steps"].append(f"stock_daily: ERROR {exc}")
-
-            # Step 2: fundamentals valuation
-            try:
-                val_r = {"errors": []}
-                write_twse_valuation(val_r)
-                write_tpex_valuation(val_r)
-                result["valuation"] = val_r
-                result["steps"].append(
-                    f"valuation: TWSE={val_r.get('twse_valuation_written',0)}"
-                    f" TPEx={val_r.get('tpex_valuation_written',0)}"
-                    f" errors={len(val_r.get('errors',[]))}"
-                )
-                if val_r.get("errors"):
-                    result["errors"].extend(val_r["errors"])
-            except Exception as exc:
-                result["errors"].append(f"valuation: {exc}")
-                result["steps"].append(f"valuation: ERROR {exc}")
-
-            result["finished_at"] = datetime.now(TW_TZ).isoformat()
-            save_job_log(job_id, result)
-            return result
-
-        r = _start_job(job_id, _run_all)
-        return _json({**r, "job_id": job_id, "lookback_days": lookback_days,
-                      "note": "Runs stock_daily → chip_today → valuation in sequence"})
