@@ -243,7 +243,8 @@ export default function StockChart({ code, market, dailyRows, longBars, longLoad
 
     // 可見區間：只在換股票 / 週期 / 區間（或第一次有資料）時設定，之後的報價更新不動使用者的縮放
     const n = bars.length;
-    const key = `${code}|${period}|${range}|${structVer}`;
+    // 長期歷史晚到時 K 棒會往前補，邏輯索引位移 → 重新套用區間
+    const key = `${code}|${period}|${range}|${structVer}|${longBars?.length ? "L" : "S"}`;
     if (!n || rangeKey.current === key) return;
     rangeKey.current = key;
     if (intraday) main.timeScale().fitContent();
@@ -254,7 +255,7 @@ export default function StockChart({ code, market, dailyRows, longBars, longLoad
       main.timeScale().setVisibleLogicalRange({ from: n - count - 0.5, to: n - 1 + 3 });
     }
     try { subc.timeScale().setVisibleLogicalRange(main.timeScale().getVisibleLogicalRange()); } catch { /* ignore */ }
-  }, [bars, structVer, range, code, period, intraday, intra.prevClose]);
+  }, [bars, structVer, range, code, period, intraday, intra.prevClose, longBars]);
 
   /* ── 成本 / 策略價位線 ───────────────────────────────────────────── */
   useEffect(() => {
