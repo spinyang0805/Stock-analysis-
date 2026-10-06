@@ -80,9 +80,9 @@ begin
     array[extensions.http_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'),
           extensions.http_header('Referer', 'https://mis.twse.com.tw/stock/index.jsp')],
     null, null)::extensions.http_request);
-  return query select r.status, r.content;
+  return query select r.status::int, r.content::text;
 exception when others then
-  return query select 0, sqlerrm;
+  return query select 0, sqlerrm::text;
 end $$;
 revoke all on function public._market_get(text, int) from public, anon, authenticated;
 
