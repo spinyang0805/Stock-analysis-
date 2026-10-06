@@ -23,7 +23,6 @@ create table if not exists public.transactions (
   created_at  timestamptz not null default now()
 );
 create index if not exists transactions_user_date on public.transactions (user_id, trade_date);
-create unique index if not exists transactions_user_hash on public.transactions (user_id, import_hash) where import_hash is not null;
 
 alter table public.transactions enable row level security;
 drop policy if exists "own transactions" on public.transactions;
@@ -115,7 +114,8 @@ begin
   if hit is not null then return hit; end if;
 
   select string_agg('tse_' || x || '.tw%7Cotc_' || x || '.tw', '%7C') into chans from unnest(clean) x;
-  select * into res from _market_get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=' || chans);
+  -- anon 角色 statement_timeout 只有 3 秒：MIS 給 1.8 秒，備援 Yahoo 最多 2 檔各 0.5 秒
+  select * into res from _market_get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=' || chans, 1800);
 
   if res.status = 200 then
     begin
@@ -144,12 +144,9 @@ begin
   else
     -- 備援：Yahoo 每檔一次（.TW 不到再試 .TWO）
     src := 'Yahoo';
-    foreach c in array clean[1:10] loop
+    foreach c in array clean[1:2] loop
       y := null;
-      select * into res from _market_get('https://query1.finance.yahoo.com/v8/finance/chart/' || c || '.TW?interval=1d&range=1d');
-      if res.status <> 200 then
-        select * into res from _market_get('https://query1.finance.yahoo.com/v8/finance/chart/' || c || '.TWO?interval=1d&range=1d');
-      end if;
+      select * into res from _market_get('https://query1.finance.yahoo.com/v8/finance/chart/' || c || '.TW?interval=1d&range=1d', 500);
       if res.status = 200 then
         begin
           y := (res.body::jsonb) #> '{chart,result,0,meta}';
@@ -172,16 +169,20 @@ begin
     insert into market_cache(key, payload, fetched_at) values (ckey, res_json, now())
       on conflict (key) do update set payload = excluded.payload, fetched_at = excluded.fetched_at;
   end if;
+  if random() < 0.02 then
+    delete from market_cache where fetched_at < now() - interval '1 hour';
+  end if;
   return res_json;
 end $$;
 
 /* ── 分時 / 多日分K：Yahoo chart（interval 1m/5m/15m/60m） ────────────
    回傳 { symbol, interval, prev_close, t:[unix秒], o:[], h:[], l:[], c:[], v:[] } */
-create or replace function public.market_intraday(code text, intv text default '1m', rng text default '1d')
+drop function if exists public.market_intraday(text, text, text);
+create or replace function public.market_intraday(code text, intv text default '1m', rng text default '1d', mkt text default null)
 returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
 declare
-  ckey text; hit jsonb; res record; r jsonb; q jsonb; sym text; res_json jsonb; suffix text;
+  ckey text; hit jsonb; res record; r jsonb; q jsonb; sym text; res_json jsonb; suffix text; suffixes text[];
 begin
   code := upper(trim(code));
   if code !~ '^[0-9A-Z]{4,6}$' then return null; end if;
@@ -192,9 +193,11 @@ begin
   select payload into hit from market_cache where key = ckey and fetched_at > now() - interval '20 seconds';
   if hit is not null then return hit; end if;
 
-  foreach suffix in array array['.TW', '.TWO'] loop
+  -- 前端帶市場別（上市 / 上櫃）就只查一次，避免 anon 3 秒逾時
+  suffixes := case when mkt in ('上櫃', 'otc', 'TPEx') then array['.TWO', '.TW'] else array['.TW', '.TWO'] end;
+  foreach suffix in array suffixes loop
     sym := code || suffix;
-    select * into res from _market_get('https://query1.finance.yahoo.com/v8/finance/chart/' || sym || '?interval=' || intv || '&range=' || rng, 4000);
+    select * into res from _market_get('https://query1.finance.yahoo.com/v8/finance/chart/' || sym || '?interval=' || intv || '&range=' || rng, 1300);
     if res.status = 200 then
       begin
         r := (res.body::jsonb) #> '{chart,result,0}';
@@ -232,6 +235,8 @@ declare
   k text; r extensions.http_response; body jsonb; uid uuid := auth.uid(); n int;
 begin
   if uid is null then return jsonb_build_object('error', '請先登入'); end if;
+  -- 先鎖住該使用者再計數，避免併發繞過上限
+  perform pg_advisory_xact_lock(hashtext('ai_explain:' || uid::text));
   select count(*) into n from ai_usage where user_id = uid and used_at > now() - interval '1 hour';
   if n >= 30 then return jsonb_build_object('error', '本小時 AI 次數已達上限（30 次）'); end if;
   begin
@@ -242,35 +247,38 @@ begin
   insert into ai_usage(user_id) values (uid);
   delete from ai_usage where used_at < now() - interval '1 day';
 
+  -- 只有 HTTP 這段可以失敗；失敗時用量照算（不會因例外回滾）
   begin
-    perform extensions.http_set_curlopt('CURLOPT_TIMEOUT_MS', '7000');
-  exception when others then null;
+    begin
+      perform extensions.http_set_curlopt('CURLOPT_TIMEOUT_MS', '7000');
+    exception when others then null;
+    end;
+    select * into r from extensions.http((
+      'POST', 'https://api.groq.com/openai/v1/chat/completions',
+      array[extensions.http_header('Authorization', 'Bearer ' || k)],
+      'application/json',
+      jsonb_build_object(
+        'model', 'llama-3.3-70b-versatile',
+        'temperature', 0.3,
+        'max_tokens', 700,
+        'messages', jsonb_build_array(
+          jsonb_build_object('role', 'system', 'content',
+            '你是台股投資助理。用繁體中文、台灣用語，根據使用者提供的規則引擎結果，用白話解說進出場建議與理由。不得自行編造數字，只能引用提供的數據。最後提醒僅供參考。'),
+          jsonb_build_object('role', 'user', 'content', left(prompt, 6000))))::text
+    )::extensions.http_request);
+  exception when others then
+    return jsonb_build_object('error', 'AI 服務連線失敗：' || sqlerrm);
   end;
-  select * into r from extensions.http((
-    'POST', 'https://api.groq.com/openai/v1/chat/completions',
-    array[extensions.http_header('Authorization', 'Bearer ' || k)],
-    'application/json',
-    jsonb_build_object(
-      'model', 'llama-3.3-70b-versatile',
-      'temperature', 0.3,
-      'max_tokens', 700,
-      'messages', jsonb_build_array(
-        jsonb_build_object('role', 'system', 'content',
-          '你是台股投資助理。用繁體中文、台灣用語，根據使用者提供的規則引擎結果，用白話解說進出場建議與理由。不得自行編造數字，只能引用提供的數據。最後提醒僅供參考。'),
-        jsonb_build_object('role', 'user', 'content', left(prompt, 6000))))::text
-  )::extensions.http_request);
   if r.status <> 200 then return jsonb_build_object('error', 'AI 服務回應 ' || r.status); end if;
   body := r.content::jsonb;
   return jsonb_build_object('text', body #>> '{choices,0,message,content}', 'model', body->>'model');
-exception when others then
-  return jsonb_build_object('error', sqlerrm);
 end $$;
 
 revoke all on function public.market_quote(text[]) from public;
-revoke all on function public.market_intraday(text, text, text) from public;
+revoke all on function public.market_intraday(text, text, text, text) from public;
 revoke all on function public.ai_explain(text) from public;
 grant execute on function public.market_quote(text[]) to anon, authenticated;
-grant execute on function public.market_intraday(text, text, text) to anon, authenticated;
+grant execute on function public.market_intraday(text, text, text, text) to anon, authenticated;
 grant execute on function public.ai_explain(text) to authenticated;
 
 notify pgrst, 'reload schema';

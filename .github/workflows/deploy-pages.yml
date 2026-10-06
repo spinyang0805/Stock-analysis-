@@ -1,0 +1,60 @@
+name: Deploy site (GitHub Pages)
+
+# 前端 + 每日靜態資料一起發佈到 https://spinyang0805.github.io/Stock-analysis-/
+# 資料更新 workflow 用 GITHUB_TOKEN push 不會觸發 push 事件，所以另外監聽 workflow_run
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["backend/**", "supabase/**", ".omc/**", "docs/**"]
+  workflow_run:
+    workflows: ["Update stock data (JSON)"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        env:
+          VITE_BASE: /Stock-analysis-/
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

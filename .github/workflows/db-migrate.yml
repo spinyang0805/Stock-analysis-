@@ -37,8 +37,11 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         if: env.GROQ_API_KEY != ''
         run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -v key="$GROQ_API_KEY" <<'SQL'
+          umask 077
+          printf '%s' "$GROQ_API_KEY" > /tmp/groq_key
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q <<'SQL'
           \o /dev/null
+          \set key `cat /tmp/groq_key`
           select set_config('app.groq_key', :'key', false);
           do $$
           begin
@@ -49,17 +52,16 @@ jobs:
             end if;
           end $$;
           SQL
+          rm -f /tmp/groq_key
           echo "groq_api_key stored"
 
       - name: Smoke test market functions
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          psql "$DATABASE_URL" -At -c "select payload_source from (select public.market_quote(array['2330','6488'])->>'source' as payload_source) s;"
-          psql "$DATABASE_URL" -At -c "select jsonb_array_length(public.market_quote(array['2330','6488'])->'quotes');"
-          psql "$DATABASE_URL" -At -c "select coalesce(jsonb_array_length(public.market_intraday('2330','1m','1d')->'t'),0);"
-          echo "--- diagnostics"
-          psql "$DATABASE_URL" -At -c "select status, left(body,160) from public._market_get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=tse_2330.tw', 5000);"
-          psql "$DATABASE_URL" -At -c "select status, left(body,160) from public._market_get('https://query1.finance.yahoo.com/v8/finance/chart/2330.TW?interval=1d&range=1d', 5000);"
-          psql "$DATABASE_URL" -At -c "select status, left(body,120) from public._market_get('https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=20261001&stockNo=2330&response=json', 5000);"
-          psql "$DATABASE_URL" -At -c "select status, left(body,80) from public._market_get('https://example.com/', 5000);"
+          # 以 anon 角色、3 秒逾時（與前端相同條件）呼叫
+          AS_ANON="set statement_timeout = '3s'; set role anon;"
+          psql "$DATABASE_URL" -At -c "$AS_ANON select public.market_quote(array['2330','6488'])->>'source';"
+          psql "$DATABASE_URL" -At -c "$AS_ANON select jsonb_array_length(public.market_quote(array['2330','6488','0050'])->'quotes');"
+          psql "$DATABASE_URL" -At -c "$AS_ANON select coalesce(jsonb_array_length(public.market_intraday('2330','1m','1d','上市')->'t'),0);"
+          psql "$DATABASE_URL" -At -c "$AS_ANON select coalesce(jsonb_array_length(public.market_intraday('6488','5m','5d','上櫃')->'t'),0);"
