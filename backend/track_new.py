@@ -90,8 +90,13 @@ def main():
     # 白名單快取重載，接下來的籌碼回補才會寫入新股票
     firebase_cache._CHIP_ALLOWED = None
 
-    done = []
+    done, fresh = [], []
     for code, p in todo:
+        have, _ = _run("SELECT count(*) FROM stock_daily WHERE stock_id = %s AND date >= to_char(CURRENT_DATE - 365, 'YYYYMMDD')", (code,), fetch="one")
+        if have and have[0] >= 200:
+            print(f"[track] {code} 資料庫已有近一年 {have[0]} 天日K，跳過回補")
+            done.append(code)
+            continue
         print(f"[track] {code} {p.get('name')} ({p.get('market')}) 回補 {args.months} 個月日K…")
         try:
             r = run_on_demand_backfill(code, months=args.months, market=p.get("market") or "上市",
@@ -102,11 +107,12 @@ def main():
                 _run("UPDATE track_requests SET status='error', message='查無日K資料', done_at=now() WHERE code=%s", (code,))
                 continue
             done.append(code)
+            fresh.append(code)
         except Exception as exc:  # noqa: BLE001 — 單檔失敗不影響其他
             print(f"[track] {code} 回補失敗: {exc}")
             _run("UPDATE track_requests SET status='error', message=%s, done_at=now() WHERE code=%s", (str(exc)[:200], code))
 
-    if done and args.chip_days > 0:
+    if fresh and args.chip_days > 0:
         print(f"[track] 回補近 {args.chip_days} 個交易日籌碼…")
         try:
             run_chip_history_backfill(max_days=args.chip_days, sleep_seconds=0.3)

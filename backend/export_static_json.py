@@ -271,19 +271,12 @@ def main():
                 log(f"[export] {done}/{len(universe)} ok={done - len(errors)} "
                     f"err={len(errors)} eta={eta / 60:.1f}m")
 
-    write_json(os.path.join(args.out, "stocklist.json"), all_products)
     if args.only or args.limit:
-        # 部分匯出（例如 track_new 新增的股票）：價格併入既有 prices.json，manifest 不動
-        prices_path = os.path.join(args.out, "prices.json")
-        try:
-            with open(prices_path, encoding="utf-8") as f:
-                merged = json.load(f)
-        except (OSError, ValueError):
-            merged = {}
-        merged.update(round_floats(prices, 2))
-        write_json(prices_path, merged)
-        log(f"[export] partial export: {len(universe) - len(errors)}/{len(universe)} stocks merged")
+        # 部分匯出（track_new 新增的股票）：只寫個股檔，不動共用的 stocklist/prices/manifest，
+        # 避免和同時執行的每日更新 commit 衝突；這些檔案下一次每日更新會整批重寫
+        log(f"[export] partial export: {len(universe) - len(errors)}/{len(universe)} stock files written")
         return 1 if errors and len(errors) == len(universe) else 0
+    write_json(os.path.join(args.out, "stocklist.json"), all_products)
     write_json(os.path.join(args.out, "prices.json"), round_floats(prices, 2))
     write_json(os.path.join(args.out, "manifest.json"), {
         "updated_at": datetime.now().isoformat(timespec="seconds"),
