@@ -58,3 +58,8 @@ jobs:
           psql "$DATABASE_URL" -At -c "select payload_source from (select public.market_quote(array['2330','6488'])->>'source' as payload_source) s;"
           psql "$DATABASE_URL" -At -c "select jsonb_array_length(public.market_quote(array['2330','6488'])->'quotes');"
           psql "$DATABASE_URL" -At -c "select coalesce(jsonb_array_length(public.market_intraday('2330','1m','1d')->'t'),0);"
+          echo "--- diagnostics"
+          psql "$DATABASE_URL" -At -c "select status, left(body,160) from public._market_get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=tse_2330.tw', 5000);"
+          psql "$DATABASE_URL" -At -c "select status, left(body,160) from public._market_get('https://query1.finance.yahoo.com/v8/finance/chart/2330.TW?interval=1d&range=1d', 5000);"
+          psql "$DATABASE_URL" -At -c "select status, left(body,120) from public._market_get('https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=20261001&stockNo=2330&response=json', 5000);"
+          psql "$DATABASE_URL" -At -c "select status, left(body,80) from public._market_get('https://example.com/', 5000);"
