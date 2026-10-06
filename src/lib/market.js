@@ -83,13 +83,21 @@ export async function fetchDividends(code) {
     const res = await fetch(url);
     const json = await res.json();
     if (json.status !== 200) return [];
-    return (json.data || []).map((r) => ({
-      year: r.year,
-      cash: num(r.CashEarningsDistribution, 0) + num(r.CashStatutorySurplus, 0),
-      stock: num(r.StockEarningsDistribution, 0) + num(r.StockStatutorySurplus, 0),
-      exDate: r.CashExDividendTradingDate || r.StockExDividendTradingDate || null,
-      payDate: r.CashDividendPaymentDate || null,
-    }));
+    // 除息日（現金）與除權日（股票）可能不同 → 拆成兩個事件
+    const out = [];
+    for (const r of json.data || []) {
+      const cash = num(r.CashEarningsDistribution, 0) + num(r.CashStatutorySurplus, 0);
+      const stock = num(r.StockEarningsDistribution, 0) + num(r.StockStatutorySurplus, 0);
+      const cashEx = r.CashExDividendTradingDate || null, stockEx = r.StockExDividendTradingDate || null;
+      const payDate = r.CashDividendPaymentDate || null;
+      if (cash > 0 && stock > 0 && cashEx && stockEx && cashEx !== stockEx) {
+        out.push({ year: r.year, cash, stock: 0, exDate: cashEx, payDate });
+        out.push({ year: r.year, cash: 0, stock, exDate: stockEx, payDate: null });
+      } else {
+        out.push({ year: r.year, cash, stock, exDate: cashEx || stockEx, payDate });
+      }
+    }
+    return out;
   } catch {
     return [];
   }

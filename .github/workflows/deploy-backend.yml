@@ -1,11 +1,8 @@
 name: Deploy backend (Fly.io)
 
+# 2026-10-06 起 Fly.io 需綁信用卡才能 build；前端改 GitHub Pages、即時報價改 Supabase RPC，
+# 後端不再自動部署（只剩 AI 選股聊天與資料維護頁用到）。需要時手動 workflow_dispatch。
 on:
-  push:
-    branches: [main]
-    paths:
-      - "backend/**"
-      - ".github/workflows/deploy-backend.yml"
   workflow_dispatch:
 
 concurrency:

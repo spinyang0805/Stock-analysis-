@@ -142,8 +142,8 @@ export function equityCurve(transactions, priceHistory, { onlyCode = null, liveP
       if (!Number.isFinite(px) && pos.shares > 0) px = pos.cost / pos.shares; // 尚無行情時以成本估
       const m = pos.shares > 0 ? pos.shares * px : 0;
       mv += m; cost += pos.cost; realized += pos.realized; dividends += pos.dividends;
-      const bc = byCode[code] || (byCode[code] = { mv: 0, cost: 0 });
-      bc.mv += m; bc.cost += pos.cost;
+      const bc = byCode[code] || (byCode[code] = { mv: 0, cost: 0, realized: 0, dividends: 0, name: pos.name });
+      bc.mv += m; bc.cost += pos.cost; bc.realized += pos.realized; bc.dividends += pos.dividends;
     }
     out.push({ date, marketValue: mv, cost, realized, dividends, pnl: mv - cost + realized + dividends, byCode });
   }

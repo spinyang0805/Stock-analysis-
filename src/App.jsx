@@ -2,7 +2,7 @@
 // 個股頁、持股、交易、AI、批次工具、帳號管理各自在 src/pages/
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import {
-  Bot, ChevronsLeft, ChevronsRight, LineChart, ListOrdered, LogIn, LogOut, Users, Wallet, Wrench, UserCircle2,
+  BarChart3, Bot, ChevronsLeft, ChevronsRight, LineChart, ListOrdered, LogIn, LogOut, Users, Wallet, Wrench, UserCircle2,
 } from "lucide-react";
 import { AppStateProvider, useApp } from "./lib/appState.jsx";
 import { navigate, useRoute } from "./lib/router.js";
@@ -11,6 +11,8 @@ import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import StockPage from "./pages/StockPage.jsx";
 import PortfolioPage from "./pages/PortfolioPage.jsx";
 import TransactionsPage from "./pages/TransactionsPage.jsx";
+
+const PnlPage = lazy(() => import("./pages/PnlPage.jsx"));
 
 const BatchPage = lazy(() => import("./BatchPage.jsx"));
 const LegacyAI = lazy(() => import("./pages/LegacyPages.jsx").then((m) => ({ default: m.AIChatPage })));
@@ -23,6 +25,7 @@ function lastStock() {
 const NAV = [
   { id: "stock", label: "個股", icon: LineChart, href: () => `/stock/${lastStock()}` },
   { id: "portfolio", label: "我的持股", short: "持股", icon: Wallet, href: () => "/portfolio" },
+  { id: "pnl", label: "損益分析", short: "損益", icon: BarChart3, href: () => "/pnl" },
   { id: "transactions", label: "交易紀錄", short: "交易", icon: ListOrdered, href: () => "/transactions" },
   { id: "ai", label: "AI 選股", short: "AI", icon: Bot, href: () => "/ai" },
   { id: "batch", label: "資料維護", icon: Wrench, href: () => "/batch", role: "admin" },
@@ -85,6 +88,7 @@ function Shell() {
           {page === "stock" && <StockPage />}
           {page === "portfolio" && <PortfolioPage />}
           {page === "transactions" && <TransactionsPage />}
+          {page === "pnl" && <PnlPage />}
           {page === "ai" && <LegacyAI />}
           {page === "batch" && app.role === "admin" && <BatchPage />}
           {page === "admin" && app.role === "admin" && <div className="page"><LegacyAdmin /></div>}

@@ -191,3 +191,64 @@ test("多帳戶：分帳戶成本各自計算，合併 = 加總", () => {
   assert.equal(curve.at(-1).cost, 250000);
   assert.equal(curve.at(-1).realized, 25000);
 });
+
+import { autoDividendTx, periodBreakdown } from "../src/lib/pnl.js";
+test("自動配息：依除息日前持股；已有對帳單紀錄不重複；配股會累積到下一次", () => {
+  const txs = [
+    tx("2025-01-02", "buy", 2000, 50, 0, 0, { broker: "國泰證券" }),
+    tx("2025-01-02", "buy", 1000, 50, 0, 0, { broker: "亞東證券" }),
+    tx("2025-08-01", "sell", 1000, 60, 0, 0, { broker: "國泰證券" }),
+  ];
+  const divs = { 2330: [
+    { exDate: "2025-06-10", cash: 2, stock: 1, payDate: "2025-07-10" },  // 配股 1 元 → 每 10 股配 1 股
+    { exDate: "2025-12-10", cash: 3, stock: 0 },
+    { exDate: "2024-06-10", cash: 9, stock: 0 },                          // 買進前，不算
+  ] };
+  const auto = autoDividendTx(txs, divs);
+  const cash = auto.filter((t) => t.side === "cash_dividend");
+  const stock = auto.filter((t) => t.side === "stock_dividend");
+  assert.equal(stock.length, 2);
+  assert.equal(stock.find((t) => t.broker === "國泰證券").shares, 200);
+  assert.equal(stock.find((t) => t.broker === "亞東證券").shares, 100);
+  // 6/10：國泰 2000×2、亞東 1000×2；12/10：國泰 (2200−1000)×3、亞東 1100×3
+  const amt = (d, b) => cash.find((t) => t.trade_date === d && t.broker === b).amount;
+  assert.equal(amt("2025-06-10", "國泰證券"), 4000);
+  assert.equal(amt("2025-12-10", "國泰證券"), 3600);
+  assert.equal(amt("2025-12-10", "亞東證券"), 3300);
+  // 對帳單已有國泰 12 月股利 → 不重複
+  const auto2 = autoDividendTx([...txs, tx("2026-01-15", "cash_dividend", 1200, 3, 0, 0, { broker: "國泰證券", amount: 3590 })], divs);
+  assert.equal(auto2.filter((t) => t.side === "cash_dividend" && t.trade_date === "2025-12-10").length, 1);
+});
+
+test("年月拆解：含息 − 不含息 = 股利；各月加總 = 全期", () => {
+  const txs = [tx("2025-01-02", "buy", 1000, 100), tx("2025-03-03", "cash_dividend", 1000, 5, 0, 0, { amount: 5000 })];
+  const px = { 2330: [
+    { time: "2025-01-02", close: 100 }, { time: "2025-01-31", close: 110 },
+    { time: "2025-02-27", close: 105 }, { time: "2025-03-31", close: 120 },
+  ] };
+  const r = periodBreakdown(txs, px);
+  assert.deepEqual(r.months.map((m) => m.key), ["2025-01", "2025-02", "2025-03"]);
+  assert.equal(r.months[0].pnlNoDiv, 10000);
+  assert.equal(r.months[1].pnlNoDiv, -5000);
+  assert.equal(r.months[2].pnlNoDiv, 15000);
+  assert.equal(r.months[2].pnlWithDiv, 20000);
+  assert.equal(r.months[2].cashDiv, 5000);
+  assert.equal(r.years[0].pnlWithDiv, 25000);
+  assert.equal(r.total.pnlWithDiv - r.total.pnlNoDiv, 5000);
+  assert.equal(r.months[2].byCode["2330"].cashDiv, 5000);
+});
+
+test("配股：除權日股價計價值、成本為 0 攤低均價、各欄加總 = 含息損益", () => {
+  const txs = [tx("2025-01-02", "buy", 1000, 100), tx("2025-02-03", "stock_dividend", 100, 0)];
+  const px = { 2330: [{ time: "2025-01-02", close: 100 }, { time: "2025-01-31", close: 100 }, { time: "2025-02-03", close: 90 }, { time: "2025-02-28", close: 90 }] };
+  const [p] = computePositions(txs);
+  assert.equal(p.shares, 1100);
+  assert.ok(Math.abs(p.avgCost - 100000 / 1100) < 1e-9);
+  const r = periodBreakdown(txs, px);
+  const feb = r.months[1];
+  assert.equal(feb.stockDiv, 9000);
+  assert.equal(feb.pnlNoDiv, -10000);
+  assert.equal(feb.pnlWithDiv, -1000);
+  assert.equal(feb.unrealized, -10000);
+  assert.equal(feb.realized + feb.unrealized + feb.cashDiv + feb.stockDiv, feb.pnlWithDiv);
+});
