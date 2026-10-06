@@ -250,3 +250,18 @@ table.data tr.err td { background: rgba(239,68,68,.07); }
   .board-h { grid-column: 1 / -1; }
   .board-jump { display: flex; gap: 8px; position: sticky; top: 44px; z-index: 4; background: var(--bg); padding: 8px 0; margin-top: 8px; }
 }
+
+/* 手機：圖表工具列單行橫向捲動、圖表加高、圖例單行 */
+.chart-empty { z-index: 3; background: rgba(14,18,35,.85); line-height: 1.7; }
+@media (max-width: 640px) {
+  .chart-card { padding: 8px; margin-left: -4px; margin-right: -4px; }
+  .chart-toolbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; margin-bottom: 6px; padding-bottom: 2px; }
+  .chart-toolbar::-webkit-scrollbar { display: none; }
+  .chart-toolbar > * { flex-shrink: 0; }
+  .chart-toolbar .spacer { display: none; }
+  .chart-toolbar .seg button { padding: 4px 9px; }
+  .chart-legend { flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; scrollbar-width: none; font-size: 11px; gap: 9px; }
+  .chart-legend::-webkit-scrollbar { display: none; }
+  .chart-main { height: 340px; }
+  .chart-sub { height: 96px; }
+}

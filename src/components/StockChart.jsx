@@ -6,6 +6,7 @@ import { Table2, RefreshCw } from "lucide-react";
 import { Seg } from "./ui.jsx";
 import { aggregateBars, computeIndicators } from "../lib/indicators.js";
 import { fetchIntraday } from "../lib/market.js";
+import { supabaseConfigured } from "../lib/supabase.js";
 import { DOWN, UP, fmt, isTradingSession, signed, todayISO, trendColor } from "../lib/format.js";
 
 const TZ_SHIFT = 8 * 3600; // 分時時間戳轉台北時間顯示
@@ -84,6 +85,10 @@ export default function StockChart({ code, market, dailyRows, longBars, longLoad
   /* ── 分時資料：開盤中每 30 秒更新 ─────────────────────────────── */
   const loadIntraday = useCallback(async () => {
     if (!intraday || !code) return;
+    if (!supabaseConfigured) {
+      setIntra({ bars: [], prevClose: NaN, loading: false, error: "分時／5分需要即時服務：網站尚未設定 Supabase 金鑰（VITE_SUPABASE_ANON_KEY）。日K／週K／月K 可正常使用。" });
+      return;
+    }
     setIntra((s) => ({ ...s, loading: true, error: "" }));
     try {
       const r = period === "1m" ? await fetchIntraday(code, "1m", "1d", market) : await fetchIntraday(code, "5m", "5d", market);
