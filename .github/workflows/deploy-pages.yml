@@ -7,12 +7,13 @@ on:
     branches: [main]
     paths-ignore: ["backend/**", "supabase/**", ".omc/**", "docs/**"]
   workflow_run:
-    workflows: ["Update stock data (JSON)"]
+    workflows: ["Update stock data (JSON)", "Track new stocks"]
     types: [completed]
   workflow_dispatch:
 
 permissions:
   contents: read
+  issues: write
   pages: write
   id-token: write
 
@@ -48,6 +49,29 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+
+      - name: Notify failure (open GitHub issue → email)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          WF: ${{ github.workflow }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create pipeline-failure -R "$REPO" --color B60205 --description "自動排程失敗" --force >/dev/null 2>&1 || true
+          num=$(gh issue list -R "$REPO" --state open --label pipeline-failure --json number,title --jq "map(select(.title | contains(\"$WF\")))[0].number // empty")
+          if [ -n "$num" ]; then
+            gh issue comment "$num" -R "$REPO" --body "又失敗一次：$RUN_URL"
+          else
+            gh issue create -R "$REPO" --label pipeline-failure \
+              --title "[排程失敗] $WF" \
+              --body "@${{ github.repository_owner }} 自動排程「$WF」失敗。
+
+          - 執行紀錄：$RUN_URL
+          - 時間：$(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')（台北）
+
+          資料缺口會由下一次每日排程自動補（最近 5 個交易日 + 近 45 天缺口回補）。修好後請關閉此 issue。"
+          fi
 
   deploy:
     needs: build

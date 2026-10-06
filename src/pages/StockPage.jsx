@@ -9,6 +9,7 @@ import SearchBox from "../components/SearchBox.jsx";
 import StrategyPanel from "../components/StrategyPanel.jsx";
 import EquityChart from "../components/EquityChart.jsx";
 import TxForm from "../components/TxForm.jsx";
+import TrackBanner from "../components/TrackBanner.jsx";
 import { Badge, Card, Empty, Kpi, Tabs } from "../components/ui.jsx";
 import {
   BlackCandleCard, ChipXrayCard, FinancialsCard, FundamentalsCard, InstitutionalFlowCard, MaStatusCard,
@@ -50,16 +51,18 @@ export default function StockPage() {
   const [dividends, setDividends] = useState([]);
   const [epsQ, setEpsQ] = useState([]);
   const [txModal, setTxModal] = useState(null);
+  const [bundleLoaded, setBundleLoaded] = useState(false);
 
   useEffect(() => { try { localStorage.setItem("lastStock", code); } catch { /* ignore */ } }, [code]);
 
   useEffect(() => {
     let alive = true;
-    setBundle(null); setStatus("載入中…"); setLongBars([]); setLongLoading(true); setDividends([]); setEpsQ([]);
+    setBundle(null); setBundleLoaded(false); setStatus("載入中…"); setLongBars([]); setLongLoading(true); setDividends([]); setEpsQ([]);
     findStock(code).then((s) => alive && setMeta(s || { code, name: code, market: "" }));
     fetchStockBundle(code).then((b) => {
       if (!alive) return;
       setBundle(b);
+      setBundleLoaded(true);
       setStatus(b ? `資料日 ${String(b.kline?.data?.at(-1)?.date || "").replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3")}` : "非追蹤清單股票：改用 FinMind 歷史資料");
     });
     fetchLongHistory(code, "2015-01-01").then((bars) => alive && setLongBars(bars)).catch(() => {}).finally(() => alive && setLongLoading(false));
@@ -140,6 +143,8 @@ export default function StockPage() {
           </div>
         </div>
       </header>
+
+      {bundleLoaded && !bundle && <TrackBanner code={code} />}
 
       <div style={{ marginTop: 12 }}>
         <StockChart code={code} market={meta?.market} dailyRows={dailyRows} longBars={longBars} longLoading={longLoading} quote={quote} levels={levels} prevClose={prevClose} />

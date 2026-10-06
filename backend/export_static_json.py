@@ -272,6 +272,18 @@ def main():
                     f"err={len(errors)} eta={eta / 60:.1f}m")
 
     write_json(os.path.join(args.out, "stocklist.json"), all_products)
+    if args.only or args.limit:
+        # 部分匯出（例如 track_new 新增的股票）：價格併入既有 prices.json，manifest 不動
+        prices_path = os.path.join(args.out, "prices.json")
+        try:
+            with open(prices_path, encoding="utf-8") as f:
+                merged = json.load(f)
+        except (OSError, ValueError):
+            merged = {}
+        merged.update(round_floats(prices, 2))
+        write_json(prices_path, merged)
+        log(f"[export] partial export: {len(universe) - len(errors)}/{len(universe)} stocks merged")
+        return 1 if errors and len(errors) == len(universe) else 0
     write_json(os.path.join(args.out, "prices.json"), round_floats(prices, 2))
     write_json(os.path.join(args.out, "manifest.json"), {
         "updated_at": datetime.now().isoformat(timespec="seconds"),

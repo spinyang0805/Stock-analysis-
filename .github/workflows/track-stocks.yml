@@ -1,75 +1,84 @@
-name: Update stock data (JSON)
+name: Track new stocks
 
+# 前端「加入每日追蹤」按鈕寫入 track_requests；這裡每 20 分鐘檢查，有待處理才安裝套件與回補，
+# 完成後 commit stocks.txt + 新股票 JSON，deploy-pages 透過 workflow_run 自動重新部署。
 on:
   schedule:
-    # 平日台灣時間 15:40（07:40 UTC）收盤後更新
-    - cron: "40 7 * * 1-5"
+    - cron: "*/20 * * * *"
   workflow_dispatch:
     inputs:
-      lookback:
-        description: "回補最近 N 個交易日"
-        default: "5"
-      heal:
-        description: "個股缺口自癒（true/false）"
-        default: "true"
-      heal_budget_min:
-        description: "heal 時間預算（分鐘）— 超過就停止，確保 export/commit 一定跑得到"
-        default: "45"
+      codes:
+        description: "要加入追蹤的代號（逗號分隔，例：6488,3008）"
+        default: ""
 
 permissions:
   contents: write
   issues: write
 
 concurrency:
-  group: update-data
+  group: update-data   # 與每日更新共用，避免同時 push
   cancel-in-progress: false
 
 jobs:
-  update:
+  track:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 40
     env:
       PYTHONUNBUFFERED: "1"
     steps:
+      - name: Any pending requests?
+        id: check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CODES: ${{ github.event.inputs.codes }}
+        run: |
+          for c in $(echo "$CODES" | tr ',' ' '); do
+            if echo "$c" | grep -Eq '^[0-9A-Z]{4,6}$'; then
+              psql "$DATABASE_URL" -q -c "insert into public.track_requests(code, status) values ('$c', 'pending') on conflict (code) do update set status = 'pending', message = null, done_at = null"
+            fi
+          done
+          n=$(psql "$DATABASE_URL" -At -c "select count(*) from public.track_requests where status = 'pending'" 2>/dev/null || echo 0)
+          echo "pending=$n"
+          echo "pending=$n" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
+        if: steps.check.outputs.pending != '0'
 
       - uses: actions/setup-python@v5
+        if: steps.check.outputs.pending != '0'
         with:
           python-version: "3.12"
           cache: pip
 
       - name: Install deps
+        if: steps.check.outputs.pending != '0'
         run: pip install pandas numpy requests psycopg2-binary pytz fastapi yfinance
 
-      - name: Update DB (TWSE + TPEx daily K / chips / valuation)
+      - name: Backfill requested stocks
+        id: track
+        if: steps.check.outputs.pending != '0'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          python backend/daily_job.py \
-            --lookback "${{ github.event.inputs.lookback || '5' }}" \
-            --heal-budget-min "${{ github.event.inputs.heal_budget_min || '45' }}" \
-            $([ "${{ github.event.inputs.heal || 'true' }}" = "true" ] && echo --heal)
+          python backend/track_new.py --requests-only --max 5 | tee /tmp/track.log
+          echo "codes=$(tail -n 1 /tmp/track.log)" >> "$GITHUB_OUTPUT"
 
-      - name: Track new stocks (holdings + 加入追蹤 requests)
-        continue-on-error: true
+      - name: Export new stocks
+        if: steps.track.outputs.codes != ''
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python backend/track_new.py --max 10
+        run: python backend/export_static_json.py --source db --only "${{ steps.track.outputs.codes }}" --workers 4
 
-      - name: Export static JSON
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python backend/export_static_json.py --source db --workers 8
-
-      - name: Commit & push data
+      - name: Commit & push
+        if: steps.track.outputs.codes != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add public/data backend/stocks.txt
           if git diff --cached --quiet; then
-            echo "No data changes"
+            echo "No changes"
           else
-            git commit -m "data: daily update $(date +%Y-%m-%d)"
+            git commit -m "data: track ${{ steps.track.outputs.codes }}"
             git pull --rebase origin main
             git push
           fi
