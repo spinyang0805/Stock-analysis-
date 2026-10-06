@@ -15,6 +15,9 @@ import {
   MomentumCard, PatternCard, RiskMirrorCard, ScenarioCard, TechRadarCard, VolPriceCard,
 } from "../components/AnalysisCards.jsx";
 import { fetchStockBundle, findStock, normalizeRows } from "../lib/data.js";
+import {
+  detectPatterns, getChipAnalysis, getKdAnalysis, getMaStatus, getOverallScore, getRiskMetrics, getRsiAnalysis, getScenarios, getVolPriceMatrix,
+} from "../lib/analysis.js";
 import { fetchDividends, fetchLongHistory, fetchQuarterlyEps } from "../lib/market.js";
 import { computeIndicators } from "../lib/indicators.js";
 import { annualCashDividends, buildStrategy } from "../lib/strategy.js";
@@ -24,13 +27,10 @@ import { isStale, useQuotes } from "../lib/useQuotes.js";
 import { useApp } from "../lib/appState.jsx";
 import { navigate, useRoute } from "../lib/router.js";
 import { supabase } from "../lib/supabase.js";
-import { fmt, fmtInt, signed, todayISO, trendColor } from "../lib/format.js";
+import { DOWN, UP, fmt, fmtInt, signed, todayISO, trendColor } from "../lib/format.js";
 
 const TABS = [
-  { id: "overview", label: "總覽", icon: LayoutDashboard },
-  { id: "tech", label: "技術面", icon: CandlestickChart },
-  { id: "chip", label: "籌碼面", icon: Building2 },
-  { id: "fund", label: "基本面", icon: Gauge },
+  { id: "analysis", label: "綜合分析", icon: LayoutDashboard },
   { id: "position", label: "我的部位", icon: Wallet, star: true },
   { id: "entry", label: "進出場", icon: Compass, star: true },
 ];
@@ -39,7 +39,8 @@ export default function StockPage() {
   const route = useRoute();
   const app = useApp();
   const code = (route.parts[1] || "2330").toUpperCase();
-  const tab = TABS.some((t) => t.id === route.query.tab) ? route.query.tab : "overview";
+  // 舊網址的 overview / tech / chip / fund 都併入「綜合分析」
+  const tab = TABS.some((t) => t.id === route.query.tab) ? route.query.tab : "analysis";
 
   const [bundle, setBundle] = useState(null);
   const [meta, setMeta] = useState({ code, name: code, market: "" });
@@ -98,7 +99,7 @@ export default function StockPage() {
   const name = meta?.name || bundle?.name || quote?.name || code;
   const stale = isStale(quoteState.updatedAt, quoteState.live);
 
-  const levels = useMemo(() => (tab === "entry" || tab === "position" || tab === "overview" ? strategy?.levels || [] : position ? [{ price: position.avgCost, label: "成本", color: "#e2e8f0", style: 0 }] : []), [tab, strategy, position]);
+  const levels = useMemo(() => (tab === "entry" || tab === "position" || tab === "analysis" ? strategy?.levels || [] : position ? [{ price: position.avgCost, label: "成本", color: "#e2e8f0", style: 0 }] : []), [tab, strategy, position]);
 
   return (
     <div className="page">
@@ -146,53 +147,9 @@ export default function StockPage() {
 
       <Tabs tabs={TABS} value={tab} onChange={(t) => route.setQuery({ tab: t })} />
 
-      {tab === "overview" && (
-        <div className="grid cards">
-          <TechRadarCard rows={cardRows} chipData={chip} />
-          {strategy && (
-            <Card title="進出場摘要" icon={Compass} right={<button type="button" className="btn sm" onClick={() => route.setQuery({ tab: "entry" })}>詳細</button>}>
-              <div className={strategy.primary.tone === "up" ? "up" : strategy.primary.tone === "down" ? "down" : ""} style={{ fontSize: 24, fontWeight: 900 }}>{strategy.primary.label}</div>
-              <div className="muted" style={{ marginBottom: 8 }}>{strategy.primary.why}</div>
-              {strategy.value && <div className="row"><span>便宜／合理／昂貴</span><b className="num">{fmt(strategy.value.cheap)}／{fmt(strategy.value.fair)}／{fmt(strategy.value.expensive)}</b></div>}
-              <div className="row"><span>波段停損／目標</span><b className="num">{fmt(strategy.swing.stop)}／{fmt(strategy.swing.target1)}</b></div>
-              <div className="row"><span>波段條件</span><b className="num">{strategy.swing.score}/6</b></div>
-            </Card>
-          )}
-          {position && <PositionMini position={position} price={price} />}
-          <ScenarioCard rows={cardRows} chipData={chip} />
-          <RiskMirrorCard rows={cardRows} chipData={chip} />
-          <ChipXrayCard chipData={chip} />
-        </div>
-      )}
-
-      {tab === "tech" && (
-        <div className="grid cards">
-          <MaStatusCard rows={cardRows} />
-          <VolPriceCard rows={cardRows} />
-          <PatternCard rows={cardRows} />
-          <MomentumCard rows={cardRows} />
-          <BlackCandleCard rows={cardRows} chipData={chip} />
-          <TechRadarCard rows={cardRows} chipData={chip} />
-        </div>
-      )}
-
-      {tab === "chip" && (
-        <div className="grid cards">
-          <div style={{ gridColumn: "1 / -1" }}><InstitutionalFlowCard chipData={chip} /></div>
-          <ChipXrayCard chipData={chip} />
-          <BlackCandleCard rows={cardRows} chipData={chip} />
-          <RiskMirrorCard rows={cardRows} chipData={chip} />
-          {!chip && <Card><div className="dim">此股票沒有籌碼資料（不在每日追蹤清單）</div></Card>}
-        </div>
-      )}
-
-      {tab === "fund" && (
-        <div className="grid cards">
-          <FundamentalsCard data={bundle?.fundamentals} />
-          <ValuationCard strategy={strategy} price={price} />
-          <DividendCard dividends={dividends} />
-          <div style={{ gridColumn: "1 / -1" }}><FinancialsCard data={bundle?.financials} /></div>
-        </div>
+      {tab === "analysis" && (
+        <AnalysisBoard rows={cardRows} chip={chip} bundle={bundle} strategy={strategy} price={price}
+          dividends={dividends} position={position} onEntry={() => route.setQuery({ tab: "entry" })} />
       )}
 
       {tab === "position" && <PositionTab code={code} name={name} price={price} longBars={longRows} quote={quote} onEdit={(t) => setTxModal({ initial: t })} onAdd={() => setTxModal({ stock: { code, name, price } })} />}
@@ -204,16 +161,112 @@ export default function StockPage() {
   );
 }
 
-function PositionMini({ position, price }) {
-  const mv = position.shares * price;
-  const un = mv - position.cost;
+const toneCls = (t) => (t === "up" ? "up" : t === "down" ? "down" : "");
+
+const jump = (id) => () => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+function GlanceTile({ title, icon: Icon, color, score, verdict, verdictTone, items, onClick }) {
+  const body = (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Icon size={16} aria-hidden="true" style={{ color }} />
+        <b style={{ fontSize: 14 }}>{title}</b>
+        {score != null && <span className="num" style={{ marginLeft: "auto", fontSize: 26, fontWeight: 900, color }}>{score}</span>}
+      </div>
+      <div className={toneCls(verdictTone)} style={{ fontSize: 18, fontWeight: 900, margin: "2px 0 6px", color: verdictTone ? undefined : color }}>{verdict}</div>
+      <div className="glance-items">
+        {items.filter(Boolean).map(([k, v, c]) => (
+          <div key={k}><span>{k}</span><b className="num" style={c ? { color: c } : undefined}>{v}</b></div>
+        ))}
+      </div>
+    </>
+  );
+  return <button type="button" className="card glance-tile" style={{ borderTopColor: color }} onClick={onClick}>{body}</button>;
+}
+
+// 綜合分析：上方一排摘要 + 技術｜籌碼｜基本 三欄並排（手機改成上下三段 + 跳段按鈕）
+function AnalysisBoard({ rows, chip, bundle, strategy, price, dividends, position, onEntry }) {
+  const g = useMemo(() => {
+    const score = getOverallScore(rows, chip);
+    const ma = getMaStatus(rows), vol = getVolPriceMatrix(rows), rsi = getRsiAnalysis(rows), kd = getKdAnalysis(rows);
+    const pat = detectPatterns(rows), ch = getChipAnalysis(chip), risk = getRiskMetrics(rows, chip), sc = getScenarios(rows, chip);
+    return { score, ma, vol, rsi, kd, pat, ch, risk, sc };
+  }, [rows, chip]);
+  const f = bundle?.fundamentals || {};
+  const v = strategy?.value;
+  const techColor = g.score >= 60 ? UP : g.score >= 45 ? "#f59e0b" : DOWN;
+  const chipColor = g.ch.score > 60 ? UP : g.ch.score < 40 ? DOWN : "#f59e0b";
+  const valLabel = !v ? "估值資料不足" : price <= v.cheap ? "便宜" : price <= v.fair ? "合理偏低" : price < v.expensive ? "合理偏高" : "昂貴";
+  const valColor = !v ? "#94a3b8" : price <= v.cheap ? "#38bdf8" : price <= v.fair ? "#22d3ee" : price < v.expensive ? "#facc15" : "#f97316";
+  const trend = g.score >= 75 ? "強勢多頭" : g.score >= 60 ? "偏多" : g.score >= 45 ? "盤整" : g.score >= 30 ? "偏空" : "強勢空頭";
+  const streak = (n, word) => (n > 0 ? `連買 ${n} 天` : n < 0 ? `連賣 ${-n} 天` : word);
+
   return (
-    <Card title="我的部位" icon={Wallet}>
-      <div className="row"><span>持股</span><b className="num">{fmtInt(position.shares)} 股</b></div>
-      <div className="row"><span>均價</span><b className="num">{fmt(position.avgCost)}</b></div>
-      <div className="row"><span>市值</span><b className="num">{fmtInt(mv)}</b></div>
-      <div className="row"><span>未實現</span><b className="num" style={{ color: trendColor(un) }}>{signed(un, 0)}（{signed(position.cost ? (un / position.cost) * 100 : NaN, 2, "%")}）</b></div>
-    </Card>
+    <div>
+      <div className="glance">
+        <GlanceTile title="技術面" icon={CandlestickChart} color={techColor} score={g.score} verdict={trend} onClick={jump("sec-tech")} items={[
+          ["均線", g.ma.label, g.ma.color],
+          ["量價", g.vol.type, g.vol.color],
+          ["RSI／KD", `${g.rsi.rsi ? g.rsi.rsi.toFixed(0) : "--"}／${g.kd.status}`, g.kd.color],
+          ["型態", g.pat.patterns[0]?.label || "--"],
+        ]} />
+        <GlanceTile title="籌碼面" icon={Building2} color={chipColor} score={chip ? g.ch.score : null} verdict={chip ? g.ch.status : "無籌碼資料"} onClick={jump("sec-chip")} items={chip && [
+          ["外資", `${streak(g.ch.foreignStreak, "中性")}・5日 ${signed(g.ch.foreign5d / 1000, 0)}`, trendColor(g.ch.foreign5d)],
+          ["投信", `${streak(g.ch.trustStreak, "中性")}・5日 ${signed(g.ch.trust5d / 1000, 0)}`, trendColor(g.ch.trust5d)],
+          ["風險", g.risk.isLongRisk ? "融資斷頭警戒" : g.risk.isShortSqueeze ? "軋空預兆" : "無異常", g.risk.isLongRisk ? UP : g.risk.isShortSqueeze ? "#f59e0b" : undefined],
+        ].concat([["多空機率", `多 ${g.sc.bull}%／空 ${g.sc.bear}%`]]) || [["多空機率", `多 ${g.sc.bull}%／空 ${g.sc.bear}%`]]} />
+        <GlanceTile title="基本面" icon={Gauge} color={valColor} verdict={valLabel} onClick={jump("sec-fund")} items={[
+          v && ["便宜／合理／昂貴", `${fmt(v.cheap, 0)}／${fmt(v.fair, 0)}／${fmt(v.expensive, 0)}`],
+          ["本益比／殖利率", `${f.pe_ratio != null ? fmt(f.pe_ratio, 1) : "--"}／${f.dividend_yield != null ? `${fmt(f.dividend_yield, 2)}%` : "--"}`],
+          ["EPS（近四季）／ROE", `${f.eps != null ? fmt(f.eps, 2) : "--"}／${f.roe != null ? `${fmt(f.roe, 1)}%` : "--"}`],
+          ["月營收 YoY", f.revenue_yoy != null ? signed(f.revenue_yoy, 1, "%") : "--", trendColor(f.revenue_yoy)],
+        ]} />
+        {strategy && (
+          <GlanceTile title="綜合建議" icon={Compass} color="var(--accent-2)" verdict={strategy.primary.label} verdictTone={strategy.primary.tone} onClick={onEntry} items={[
+            ["依據", strategy.primary.why],
+            ["波段條件", `${strategy.swing.score}/6`],
+            ["停損／目標", `${fmt(strategy.swing.stop)}／${fmt(strategy.swing.target1)}`],
+            position && ["我的未實現", signed(position.shares * price - position.cost, 0), trendColor(position.shares * price - position.cost)],
+          ]} />
+        )}
+      </div>
+
+      <nav className="board-jump" aria-label="跳到分析區段">
+        <button type="button" className="btn sm" onClick={jump("sec-tech")}>技術面</button>
+        <button type="button" className="btn sm" onClick={jump("sec-chip")}>籌碼面</button>
+        <button type="button" className="btn sm" onClick={jump("sec-fund")}>基本面</button>
+      </nav>
+
+      <div className="board">
+        <section id="sec-tech" aria-labelledby="h-tech">
+          <h2 id="h-tech" className="board-h" style={{ borderColor: techColor }}><CandlestickChart size={16} aria-hidden="true" />技術面</h2>
+          <TechRadarCard rows={rows} chipData={chip} />
+          <MaStatusCard rows={rows} />
+          <MomentumCard rows={rows} />
+          <VolPriceCard rows={rows} />
+          <PatternCard rows={rows} />
+          <BlackCandleCard rows={rows} chipData={chip} />
+        </section>
+        <section id="sec-chip" aria-labelledby="h-chip">
+          <h2 id="h-chip" className="board-h" style={{ borderColor: chipColor }}><Building2 size={16} aria-hidden="true" />籌碼面</h2>
+          {chip ? (
+            <>
+              <InstitutionalFlowCard chipData={chip} />
+              <ChipXrayCard chipData={chip} />
+            </>
+          ) : <Card><div className="dim">此股票沒有籌碼資料（不在每日追蹤清單）</div></Card>}
+          <RiskMirrorCard rows={rows} chipData={chip} />
+          <ScenarioCard rows={rows} chipData={chip} />
+        </section>
+        <section id="sec-fund" aria-labelledby="h-fund">
+          <h2 id="h-fund" className="board-h" style={{ borderColor: valColor }}><Gauge size={16} aria-hidden="true" />基本面</h2>
+          <ValuationCard strategy={strategy} price={price} />
+          <FundamentalsCard data={bundle?.fundamentals} />
+          <DividendCard dividends={dividends} />
+          <FinancialsCard data={bundle?.financials} />
+        </section>
+      </div>
+    </div>
   );
 }
 

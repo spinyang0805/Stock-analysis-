@@ -230,3 +230,23 @@ table.data tr.err td { background: rgba(239,68,68,.07); }
 .span-2 { grid-column: span 2; }
 @media (max-width: 900px) { .span-2 { grid-column: auto; } }
 @media (max-width: 860px) { :root { --chat-offset: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 12px); } }
+
+/* ── 綜合分析：摘要列 + 三欄並排 ─────────────────────────────── */
+.glance { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.glance-tile { border-top: 3px solid var(--flat); text-decoration: none; color: inherit; display: block; padding: 12px 14px; transition: background .15s; }
+.glance-tile { width: 100%; text-align: left; cursor: pointer; font: inherit; }
+.glance-tile:hover { background: var(--card-2); }
+.glance-items { display: grid; gap: 3px; font-size: 13px; }
+.glance-items > div { display: flex; justify-content: space-between; gap: 8px; }
+.glance-items span { color: var(--fg-3); white-space: nowrap; }
+.glance-items b { text-align: right; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); align-items: start; margin-top: var(--space-3); }
+.board > section { display: grid; gap: var(--space-3); min-width: 0; scroll-margin-top: 60px; }
+.board-h { display: flex; align-items: center; gap: 8px; margin: 0; padding: 6px 2px 6px 10px; font-size: 16px; font-weight: 800; border-left: 4px solid var(--accent); }
+.board-jump { display: none; }
+@media (max-width: 1100px) {
+  .board { grid-template-columns: 1fr; }
+  .board > section { grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
+  .board-h { grid-column: 1 / -1; }
+  .board-jump { display: flex; gap: 8px; position: sticky; top: 44px; z-index: 4; background: var(--bg); padding: 8px 0; margin-top: 8px; }
+}

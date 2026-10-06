@@ -169,7 +169,7 @@ export function InstitutionalFlowCard({ chipData }) {
   if (!data.length) return null;
   const sum = (k) => data.reduce((s, d) => s + d[k], 0);
   return (
-    <Card title="法人每日買賣超（張）" icon={Landmark} className="span-2">
+    <Card title="法人每日買賣超（張）" icon={Landmark}>
       <div style={{ height: 220 }}>
         <ResponsiveContainer>
           <BarChart data={data} margin={{ top: 4, right: 4, left: -8, bottom: 0 }}>

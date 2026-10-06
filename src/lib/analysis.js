@@ -91,9 +91,9 @@ export function getChipAnalysis(chipData) {
   const status = chipData.analysis?.status || "中性";
   let conclusion;
   if (foreign5d > 0 && trust5d > 0)
-    conclusion = `外資投信雙買（近5日合計 ${((foreign5d+trust5d)/1000).toFixed(0)}千張），法人積極佈局，籌碼健康。`;
+    conclusion = `外資投信雙買（近5日合計 ${((foreign5d+trust5d)/1000).toFixed(0)} 張），法人積極佈局，籌碼健康。`;
   else if (foreign5d > 0)
-    conclusion = `外資近5日買超 ${(foreign5d/1000).toFixed(0)}千張，主力偏多，持股續抱為宜。`;
+    conclusion = `外資近5日買超 ${(foreign5d/1000).toFixed(0)} 張，主力偏多，持股續抱為宜。`;
   else if (trust5d > 0)
     conclusion = `投信連買 ${trustStreak||"多"} 天，中期支撐明顯，觀察外資是否跟進。`;
   else if (foreign5d < 0 && trust5d < 0)
