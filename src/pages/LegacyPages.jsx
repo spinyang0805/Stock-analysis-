@@ -1,14 +1,14 @@
-// 舊功能頁（AI 選股聊天、帳號管理）：沿用原邏輯，只改用新樣式
+// AI 選股聊天（Supabase RPC ai_pick：盤後選股清單 + Groq）、帳號管理
 import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase.js";
-
-const API = "https://stock-analysis-tw.fly.dev";
+import { useApp } from "../lib/appState.jsx";
 
 export function AIChatPage() {
   const [messages, setMessages] = useState([{
     role:"assistant",
     content:"您好！我是 AI 選股助理。\n請描述您想找的股票條件，例如：\n• 找近期突破月線的強勢股\n• 推薦技術面黃金交叉的股票\n• 哪些股票量增價漲且籌碼集中？"
   }]);
+  const app = useApp();
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
@@ -22,13 +22,6 @@ export function AIChatPage() {
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[messages, loading]);
 
-  function compressHistory(msgs) {
-    if (msgs.length <= 8) return msgs;
-    const old = msgs.slice(0, -8).filter(m=>m.role!=="system");
-    const recent = msgs.slice(-8);
-    const summary = old.map(m=>`[${m.role}] ${String(m.content).slice(0,100)}`).join(" | ");
-    return [{ role:"system", content:`Prior conversation (compressed): ${summary}` }, ...recent];
-  }
 
   async function send(text) {
     const content = (text||input).trim();
@@ -38,12 +31,9 @@ export function AIChatPage() {
     setMessages(newMsgs);
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/ai/stock-picker`, {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({messages:compressHistory(newMsgs)}), cache:"no-store",
-      });
-      const json = await res.json();
-      const reply = json.reply ?? json.error ?? "";
+      const { data: json, error } = await supabase.rpc("ai_pick", { messages: newMsgs.slice(1).filter(m=>m.role!=="system") });
+      if (error) throw new Error(error.message);
+      const reply = json?.text ?? (json?.error ? `AI 服務錯誤：${json.error}` : "");
       setMessages(prev=>[...prev,{role:"assistant", content:reply||"AI 未回傳內容，請再試一次"}]);
     } catch(e) {
       setMessages(prev=>[...prev,{role:"assistant", content:`連線失敗：${e.message}`}]);
@@ -51,11 +41,20 @@ export function AIChatPage() {
     setLoading(false);
   }
 
+  if (!app.user) {
+    return (
+      <div className="page"><div className="card" style={{ textAlign:"center", padding:40 }}>
+        <div style={{ fontWeight:700, marginBottom:12 }}>AI 選股需要登入（每人每小時 30 次）</div>
+        <button type="button" className="btn primary" onClick={app.signIn}>Google 登入</button>
+      </div></div>
+    );
+  }
+
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100dvh - var(--chat-offset, 0px))", minHeight:480, background:"#020617", color:"#f1f5f9" }}>
       <div style={{ padding:"14px 20px", borderBottom:"1px solid #1e293b", background:"#0f172a", flexShrink:0 }}>
         <div style={{ color:"#38bdf8", fontSize:11, fontWeight:800, letterSpacing:1 }}>TW STOCK DECISION SYSTEM</div>
-        <div style={{ fontSize:18, fontWeight:900, marginTop:4 }}>AI 選股助理<span style={{ fontSize:12, color:"#94a3b8", fontWeight:500, marginLeft:8 }}>（使用舊版 Fly 後端，可能需 10～30 秒喚醒）</span></div>
+        <div style={{ fontSize:18, fontWeight:900, marginTop:4 }}>AI 選股助理<span style={{ fontSize:12, color:"#94a3b8", fontWeight:500, marginLeft:8 }}>（依盤後選股清單推薦・每小時 30 次）</span></div>
       </div>
       <div style={{ padding:"8px 14px", display:"flex", gap:8, flexWrap:"wrap", borderBottom:"1px solid #1e293b", flexShrink:0 }}>
         {quickActions.map(q=>(

@@ -50,6 +50,12 @@ jobs:
             --heal-budget-min "${{ github.event.inputs.heal_budget_min || '45' }}" \
             $([ "${{ github.event.inputs.heal || 'true' }}" = "true" ] && echo --heal)
 
+      - name: Refresh AI screener lists
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: psql "$DATABASE_URL" -At -c "select public.ai_screen_refresh();"
+
       - name: Track new stocks (holdings + 加入追蹤 requests)
         continue-on-error: true
         env:

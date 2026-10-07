@@ -70,3 +70,5 @@ jobs:
           psql "$DATABASE_URL" -At -c "select jobname, schedule from cron.job order by jobname;"
           psql "$DATABASE_URL" -At -c "select code, count(*), max(minute) at time zone 'Asia/Taipei' from public.intraday_bars group by code order by 2 desc limit 5;"
           psql "$DATABASE_URL" -At -c "$AS_ANON select public.market_intraday('2330','1m','1d','上市')->>'source', jsonb_array_length(public.market_intraday('2330','1m','1d','上市')->'t');"
+          echo "--- ai screen"
+          psql "$DATABASE_URL" -At -c "select signal, jsonb_array_length(rows), data_date from public.ai_screen order by signal;"
