@@ -8,6 +8,6 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           for k in 1 2 3; do
-            psql "$DATABASE_URL" -At -c "select now() at time zone 'Asia/Taipei', m->>'z', m->>'pz', m->>'y', m->>'v', m->>'t', m->>'tlong', m->>'o', m->>'h', m->>'l', m->>'b' from jsonb_array_elements((select (body::jsonb)->'msgArray' from public._market_get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=tse_2330.tw%7Ctse_2317.tw%7Cotc_6488.tw', 3000))) m;"
+            psql "$DATABASE_URL" -At -c "select now() at time zone 'Asia/Taipei', m->>'z', public._mis_price(m), m->>'y', m->>'v', m->>'t', m->>'tlong', m->>'o', m->>'h', m->>'l', m->>'b' from jsonb_array_elements((select (body::jsonb)->'msgArray' from public._market_get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=tse_2330.tw%7Ctse_2317.tw%7Cotc_6488.tw', 3000))) m;"
             sleep 6
           done

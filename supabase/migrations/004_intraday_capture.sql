@@ -22,6 +22,26 @@ create table if not exists public.intraday_bars (
 );
 alter table public.intraday_bars enable row level security;
 
+/* MIS 價格：z 只有在該 5 秒撮合有成交時才有值（多數快照為 "-"）
+   → 成交價 > pz > 最佳買賣中價（台股價差通常 1 檔，誤差在 1 檔內），並夾在當日高低之間 */
+create or replace function public._mis_price(m jsonb)
+returns numeric
+language sql immutable as $$
+  select case when p is null then null
+              when hi is not null and lo is not null then least(greatest(p, lo), hi)
+              else p end
+  from (
+    select coalesce(
+             nullif(m->>'z', '-')::numeric,
+             nullif(m->>'pz', '-')::numeric,
+             case when nullif(split_part(coalesce(m->>'a', ''), '_', 1), '')::numeric > 0
+                   and nullif(split_part(coalesce(m->>'b', ''), '_', 1), '')::numeric > 0
+                  then round((split_part(m->>'a', '_', 1)::numeric + split_part(m->>'b', '_', 1)::numeric) / 2, 2) end
+           ) as p,
+           nullif(m->>'h', '-')::numeric as hi, nullif(m->>'l', '-')::numeric as lo
+  ) x
+$$;
+
 /* MIS msgArray → 寫入 1 分 K（只收台北「今天」的成交） */
 create or replace function public._ingest_mis(arr jsonb)
 returns int
@@ -31,7 +51,7 @@ begin
   if arr is null then return 0; end if;
   with src as (
     select m->>'c' as code,
-           coalesce(nullif(m->>'z', '-'), nullif(m->>'pz', '-'))::numeric as price,
+           public._mis_price(m) as price,
            nullif(m->>'v', '-')::bigint as vol,
            to_timestamp((m->>'tlong')::bigint / 1000.0) as ts,
            m->>'d' as d
@@ -174,7 +194,8 @@ begin
       'code',  m->>'c',
       'name',  m->>'n',
       'market', m->>'ex',
-      'price', coalesce(nullif(m->>'z', '-'), nullif(m->>'pz', '-')),
+      'price', public._mis_price(m)::text,
+      'traded', nullif(m->>'z', '-') is not null,
       'prev',  m->>'y',
       'open',  nullif(m->>'o', '-'),
       'high',  nullif(m->>'h', '-'),
