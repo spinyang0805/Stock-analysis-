@@ -1,0 +1,13 @@
+name: AI smoke test (temporary)
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          AS_USER="set statement_timeout = '8s'; set role authenticated; select set_config('request.jwt.claims', '{\"sub\":\"00000000-0000-4000-8000-000000000001\",\"role\":\"authenticated\"}', true);"
+          psql "$DATABASE_URL" -At -c "begin; $AS_USER select 'pick', clock_timestamp(), public.ai_pick('[{\"role\":\"user\",\"content\":\"找法人連買但還沒漲的股票\"}]'::jsonb), clock_timestamp(); commit;" || true
+          psql "$DATABASE_URL" -At -c "begin; $AS_USER select 'explain', public.ai_explain('台積電現價 2575，均線四線多排，波段 5/6 條件成立，停損 2506。請用兩句話說明。'); commit;" || true
+          psql "$DATABASE_URL" -At -c "delete from public.ai_usage where user_id = '00000000-0000-4000-8000-000000000001';"
