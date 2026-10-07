@@ -849,7 +849,9 @@ def groq_analyze(stock: str):
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
             json={
-                "model": "llama-3.3-70b-versatile",
+                "model": "qwen/qwen3.8-27b",
+                "reasoning_effort": "none",
+                "reasoning_format": "hidden",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 1024,
                 "temperature": 0.3,
@@ -1304,7 +1306,9 @@ async def ai_stock_picker(request: Request):
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
                 json={
-                    "model": "llama-3.3-70b-versatile",
+                    "model": "qwen/qwen3.8-27b",
+                "reasoning_effort": "none",
+                "reasoning_format": "hidden",
                     "messages": full_messages,
                     "tools": _PICKER_TOOLS,
                     "tool_choice": tool_choice,

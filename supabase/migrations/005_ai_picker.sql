@@ -1,5 +1,5 @@
 -- AI 選股搬離 Fly：盤後 pg_cron 預先算好候選清單（ai_screen），ai_pick 只呼叫 Groq 一次
--- Groq 已於 2026-08-16 下架 llama-3.3-70b-versatile → 改用 openai/gpt-oss-120b
+-- Groq 已於 2026-08-16 下架 llama-3.3-70b-versatile → 改用 qwen/qwen3.8-27b（Groq Preview 模型）
 
 create table if not exists public.ai_screen (
   signal     text primary key,
@@ -133,8 +133,9 @@ begin
       'POST', 'https://api.groq.com/openai/v1/chat/completions',
       array[extensions.http_header('Authorization', 'Bearer ' || k)],
       'application/json',
-      jsonb_build_object('model', 'openai/gpt-oss-120b', 'temperature', 0.3, 'max_tokens', max_tokens,
-                         'reasoning_effort', 'low', 'messages', messages)::text
+      -- 關閉思考模式：Supabase authenticated 逾時 8 秒，思考模式太慢
+      jsonb_build_object('model', 'qwen/qwen3.8-27b', 'temperature', 0.3, 'max_tokens', max_tokens,
+                         'reasoning_effort', 'none', 'reasoning_format', 'hidden', 'messages', messages)::text
     )::extensions.http_request);
   exception when others then
     return jsonb_build_object('error', 'AI 服務連線失敗：' || sqlerrm);
@@ -143,7 +144,9 @@ begin
     return jsonb_build_object('error', 'AI 服務回應 ' || r.status || '：' || left(coalesce(r.content, ''), 200));
   end if;
   body := r.content::jsonb;
-  return jsonb_build_object('text', body #>> '{choices,0,message,content}', 'model', body->>'model');
+  -- 保險：若仍回傳 <think>…</think> 就去掉
+  return jsonb_build_object('text', btrim(regexp_replace(coalesce(body #>> '{choices,0,message,content}', ''), '<think>.*?</think>', '', 'gs')),
+                            'model', body->>'model');
 end $$;
 revoke all on function public._groq_chat(jsonb, int, int) from public, anon, authenticated;
 
