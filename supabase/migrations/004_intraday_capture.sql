@@ -234,9 +234,9 @@ begin
   if rng not in ('1d','5d','1mo') then rng := '1d'; end if;
   ckey := 'i:' || code || ':' || intv || ':' || rng;
 
-  insert into intraday_watch(code, last_seen) values (code, now())
-    on conflict (code) do update set last_seen = excluded.last_seen
-    where intraday_watch.last_seen < now() - interval '1 minute';
+  insert into intraday_watch as w (code, last_seen) values (market_intraday.code, now())
+    on conflict on constraint intraday_watch_pkey do update set last_seen = excluded.last_seen
+    where w.last_seen < now() - interval '1 minute';
 
   select payload into hit from market_cache where key = ckey and fetched_at > now() - interval '20 seconds';
   if hit is not null then return hit; end if;
