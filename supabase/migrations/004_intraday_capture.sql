@@ -123,7 +123,8 @@ returns jsonb
 language sql security definer set search_path = public as $$
   with b as (
     select code, minute, open, high, low, close, cum_vol,
-           cum_vol - coalesce(lag(cum_vol) over (order by minute), 0) as vol
+           cum_vol - coalesce(lag(cum_vol) over (order by minute),
+                              case when (minute at time zone 'Asia/Taipei')::time <= time '09:01' then 0 else cum_vol end) as vol
       from intraday_bars
      where code = p_code
        and minute >= ((now() at time zone 'Asia/Taipei')::date::timestamp at time zone 'Asia/Taipei')

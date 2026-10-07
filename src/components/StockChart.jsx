@@ -67,7 +67,7 @@ export default function StockChart({ code, market, dailyRows, longBars, longLoad
   const [sub, setSub] = useState(() => loadPref("sub", "VOL"));
   const [showBB, setShowBB] = useState(() => loadPref("bb", "0") === "1");
   const [logScale, setLogScale] = useState(() => loadPref("log", "0") === "1");
-  const [hoverIdx, setHoverIdx] = useState(null);
+  const [hoverTime, setHoverTime] = useState(null); // 十字線所在 K 棒時間（分時有補空白點，不能用邏輯索引）
   const [intra, setIntra] = useState({ bars: [], prevClose: NaN, loading: false, error: "" });
   const [showTable, setShowTable] = useState(false);
 
@@ -150,8 +150,8 @@ export default function StockChart({ code, market, dailyRows, longBars, longLoad
     });
     sync(main, subc); sync(subc, main);
     const onMove = (src) => (param) => {
-      if (!param.point || param.time === undefined || param.logical === undefined) { setHoverIdx(null); return; }
-      setHoverIdx(Math.round(param.logical));
+      if (!param.point || param.time === undefined) { setHoverTime(null); return; }
+      setHoverTime(param.time);
       const other = src === main ? subc : main;
       const s = src === main ? series.current.sub0 : series.current.main0;
       if (other.setCrosshairPosition && s) {
@@ -228,8 +228,16 @@ export default function StockChart({ code, market, dailyRows, longBars, longLoad
     if (S.price) {
       const base = Number.isFinite(intra.prevClose) ? intra.prevClose : bars[0]?.open;
       S.price.api.applyOptions({ baseValue: { type: "price", price: base || 0 } });
-      S.price.api.setData(bars.map((b) => ({ time: b.time, value: b.close })));
-      S.avg.api.setData(line("avg"));
+      // 像看盤軟體一樣固定顯示整個交易時段 09:00～13:30（沒資料的分鐘補空白點）
+      const pad = [];
+      if (bars.length) {
+        const day = Math.floor(bars[0].time / 86400) * 86400;
+        const have = new Set(bars.map((b) => b.time));
+        for (let t = day + 9 * 3600; t <= day + 13.5 * 3600; t += 60) if (!have.has(t)) pad.push({ time: t });
+      }
+      const withPad = (arr) => [...arr, ...pad].sort((a, b) => a.time - b.time);
+      S.price.api.setData(withPad(bars.map((b) => ({ time: b.time, value: b.close }))));
+      S.avg.api.setData(withPad(line("avg")));
       if (prevLine.current) { try { S.price.api.removePriceLine(prevLine.current); } catch { /* ignore */ } }
       prevLine.current = base ? S.price.api.createPriceLine({ price: base, color: "#64748b", lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, title: "昨收" }) : null;
     } else {
@@ -237,10 +245,15 @@ export default function StockChart({ code, market, dailyRows, longBars, longLoad
       for (const k of [...Object.keys(MA_COLORS), "bb_upper", "bb_lower"]) S[k]?.api.setData(line(k));
     }
     if (S.vol) {
-      S.vol.api.setData(bars.map((b, i) => ({
+      const padVol = period === "1m" && bars.length ? (() => {
+        const day = Math.floor(bars[0].time / 86400) * 86400, have = new Set(bars.map((b) => b.time)), out = [];
+        for (let t = day + 9 * 3600; t <= day + 13.5 * 3600; t += 60) if (!have.has(t)) out.push({ time: t });
+        return out;
+      })() : [];
+      S.vol.api.setData([...padVol, ...bars.map((b, i) => ({
         time: b.time, value: (b.volume || 0) / 1000,
         color: (period === "1m" ? b.close >= (bars[i - 1]?.close ?? b.open) : b.close >= b.open) ? "rgba(239,68,68,.6)" : "rgba(34,197,94,.6)",
-      })));
+      }))].sort((a, b) => a.time - b.time));
       S.volume_ma5?.api.setData(line("volume_ma5", 1000));
     }
     for (const k of ["kd_k", "kd_d", "rsi14", "macd", "macd_signal"]) S[k]?.api.setData(line(k));
@@ -276,7 +289,8 @@ export default function StockChart({ code, market, dailyRows, longBars, longLoad
   }, [levels, structVer]);
 
   /* ── 十字線所在 K 棒 ───────────────────────────────────────────── */
-  const idx = hoverIdx != null && hoverIdx >= 0 && hoverIdx < bars.length ? hoverIdx : bars.length - 1;
+  const timeIndex = useMemo(() => new Map(bars.map((b, i) => [b.time, i])), [bars]);
+  const idx = hoverTime != null && timeIndex.has(hoverTime) ? timeIndex.get(hoverTime) : bars.length - 1;
   const bar = bars[idx];
   const prevBar = bars[idx - 1];
   const ref = period === "1m" ? (Number.isFinite(intra.prevClose) ? intra.prevClose : prevClose) : prevBar?.close;
@@ -295,7 +309,7 @@ export default function StockChart({ code, market, dailyRows, longBars, longLoad
     if (i < 0) return;
     const main = charts.current.main;
     main?.timeScale().setVisibleLogicalRange({ from: Math.max(0, i - 30), to: Math.min(bars.length + 3, i + 30) });
-    setHoverIdx(i);
+    setHoverTime(bars[i].time);
     const ti = tableRows.findIndex((b) => b.time <= date);
     if (ti >= 0) setTablePage(Math.floor(ti / PAGE));
   }
@@ -383,7 +397,7 @@ export default function StockChart({ code, market, dailyRows, longBars, longLoad
                   const p = period === "1m" && i === 0 ? intra.prevClose : bars[i - 1]?.close;
                   const c = Number.isFinite(p) ? b.close - p : NaN;
                   return (
-                    <tr key={b.time} className="clickable" onClick={() => setHoverIdx(i)} style={i === idx ? { outline: "1px solid var(--accent)" } : undefined}>
+                    <tr key={b.time} className="clickable" onClick={() => setHoverTime(b.time)} style={i === idx ? { outline: "1px solid var(--accent)" } : undefined}>
                       <td className="left num">{fmtTime(b.time, intraday)}</td>
                       {period !== "1m" && <><td>{fmt(b.open)}</td><td className="up">{fmt(b.high)}</td><td className="down">{fmt(b.low)}</td></>}
                       <td style={{ color: trendColor(c), fontWeight: 700 }}>{fmt(b.close)}</td>
