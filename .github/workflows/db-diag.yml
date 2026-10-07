@@ -7,10 +7,7 @@ jobs:
       - env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          psql "$DATABASE_URL" -At -c "select count(*), max(last_seen) from public.intraday_watch;"
-          psql "$DATABASE_URL" -At -c "select now() at time zone 'Asia/Taipei', to_char(now() at time zone 'Asia/Taipei','YYYYMMDD');"
-          psql "$DATABASE_URL" -At -c "select left(body, 400) from public._market_get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=tse_2330.tw', 3000);" || true
-          psql "$DATABASE_URL" -At -c "select public._ingest_mis((select (body::jsonb)->'msgArray' from public._market_get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=tse_2330.tw', 3000)));" || true
-          psql "$DATABASE_URL" -At -c "select public.intraday_capture();" || true
-          psql "$DATABASE_URL" -At -c "select code, count(*), max(minute) at time zone 'Asia/Taipei' from public.intraday_bars group by code;" || true
-          psql "$DATABASE_URL" -At -c "select status, left(return_message,200), start_time from cron.job_run_details order by start_time desc limit 3;" || true
+          for k in 1 2 3; do
+            psql "$DATABASE_URL" -At -c "select now() at time zone 'Asia/Taipei', m->>'z', m->>'pz', m->>'y', m->>'v', m->>'t', m->>'tlong', m->>'o', m->>'h', m->>'l', m->>'b' from jsonb_array_elements((select (body::jsonb)->'msgArray' from public._market_get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=tse_2330.tw%7Ctse_2317.tw%7Cotc_6488.tw', 3000))) m;"
+            sleep 6
+          done
