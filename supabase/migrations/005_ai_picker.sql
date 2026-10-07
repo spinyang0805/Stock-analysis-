@@ -188,8 +188,19 @@ declare
   d text;
 begin
   if q is not null then return jsonb_build_object('error', q); end if;
-  select string_agg('【' || label || '】' || rows::text, E'\n' order by signal), max(data_date)
-    into ctx, d from ai_screen;
+  -- 精簡文字（每類前 10 檔），控制在 Groq 免費額度每分鐘 8,000 tokens 內
+  select string_agg('【' || s.label || '】' || coalesce((
+           select string_agg(
+             (x->>'code') || ' ' || coalesce(x->>'name', '') || ' 收' || (x->>'close')
+             || coalesce(' 漲跌' || (x->>'chg_pct') || '%', '')
+             || coalesce(' 5日' || (x->>'chg5_pct') || '%', '')
+             || coalesce(' 量比' || (x->>'vol_ratio'), '')
+             || coalesce(' 月線' || (x->>'ma20'), '')
+             || coalesce(' 法人5日' || (x->>'inst5_lots') || '張', '')
+             || coalesce(' 連買' || (x->>'buy_days') || '天', ''), '；' order by o)
+             from (select x, o from jsonb_array_elements(s.rows) with ordinality t(x, o) order by o limit 10) y), '無'),
+         E'\n' order by s.signal), max(s.data_date)
+    into ctx, d from ai_screen s;
   if ctx is null then return jsonb_build_object('error', '選股資料尚未產生，請稍後再試'); end if;
   -- 只保留最近 6 則對話，每則最多 1500 字
   select coalesce(jsonb_agg(jsonb_build_object('role', m->>'role', 'content', left(m->>'content', 1500)) order by ord), '[]')
@@ -202,7 +213,7 @@ begin
       '1. 只能從下面「盤後選股清單」挑股票，數字照抄清單，不可編造。' ||
       '2. 依使用者需求選最相關的清單，推薦 5～8 檔，每檔一行：代號 名稱｜理由（引用清單數字）。' ||
       '3. 清單沒有符合的就直說，並建議可以改問哪一類。4. 最後一行提醒僅供參考、非投資建議。' ||
-      E'\n資料日：' || coalesce(d, '--') || E'\n盤後選股清單（JSON）：\n' || ctx))
+      E'\n資料日：' || coalesce(d, '--') || E'\n盤後選股清單：\n' || ctx))
     || hist, 1200, 6500);
 end $$;
 
