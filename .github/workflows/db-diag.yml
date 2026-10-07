@@ -11,3 +11,8 @@ jobs:
             psql "$DATABASE_URL" -At -c "select now() at time zone 'Asia/Taipei', m->>'z', public._mis_price(m), m->>'y', m->>'v', m->>'t', m->>'tlong', m->>'o', m->>'h', m->>'l', m->>'b' from jsonb_array_elements((select (body::jsonb)->'msgArray' from public._market_get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=tse_2330.tw%7Ctse_2317.tw%7Cotc_6488.tw', 3000))) m;" || true
             sleep 6
           done
+          psql "$DATABASE_URL" -At -c "select 'watch', count(*), max(last_seen) from public.intraday_watch;" || true
+          psql "$DATABASE_URL" -At -c "select 'capture', public.intraday_capture();" || true
+          psql "$DATABASE_URL" -At -c "select 'bars', code, count(*), min(minute) at time zone 'Asia/Taipei', max(minute) at time zone 'Asia/Taipei', max(close) from public.intraday_bars group by code order by 3 desc limit 8;" || true
+          psql "$DATABASE_URL" -At -c "select 'cron', status, count(*) from cron.job_run_details where start_time > now() - interval '15 minutes' group by status;" || true
+          psql "$DATABASE_URL" -At -c "set statement_timeout='3s'; set role anon; select 'rpc', public.market_intraday('2330','1m','1d','上市')->>'source', jsonb_array_length(public.market_intraday('2330','1m','1d','上市')->'t');" || true
