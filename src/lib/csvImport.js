@@ -140,7 +140,10 @@ export function convertRows(header, rows, mapping, { broker = null, headerLine =
     let shares = toNumber(get(r, "shares"));
     if (!Number.isFinite(shares) && idx.lots >= 0) shares = toNumber(get(r, "lots")) * 1000;
     shares = Math.abs(shares);
-    const price = Math.abs(toNumber(get(r, "price")));
+    let price = Math.abs(toNumber(get(r, "price")));
+    // 轉入股：券商記成 0 元買進、但收付金額為正（例：5000 股、+75000）→ 以 金額÷股數 當成本價
+    const amt0 = toNumber(get(r, "amount"));
+    if (side === "buy" && !(price > 0) && amt0 > 0 && shares > 0) price = amt0 / shares;
     if (side === "buy" || side === "sell") {
       if (!(shares > 0)) errors.push("股數無效");
       if (!(price > 0)) errors.push("成交價無效");

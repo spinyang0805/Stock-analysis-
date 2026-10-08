@@ -252,3 +252,21 @@ test("配股：除權日股價計價值、成本為 0 攤低均價、各欄加�
   assert.equal(feb.unrealized, -10000);
   assert.equal(feb.realized + feb.unrealized + feb.cashDiv + feb.stockDiv, feb.pnlWithDiv);
 });
+
+test("xlsx 對帳單：現金增股=買進、配股=股票股利、轉入股用金額÷股數、分割擋下", () => {
+  const header = ["成交日期", "類別", "股票名稱", "股數", "成交價", "收付金額"];
+  const m = guessMapping(header);
+  assert.equal(m.code, "股票名稱");
+  const out = convertRows(header, [
+    ["2026/09/30", "現金增股", "眾達–ＫＹ(4977)", "80", "105", "-8400"],
+    ["2026/10/05", "現股配股", "晟銘電(3013)", "40", "0", "0"],
+    ["2023/09/20", "現股買進", "第一金(2892)", "11", "0", "0"],
+    ["2024/03/19", "現股買進", "統一台灣高息動能(00939)", "5000", "0", "75000"],
+    ["2025/06/13", "現股賣出", "元大台灣５０(0050)", "184", "0", "0"],
+    ["2025/06/18", "現股買進", "元大台灣５０(0050)", "736", "0", "0"],
+  ], m);
+  assert.deepEqual(out.map((r) => r.ok && r.tx.side), ["buy", "stock_dividend", "stock_dividend", "buy", false, false]);
+  assert.equal(out[0].tx.stock_id, "4977");
+  assert.equal(out[0].tx.stock_name, "眾達–ＫＹ");
+  assert.equal(out[3].tx.price, 15);
+});
