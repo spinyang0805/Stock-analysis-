@@ -7,7 +7,7 @@ import { Card, Empty } from "../components/ui.jsx";
 import { useApp } from "../lib/appState.jsx";
 import { navigate, useRoute } from "../lib/router.js";
 import { supabase } from "../lib/supabase.js";
-import { SIDE_LABEL, accountOf, cashDividendAmount, listAccounts } from "../lib/portfolio.js";
+import { SIDE_LABEL, sideLabel, accountOf, cashDividendAmount, listAccounts } from "../lib/portfolio.js";
 import { fmt, fmtInt } from "../lib/format.js";
 
 export default function TransactionsPage() {
@@ -92,7 +92,7 @@ export default function TransactionsPage() {
                       <td className="left"><input type="checkbox" aria-label={`選取 ${t.trade_date} ${t.stock_id}`} checked={selected.has(t.id)} onChange={() => toggle(t.id)} /></td>
                       <td className="left num">{t.trade_date}</td>
                       <td className="left"><a href={`#/stock/${t.stock_id}?tab=position`}><b className="num">{t.stock_id}</b></a> {t.stock_name}</td>
-                      <td className="left"><span className={t.side === "buy" ? "up" : t.side === "sell" ? "down" : ""}>{SIDE_LABEL[t.side]}</span></td>
+                      <td className="left"><span className={t.side === "buy" ? "up" : t.side === "sell" ? "down" : ""}>{sideLabel(t)}</span></td>
                       <td>{fmtInt(t.shares)}</td><td>{fmt(t.price)}</td><td>{fmtInt(t.fee)}</td><td>{fmtInt(t.tax)}</td>
                       <td>{fmtInt(gross)}</td>
                       <td className="left dim">{accountOf(t)}</td>

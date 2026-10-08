@@ -1,7 +1,7 @@
 // node --test tests/   （純函式單元測試，不需瀏覽器）
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computePositions, valuePositions, equityCurve } from "../src/lib/portfolio.js";
+import { computePositions, valuePositions, equityCurve, isDividendTx, sideLabel } from "../src/lib/portfolio.js";
 import { parseCSV, detectHeader, guessMapping, convertRows, decodeBytes, parseSide } from "../src/lib/csvImport.js";
 import { computeIndicators, aggregateBars } from "../src/lib/indicators.js";
 import { toISODate } from "../src/lib/format.js";
@@ -253,7 +253,7 @@ test("配股：除權日股價計價值、成本為 0 攤低均價、各欄加�
   assert.equal(feb.realized + feb.unrealized + feb.cashDiv + feb.stockDiv, feb.pnlWithDiv);
 });
 
-test("xlsx 對帳單：現金增股=買進、配股=股票股利、轉入股用金額÷股數、分割擋下", () => {
+test("xlsx 對帳單：現金增股=買進、配股=股票股利、轉入股用金額÷股數、分割成對合成", () => {
   const header = ["成交日期", "類別", "股票名稱", "股數", "成交價", "收付金額"];
   const m = guessMapping(header);
   assert.equal(m.code, "股票名稱");
@@ -265,8 +265,23 @@ test("xlsx 對帳單：現金增股=買進、配股=股票股利、轉入股用�
     ["2025/06/13", "現股賣出", "元大台灣５０(0050)", "184", "0", "0"],
     ["2025/06/18", "現股買進", "元大台灣５０(0050)", "736", "0", "0"],
   ], m);
-  assert.deepEqual(out.map((r) => r.ok && r.tx.side), ["buy", "stock_dividend", "stock_dividend", "buy", false, false]);
+  assert.deepEqual(out.map((r) => r.ok && r.tx.side), ["buy", "stock_dividend", "stock_dividend", "buy", "stock_dividend", false]);
+  assert.equal(out[5].skipped, true);
+  assert.equal(out[4].tx.shares, 552);
+  assert.match(out[4].tx.note, /股票分割 184→736/);
   assert.equal(out[0].tx.stock_id, "4977");
   assert.equal(out[0].tx.stock_name, "眾達–ＫＹ");
   assert.equal(out[3].tx.price, 15);
+});
+
+test("股票分割：成本不變、不計損益、不算股利", () => {
+  const split = tx("2025-06-13", "stock_dividend", 552, 0, 0, 0, { note: "股票分割 184→736（4 倍）" });
+  const txs = [tx("2025-01-02", "buy", 184, 100), split];
+  const [p] = computePositions(txs);
+  assert.equal(p.shares, 736);
+  assert.equal(p.cost, 18400);
+  assert.equal(p.realized, 0);
+  assert.equal(isDividendTx(split), false);
+  assert.equal(sideLabel(split), "股票分割");
+  assert.equal(isDividendTx(tx("2025-06-13", "stock_dividend", 40, 0)), true);
 });

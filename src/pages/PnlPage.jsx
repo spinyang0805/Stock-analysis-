@@ -5,7 +5,7 @@ import { Bar, BarChart, CartesianGrid, Legend, ReferenceLine, ResponsiveContaine
 import AccountPicker, { ALL, useAccountView } from "../components/AccountPicker.jsx";
 import { Card, Empty, Kpi, Seg } from "../components/ui.jsx";
 import { useApp } from "../lib/appState.jsx";
-import { accountOf, listAccounts } from "../lib/portfolio.js";
+import { accountOf, isDividendTx, listAccounts } from "../lib/portfolio.js";
 import { autoDividendTx, periodBreakdown, stockDividendValue } from "../lib/pnl.js";
 import { fetchDividends, fetchLongHistory } from "../lib/market.js";
 import { fetchStockBundle, normalizeRows } from "../lib/data.js";
@@ -62,7 +62,7 @@ export default function PnlPage() {
   const live = useMemo(() => Object.fromEntries(Object.entries(q.quotes).map(([c, v]) => [c, v.price]).filter(([, v]) => Number.isFinite(v))), [q.quotes]);
   const result = useMemo(() => (Object.keys(history).length ? periodBreakdown(allTx, history, { livePrices: live, today: todayISO() }) : null), [allTx, history, live]);
 
-  const dividendRows = useMemo(() => allTx.filter((t) => t.side === "cash_dividend" || t.side === "stock_dividend")
+  const dividendRows = useMemo(() => allTx.filter(isDividendTx)
     .sort((a, b) => b.trade_date.localeCompare(a.trade_date)), [allTx]);
 
   if (!app.user) {

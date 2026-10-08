@@ -3,6 +3,12 @@
 
 export const SIDE_LABEL = { buy: "買進", sell: "賣出", cash_dividend: "現金股利", stock_dividend: "股票股利" };
 
+// 股票分割／反分割：以 stock_dividend（只加股數、成本不變）+ 備註「股票分割」記錄，免改資料庫 side 限制
+export const isSplit = (t) => t.side === "stock_dividend" && /股票分割/.test(t.note || "");
+// 真正的股利收入（現金股利、配股）；分割不是股利，不能計入股利統計
+export const isDividendTx = (t) => t.side === "cash_dividend" || (t.side === "stock_dividend" && !isSplit(t));
+export const sideLabel = (t) => (isSplit(t) ? "股票分割" : SIDE_LABEL[t.side]);
+
 function sortTx(txs) {
   return [...txs].sort((a, b) => String(a.trade_date).localeCompare(String(b.trade_date)) || (a.side === "sell") - (b.side === "sell"));
 }

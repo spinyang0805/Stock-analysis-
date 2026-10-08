@@ -125,9 +125,34 @@ export function convertRows(header, rows, mapping, { broker = null, headerLine =
   const idx = Object.fromEntries(FIELDS.map((f) => [f.key, col(f.key)]));
   const get = (r, key) => (idx[key] >= 0 ? r[idx[key]] : "");
   const seen = new Map();
-  // 價格 0 的賣出 = 股票分割／減資換股的一半：同檔的 0 元買進不能當配股，兩邊都擋下請手動處理
-  const zeroSell = new Set(rows.filter((r) => parseSide(get(r, "side")) === "sell" && !(Math.abs(toNumber(get(r, "price"))) > 0)).map((r) => parseCode(get(r, "code"))));
+  // 股票分割：券商把分割記成同檔「價格 0 的賣出」+ 其後 31 天內「價格 0 的買進」。
+  // 配成對 → 合成一筆（補差額股數、成本不變），買進列標為已併入；配不成對的 0 元賣出維持報錯。
+  const zeroPx = (r) => !(Math.abs(toNumber(get(r, "price"))) > 0) && !(Math.abs(toNumber(get(r, "amount"))) > 0);
+  const dayMs = (r) => Date.parse(toISODate(get(r, "date")) || "");
+  const splitBySell = new Map(), splitBuys = new Set();
+  rows.forEach((r, i) => {
+    if (parseSide(get(r, "side")) !== "sell" || !zeroPx(r)) return;
+    const code = parseCode(get(r, "code")), from = Math.abs(toNumber(get(r, "shares")));
+    const j = rows.findIndex((q, k) => k > i && !splitBuys.has(k) && parseSide(get(q, "side")) === "buy" && zeroPx(q)
+      && parseCode(get(q, "code")) === code && dayMs(q) - dayMs(r) >= 0 && dayMs(q) - dayMs(r) <= 31 * 864e5);
+    const to = j >= 0 ? Math.abs(toNumber(get(rows[j], "shares"))) : NaN;
+    if (code && from > 0 && to > from) { splitBySell.set(i, { from, to }); splitBuys.add(j); }
+  });
+  const zeroSell = new Set(rows.filter((r, i) => parseSide(get(r, "side")) === "sell" && zeroPx(r) && !splitBySell.has(i)).map((r) => parseCode(get(r, "code"))));
   return rows.map((r, i) => {
+    const line = headerLine + i + 2;
+    if (splitBuys.has(i)) return { ok: false, skipped: true, errors: ["已併入股票分割（見前面的賣出列）"], tx: null, raw: r, line };
+    const sp = splitBySell.get(i);
+    if (sp) {
+      const date = toISODate(get(r, "date")), code = parseCode(get(r, "code"));
+      const tx = {
+        trade_date: date, stock_id: code, stock_name: String(get(r, "name") || "").replace(/\s*[(（][0-9A-Z]{4,6}[)）]\s*$/, "") || null,
+        side: "stock_dividend", shares: sp.to - sp.from, price: 0, fee: 0, tax: 0, amount: null,
+        broker, source: "csv", note: `股票分割 ${sp.from}→${sp.to}（${+(sp.to / sp.from).toFixed(4)} 倍）`,
+        import_hash: `split|${date}|${code}|${sp.from}|${sp.to}`,
+      };
+      return { ok: true, errors: [], tx, raw: r, line };
+    }
     const errors = [];
     const date = toISODate(get(r, "date"));
     if (!date) errors.push("日期無法辨識");

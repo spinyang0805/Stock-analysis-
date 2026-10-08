@@ -1,6 +1,6 @@
 // 損益分析：自動配股配息 + 含息／不含息兩本帳 + 年／月拆解
 // 純函式（tests/lib.test.mjs 有測），資料來源見 PnlPage.jsx
-import { accountOf, computePositions, equityCurve } from "./portfolio.js";
+import { accountOf, computePositions, equityCurve, isDividendTx, isSplit } from "./portfolio.js";
 
 const DAY = 86400000;
 const addDays = (iso, n) => new Date(Date.parse(iso) + n * DAY).toISOString().slice(0, 10);
@@ -28,7 +28,7 @@ export function autoDividendTx(transactions, dividendsByCode) {
       const before = [...txs, ...generated].filter((t) => t.trade_date < ev.exDate);
       const held = computePositions(before, { byAccount: true }).filter((p) => p.shares > 0);
       for (const p of held) {
-        const recorded = (side) => txs.some((t) => t.side === side && accountOf(t) === p.account
+        const recorded = (side) => txs.some((t) => t.side === side && !isSplit(t) && accountOf(t) === p.account
           && t.trade_date >= addDays(ev.exDate, -5) && t.trade_date <= addDays(ev.exDate, 90));
         const name = txs.find((t) => t.stock_name)?.stock_name || null;
         if (ev.cash > 0 && !recorded("cash_dividend")) {
@@ -68,12 +68,12 @@ export function stockDividendValue(tx, priceHistory) {
    回傳 { months: [...], years: [...], total } 每列：
    { key, realized, unrealized, cashDiv, pnlNoDiv, pnlWithDiv, avgCost, retNoDiv, retWithDiv, byCode:{code:{...}} } */
 export function periodBreakdown(transactions, priceHistory, { livePrices = null, today = null } = {}) {
-  const noDivTx = transactions.filter((t) => t.side !== "cash_dividend" && t.side !== "stock_dividend");
+  const noDivTx = transactions.filter((t) => !isDividendTx(t));
   const A = equityCurve(transactions, priceHistory, { livePrices, today });
   const B = equityCurve(noDivTx, priceHistory, { livePrices, today });
   if (!A.length) return { months: [], years: [], total: null };
   const bByDate = new Map(B.map((p) => [p.date, p]));
-  const stockDivs = transactions.filter((t) => t.side === "stock_dividend")
+  const stockDivs = transactions.filter((t) => isDividendTx(t) && t.side === "stock_dividend")
     .map((t) => ({ date: t.trade_date, code: String(t.stock_id), value: stockDividendValue(t, priceHistory).value }))
     .sort((a, b) => a.date.localeCompare(b.date));
 

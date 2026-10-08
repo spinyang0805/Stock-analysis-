@@ -22,7 +22,7 @@ import {
 import { fetchDividends, fetchLongHistory, fetchQuarterlyEps } from "../lib/market.js";
 import { computeIndicators } from "../lib/indicators.js";
 import { annualCashDividends, buildStrategy } from "../lib/strategy.js";
-import { accountOf, computePositions, equityCurve, listAccounts, valuePositions, SIDE_LABEL } from "../lib/portfolio.js";
+import { accountOf, computePositions, equityCurve, listAccounts, valuePositions, SIDE_LABEL, sideLabel } from "../lib/portfolio.js";
 import AccountPicker, { ALL, SPLIT, useAccountView } from "../components/AccountPicker.jsx";
 import { isStale, useQuotes } from "../lib/useQuotes.js";
 import { useApp } from "../lib/appState.jsx";
@@ -350,7 +350,7 @@ function PositionTab({ code, name, price, longBars, quote, onEdit, onAdd }) {
   const holdDays = r.firstDate ? Math.round((Date.now() - Date.parse(r.firstDate)) / 86400000) : null;
 
   async function remove(t) {
-    if (!window.confirm(`刪除 ${t.trade_date} ${SIDE_LABEL[t.side]} ${t.shares} 股？`)) return;
+    if (!window.confirm(`刪除 ${t.trade_date} ${sideLabel(t)} ${t.shares} 股？`)) return;
     const { error } = await supabase.from("transactions").delete().eq("id", t.id);
     if (error) { window.alert(`刪除失敗：${error.message}`); return; }
     app.reload();
@@ -413,7 +413,7 @@ function PositionTab({ code, name, price, longBars, quote, onEdit, onAdd }) {
               {[...txs].reverse().map((t) => (
                 <tr key={t.id}>
                   <td className="left num">{t.trade_date}</td>
-                  <td className="left"><span className={t.side === "buy" ? "up" : t.side === "sell" ? "down" : ""}>{SIDE_LABEL[t.side]}</span></td>
+                  <td className="left"><span className={t.side === "buy" ? "up" : t.side === "sell" ? "down" : ""}>{sideLabel(t)}</span></td>
                   <td>{fmtInt(t.shares)}</td><td>{fmt(t.price)}</td><td>{fmtInt(t.fee)}</td><td>{fmtInt(t.tax)}</td>
                   <td className="left dim">{accountOf(t)}</td>
                   <td>

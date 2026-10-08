@@ -5,7 +5,7 @@ import { Card } from "./ui.jsx";
 import { FIELDS, convertRows, decodeBytes, detectHeader, guessMapping, parseCSV, parseXlsx } from "../lib/csvImport.js";
 import { supabase } from "../lib/supabase.js";
 import { useApp } from "../lib/appState.jsx";
-import { SIDE_LABEL } from "../lib/portfolio.js";
+import { sideLabel } from "../lib/portfolio.js";
 import { fmt, fmtInt } from "../lib/format.js";
 
 const BROKERS = ["國泰證券", "亞東證券", "其他"];
@@ -53,7 +53,8 @@ export default function CsvImport({ onDone }) {
 
   const converted = useMemo(() => (table ? convertRows(table.header, table.rows, mapping, { broker: account.trim() || broker, headerLine: table.headerLine }) : []), [table, mapping, broker, account]);
   const okRows = converted.filter((r) => r.ok);
-  const badRows = converted.filter((r) => !r.ok);
+  const badRows = converted.filter((r) => !r.ok && !r.skipped);
+  const splitRows = okRows.filter((r) => r.tx.note?.startsWith("股票分割"));
   const missing = FIELDS.filter((f) => f.required && !mapping[f.key]);
   const qtyMissing = !mapping.shares && !mapping.lots;
 
@@ -150,6 +151,7 @@ export default function CsvImport({ onDone }) {
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <span className="badge blue">可匯入 {okRows.length} 筆</span>
             {badRows.length > 0 && <span className="badge down" style={{ color: "#fca5a5", background: "rgba(239,68,68,.14)" }}>有問題 {badRows.length} 筆（不會匯入）</span>}
+            {splitRows.length > 0 && <span className="badge blue">股票分割 {splitRows.length} 筆（成本不變、不計損益）</span>}
             <span className="dim">已存在的交易（同日期、代號、類別、股數、價格、費用）會自動略過</span>
           </div>
           <div className="table-wrap" style={{ maxHeight: 420 }}>
@@ -163,7 +165,7 @@ export default function CsvImport({ onDone }) {
                       <>
                         <td className="left num">{r.tx.trade_date}</td>
                         <td className="left">{r.tx.stock_id} {r.tx.stock_name}</td>
-                        <td className="left"><span className={r.tx.side === "buy" ? "up" : r.tx.side === "sell" ? "down" : ""}>{SIDE_LABEL[r.tx.side]}</span></td>
+                        <td className="left"><span className={r.tx.side === "buy" ? "up" : r.tx.side === "sell" ? "down" : ""}>{sideLabel(r.tx)}</span></td>
                         <td>{fmtInt(r.tx.shares)}</td><td>{fmt(r.tx.price)}</td><td>{fmtInt(r.tx.fee)}</td><td>{fmtInt(r.tx.tax)}</td>
                         <td className="left dim">OK</td>
                       </>
