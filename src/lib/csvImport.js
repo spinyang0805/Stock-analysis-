@@ -27,6 +27,17 @@ export function decodeBytes(buf) {
   }
 }
 
+// xlsx 對帳單 → 字串二維陣列（與 parseCSV 輸出同形，後續流程共用）。只讀第一個工作表
+export async function parseXlsx(buf) {
+  const { default: readXlsxFile } = await import("read-excel-file/browser");
+  const sheets = await readXlsxFile(buf);
+  const cell = (v) => {
+    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    return v === null || v === undefined ? "" : String(v).trim();
+  };
+  return (sheets[0]?.data || []).map((r) => r.map(cell)).filter((r) => r.some((c) => c !== ""));
+}
+
 export function parseCSV(text) {
   const rows = [];
   let row = [], cell = "", q = false;
@@ -75,6 +86,8 @@ export function guessMapping(header) {
     });
     if (pick !== null) { mapping[f.key] = header[pick]; used.add(pick); }
   }
+  // 亞東、國泰台股把代號放在名稱欄的括號裡，例如「台積電(2330)」
+  if (!mapping.code && mapping.name) mapping.code = mapping.name;
   return mapping;
 }
 
@@ -89,6 +102,7 @@ export function toNumber(v) {
 
 export function parseSide(v) {
   const s = String(v || "");
+  if (/現金增資|現金增股|現增|增資/.test(s)) return "buy"; // 現金增資認購：出資買新股，不是股利
   if (/股票股利|配股|無償|stock\s*div/i.test(s)) return "stock_dividend";
   if (/股息|股利|配息|現金|dividend/i.test(s)) return "cash_dividend";
   if ((/賣/.test(s) && !/買/.test(s)) || /^\s*(S|SELL)\s*$/i.test(s)) return "sell";
@@ -97,7 +111,10 @@ export function parseSide(v) {
 }
 
 export function parseCode(v) {
-  const m = String(v || "").match(/([0-9]{4,6}[A-Z]?|[0-9]{4,6})/);
+  const s = String(v || "");
+  const paren = s.match(/[(（]\s*([0-9]{4,6}[A-Z]?)\s*[)）]/); // 名稱(代號) 優先，避免名稱內的數字被誤抓
+  if (paren) return paren[1];
+  const m = s.match(/([0-9]{4,6}[A-Z]?)/);
   return m ? m[1] : null;
 }
 
@@ -108,13 +125,17 @@ export function convertRows(header, rows, mapping, { broker = null, headerLine =
   const idx = Object.fromEntries(FIELDS.map((f) => [f.key, col(f.key)]));
   const get = (r, key) => (idx[key] >= 0 ? r[idx[key]] : "");
   const seen = new Map();
+  // 價格 0 的賣出 = 股票分割／減資換股的一半：同檔的 0 元買進不能當配股，兩邊都擋下請手動處理
+  const zeroSell = new Set(rows.filter((r) => parseSide(get(r, "side")) === "sell" && !(Math.abs(toNumber(get(r, "price"))) > 0)).map((r) => parseCode(get(r, "code"))));
   return rows.map((r, i) => {
     const errors = [];
     const date = toISODate(get(r, "date"));
     if (!date) errors.push("日期無法辨識");
     const code = parseCode(get(r, "code"));
     if (!code) errors.push("股票代號無法辨識");
-    const side = parseSide(get(r, "side"));
+    let side = parseSide(get(r, "side"));
+    // 價格與金額都是 0 的「買進」= 配股（券商常把配股記成現股買進）
+    if (side === "buy" && !(Math.abs(toNumber(get(r, "price"))) > 0) && !(Math.abs(toNumber(get(r, "amount"))) > 0) && !zeroSell.has(code)) side = "stock_dividend";
     if (!side) errors.push(`買賣別「${get(r, "side")}」無法辨識`);
     let shares = toNumber(get(r, "shares"));
     if (!Number.isFinite(shares) && idx.lots >= 0) shares = toNumber(get(r, "lots")) * 1000;
@@ -132,7 +153,7 @@ export function convertRows(header, rows, mapping, { broker = null, headerLine =
     const n = (seen.get(base) || 0) + 1;
     seen.set(base, n);
     const tx = errors.length ? null : {
-      trade_date: date, stock_id: code, stock_name: get(r, "name") || null, side,
+      trade_date: date, stock_id: code, stock_name: String(get(r, "name") || "").replace(/\s*[(（][0-9A-Z]{4,6}[)）]\s*$/, "") || null, side,
       shares: Number.isFinite(shares) ? shares : 0, price: Number.isFinite(price) ? price : 0,
       fee, tax, amount: Number.isFinite(amount) ? amount : null,
       broker, source: "csv", note: get(r, "note") || null,

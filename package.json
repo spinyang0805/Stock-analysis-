@@ -15,6 +15,7 @@
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "read-excel-file": "^9.3.12",
     "recharts": "latest",
     "vite": "^8.0.14"
   },

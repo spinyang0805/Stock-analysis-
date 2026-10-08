@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FileUp, Save } from "lucide-react";
 import { Card } from "./ui.jsx";
-import { FIELDS, convertRows, decodeBytes, detectHeader, guessMapping, parseCSV } from "../lib/csvImport.js";
+import { FIELDS, convertRows, decodeBytes, detectHeader, guessMapping, parseCSV, parseXlsx } from "../lib/csvImport.js";
 import { supabase } from "../lib/supabase.js";
 import { useApp } from "../lib/appState.jsx";
 import { SIDE_LABEL } from "../lib/portfolio.js";
@@ -33,8 +33,13 @@ export default function CsvImport({ onDone }) {
     if (!file) return;
     setErr(""); setResult(null);
     const buf = await file.arrayBuffer();
-    const rows = parseCSV(decodeBytes(buf));
-    if (rows.length < 2) { setErr("檔案內容太少，請確認是 CSV 對帳單"); return; }
+    let rows;
+    try {
+      rows = /\.xlsx$/i.test(file.name) ? await parseXlsx(buf) : parseCSV(decodeBytes(buf));
+    } catch (e) {
+      setErr(`檔案解析失敗：${e.message}（若是 .xls 舊格式，請在 Excel 另存成 .xlsx 或 CSV）`); return;
+    }
+    if (rows.length < 2) { setErr("檔案內容太少，請確認是 CSV 或 xlsx 對帳單"); return; }
     const h = detectHeader(rows);
     const header = rows[h];
     const preset = presets.find((p) => p.name === broker);
@@ -107,9 +112,9 @@ export default function CsvImport({ onDone }) {
             onDrop={(e) => { e.preventDefault(); setOver(false); readFile(e.dataTransfer.files?.[0]); }}
           >
             <FileUp size={28} aria-hidden="true" />
-            <div style={{ fontWeight: 700, color: "var(--fg-2)", marginTop: 6 }}>拖曳 CSV 到這裡，或點擊選擇檔案</div>
-            <div className="dim">支援 UTF-8 與 Big5 編碼；從券商 App／網站匯出「交易明細」或「對帳單」</div>
-            <input ref={inputRef} type="file" accept=".csv,.txt,text/csv" hidden onChange={(e) => readFile(e.target.files?.[0])} />
+            <div style={{ fontWeight: 700, color: "var(--fg-2)", marginTop: 6 }}>拖曳 CSV／xlsx 到這裡，或點擊選擇檔案</div>
+            <div className="dim">支援 .xlsx 與 CSV（UTF-8、Big5）；從券商 App／網站匯出「交易明細」或「對帳單」</div>
+            <input ref={inputRef} type="file" accept=".csv,.txt,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={(e) => readFile(e.target.files?.[0])} />
           </div>
           {presets.some((p) => p.name === broker) && <div className="dim">已有「{broker}」欄位對應預設，上傳後自動套用。</div>}
         </div>
