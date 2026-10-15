@@ -32,14 +32,21 @@ export default function TransactionsPage() {
     return <div className="page"><Card><Empty icon={ListOrdered} title="登入後管理交易紀錄"><button type="button" className="btn primary" onClick={app.signIn}>Google 登入</button></Empty></Card></div>;
   }
 
-  async function removeSelected() {
-    if (!selected.size || !window.confirm(`刪除選取的 ${selected.size} 筆交易？此動作無法復原。`)) return;
-    const { error } = await supabase.from("transactions").delete().in("id", [...selected]);
-    if (error) { setMsg(`刪除失敗：${error.message}`); return; }
+  // 分批刪除：一次 .in("id", …) 放太多 id 會超過 URL 長度上限
+  async function removeIds(ids, question) {
+    if (!ids.length || !window.confirm(question)) return;
+    for (let i = 0; i < ids.length; i += 100) {
+      const { error } = await supabase.from("transactions").delete().in("id", ids.slice(i, i + 100));
+      if (error) { setMsg(`刪除失敗：${error.message}`); app.reload(); return; }
+    }
     setMsg("");
     setSelected(new Set());
     app.reload();
   }
+  const removeSelected = () => removeIds([...selected], `刪除選取的 ${selected.size} 筆交易？此動作無法復原。`);
+  const removeOne = (t) => removeIds([t.id], `刪除 ${t.trade_date} ${t.stock_id} ${sideLabel(t)}？此動作無法復原。`);
+  const filtered = !!(filter.trim() || side || acc);
+  const removeAll = () => removeIds(list.map((t) => t.id), `${filtered ? "刪除目前篩選結果的" : "刪除「全部」"} ${list.length} 筆交易？此動作無法復原。`);
 
   const toggle = (id) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
@@ -58,9 +65,9 @@ export default function TransactionsPage() {
       </div>
 
       {msg && <div className="notice err" style={{ marginBottom: 12 }}>{msg}</div>}
-      {showImport && <div style={{ marginBottom: 12 }}><CsvImport onDone={() => navigate("/portfolio")} /></div>}
+      {showImport && <div style={{ marginBottom: 20 }}><CsvImport onDone={() => navigate("/portfolio")} onClose={() => route.setQuery({ import: "" })} /></div>}
 
-      <Card>
+      <Card title="已記錄的交易" icon={ListOrdered}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10, alignItems: "center" }}>
           <input className="input" style={{ maxWidth: 220 }} placeholder="篩選代號或名稱" aria-label="篩選代號或名稱" value={filter} onChange={(e) => setFilter(e.target.value)} />
           <select className="input" style={{ maxWidth: 150 }} aria-label="類別" value={side} onChange={(e) => setSide(e.target.value)}>
@@ -73,7 +80,8 @@ export default function TransactionsPage() {
               {accounts.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
           )}
-          {selected.size > 0 && <button type="button" className="btn danger" onClick={removeSelected}><Trash2 size={16} />刪除 {selected.size} 筆</button>}
+          {selected.size > 0 && <button type="button" className="btn danger" onClick={removeSelected}><Trash2 size={16} />刪除選取 {selected.size} 筆</button>}
+          {list.length > 0 && <button type="button" className="btn danger" onClick={removeAll}><Trash2 size={16} />{filtered ? `刪除篩選結果 ${list.length} 筆` : `刪除全部 ${list.length} 筆`}</button>}
         </div>
         {!list.length ? <Empty icon={ListOrdered} title="沒有符合的交易" /> : (
           <div className="table-wrap">
@@ -98,6 +106,7 @@ export default function TransactionsPage() {
                       <td className="left dim">{accountOf(t)}</td>
                       <td>
                         <button type="button" className="btn ghost sm" aria-label="編輯" onClick={() => setModal({ initial: t })}><Pencil size={14} /></button>
+                        <button type="button" className="btn ghost sm" aria-label="刪除" onClick={() => removeOne(t)}><Trash2 size={14} /></button>
                       </td>
                     </tr>
                   );

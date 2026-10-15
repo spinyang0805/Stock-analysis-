@@ -223,9 +223,45 @@ table.data tr.err td { background: rgba(239,68,68,.07); }
 .check:last-child { border-bottom: 0; }
 .dropzone { border: 2px dashed var(--border-strong); border-radius: 12px; padding: 28px 16px; text-align: center; color: var(--fg-3); cursor: pointer; transition: border-color .15s, background .15s; }
 .dropzone.over, .dropzone:hover { border-color: var(--accent); background: rgba(59,130,246,.06); }
-.steps { display: flex; gap: 6px; flex-wrap: wrap; font-size: 12px; margin-bottom: 12px; }
-.steps span { padding: 3px 10px; border-radius: 999px; background: var(--card-2); color: var(--fg-4); }
-.steps span.on { background: rgba(59,130,246,.18); color: var(--accent-2); font-weight: 700; }
+.dropzone svg { color: var(--accent-2); }
+.dropzone .dz-main { font-weight: 700; color: var(--fg); margin: 8px 0 4px; font-size: 15px; }
+
+/* ── 匯入精靈：整塊以強調色上框與底色和下方清單區隔 ── */
+.imp { background: var(--card); border: 1px solid var(--border-strong); border-top: 3px solid var(--accent); border-radius: var(--radius); padding: var(--space-4); }
+.imp-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
+.imp-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 17px; color: var(--fg); }
+.imp-title svg { color: var(--accent-2); }
+.stepper { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: flex; }
+.stepper li { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; font-size: 12px; color: var(--fg-4); text-align: center; }
+.stepper li + li::before { content: ""; position: absolute; top: 14px; right: 50%; width: 100%; height: 2px; background: var(--border-strong); }
+.stepper li.done + li::before, .stepper li.on::before { background: var(--accent); }
+.stepper .dot { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; background: var(--card-2); border: 2px solid var(--border-strong); color: var(--fg-3); }
+.stepper li.on .dot { background: var(--accent); border-color: var(--accent); color: #fff; }
+.stepper li.done .dot { background: rgba(59,130,246,.18); border-color: var(--accent); color: var(--accent-2); }
+.stepper li.on .lbl { color: var(--fg); font-weight: 700; }
+.imp-body { display: grid; gap: var(--space-4); }
+.imp-sec { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3) var(--space-4) var(--space-4); }
+.imp-sec-title { display: flex; align-items: center; gap: 8px; margin: 0 0 var(--space-3); font-size: 14px; color: var(--fg); }
+.imp-sec-title .dim { font-weight: 400; margin-left: 4px; }
+.imp-sec-title .num { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(59,130,246,.18); color: var(--accent-2); font-size: 12px; }
+.form-grid.two { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.imp-hint { margin: var(--space-2) 0 0; }
+.imp-sample { min-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.req { color: #fca5a5; }
+.imp-summary { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 12px; border-radius: 8px; background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.25); font-size: 13px; color: var(--fg-2); }
+.imp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: var(--space-3); }
+.imp-stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; display: grid; gap: 2px; }
+.imp-stat b { font-size: 24px; color: var(--fg); }
+.imp-stat span { font-size: 12px; color: var(--fg-3); }
+.imp-stat.ok { border-color: rgba(34,197,94,.4); } .imp-stat.ok b { color: var(--down); }
+.imp-stat.bad { border-color: rgba(239,68,68,.4); } .imp-stat.bad b { color: #fca5a5; }
+.imp-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.imp-actions.center { justify-content: center; border-top: 0; }
+.imp-done { justify-items: center; text-align: center; padding: var(--space-5) 0; color: var(--fg-2); }
+.imp-done svg { color: var(--down); }
+.imp-done h3 { margin: 0; color: var(--fg); }
+.imp-done p { margin: 0; line-height: 1.8; }
+@media (max-width: 640px) { .stepper .lbl { font-size: 11px; } .imp-actions .btn { flex: 1 1 auto; } }
 .pre { white-space: pre-wrap; font-size: 14px; line-height: 1.85; }
 .span-2 { grid-column: span 2; }
 @media (max-width: 900px) { .span-2 { grid-column: auto; } }

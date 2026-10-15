@@ -1,7 +1,6 @@
 // 券商對帳單 CSV 匯入精靈：上傳 → 欄位對應（可存成國泰／亞東預設）→ 預覽錯誤 → 匯入（重複自動略過）
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { FileUp, Save } from "lucide-react";
-import { Card } from "./ui.jsx";
+import { Check, CheckCircle2, FileUp, Save, X } from "lucide-react";
 import { FIELDS, convertRows, decodeBytes, detectHeader, guessMapping, parseCSV, parseXlsx } from "../lib/csvImport.js";
 import { supabase } from "../lib/supabase.js";
 import { useApp } from "../lib/appState.jsx";
@@ -9,8 +8,13 @@ import { sideLabel } from "../lib/portfolio.js";
 import { fmt, fmtInt } from "../lib/format.js";
 
 const BROKERS = ["國泰證券", "亞東證券", "其他"];
+const STEPS = ["上傳檔案", "欄位對應", "預覽確認", "完成"];
+const REQUIRED = FIELDS.filter((f) => f.required);
+const OPTIONAL = FIELDS.filter((f) => !f.required);
+const QTY = OPTIONAL.filter((f) => f.key === "shares" || f.key === "lots");
+const EXTRA = OPTIONAL.filter((f) => f.key !== "shares" && f.key !== "lots");
 
-export default function CsvImport({ onDone }) {
+export default function CsvImport({ onDone, onClose }) {
   const app = useApp();
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState("");
@@ -81,64 +85,104 @@ export default function CsvImport({ onDone }) {
     setStep(4);
   }
 
+  // 對應到該欄位的第一筆資料，讓使用者一眼確認選對表頭
+  const sample = (key) => {
+    const idx = table && mapping[key] ? table.header.indexOf(mapping[key]) : -1;
+    return idx >= 0 ? table.rows[0]?.[idx] : "";
+  };
+  const fieldSelect = (f) => (
+    <div className="field" key={f.key}>
+      <label htmlFor={`map-${f.key}`}>{f.label}{f.required && <b className="req"> *</b>}</label>
+      <select id={`map-${f.key}`} className="input" value={mapping[f.key] || ""} onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value || undefined }))}>
+        <option value="">（不使用）</option>
+        {table.header.map((h, i) => <option key={`${h}-${i}`} value={h}>{h || `第 ${i + 1} 欄`}</option>)}
+      </select>
+      <span className="dim imp-sample">{sample(f.key) ? `範例：${sample(f.key)}` : " "}</span>
+    </div>
+  );
+
   return (
-    <Card title="匯入券商對帳單 CSV" icon={FileUp}>
-      <div className="steps" aria-label="匯入步驟">
-        {["上傳檔案", "欄位對應", "預覽確認", "完成"].map((s, i) => <span key={s} className={step === i + 1 ? "on" : ""}>{i + 1}. {s}</span>)}
-      </div>
+    <section className="imp" aria-label="匯入券商對帳單">
+      <header className="imp-head">
+        <h2 className="imp-title"><FileUp size={18} aria-hidden="true" />匯入券商對帳單</h2>
+        {onClose && <button type="button" className="btn ghost sm" onClick={onClose} aria-label="關閉匯入"><X size={16} />關閉</button>}
+      </header>
+
+      <ol className="stepper" aria-label="匯入步驟">
+        {STEPS.map((s, i) => {
+          const n = i + 1, state = step === n ? "on" : step > n ? "done" : "";
+          return (
+            <li key={s} className={state} aria-current={step === n ? "step" : undefined}>
+              <span className="dot">{step > n ? <Check size={14} aria-hidden="true" /> : n}</span>
+              <span className="lbl">{s}</span>
+            </li>
+          );
+        })}
+      </ol>
 
       {step === 1 && (
-        <div className="grid" style={{ gap: 12 }}>
-          <div className="form-grid">
-            <div className="field">
-              <label htmlFor="csv-broker">券商</label>
-              <select id="csv-broker" className="input" value={broker} onChange={(e) => { setBroker(e.target.value); setAccount(e.target.value === "其他" ? "" : e.target.value); }}>
-                {BROKERS.map((b) => <option key={b}>{b}</option>)}
-                {presets.filter((p) => !BROKERS.includes(p.name)).map((p) => <option key={p.name}>{p.name}</option>)}
-              </select>
+        <div className="imp-body">
+          <div className="imp-sec">
+            <h3 className="imp-sec-title"><span className="num">1</span>選擇券商與帳戶</h3>
+            <div className="form-grid two">
+              <div className="field">
+                <label htmlFor="csv-broker">券商（決定欄位對應預設）</label>
+                <select id="csv-broker" className="input" value={broker} onChange={(e) => { setBroker(e.target.value); setAccount(e.target.value === "其他" ? "" : e.target.value); }}>
+                  {BROKERS.map((b) => <option key={b}>{b}</option>)}
+                  {presets.filter((p) => !BROKERS.includes(p.name)).map((p) => <option key={p.name}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="csv-account">匯入到帳戶</label>
+                <input id="csv-account" className="input" list="csv-account-list" value={account} onChange={(e) => setAccount(e.target.value)} placeholder="例：國泰證券、國泰（太太）" />
+                <datalist id="csv-account-list">
+                  {[...new Set(app.transactions.map((t) => t.broker).filter(Boolean))].map((a) => <option key={a} value={a} />)}
+                </datalist>
+              </div>
             </div>
-            <div className="field">
-              <label htmlFor="csv-account">匯入到帳戶</label>
-              <input id="csv-account" className="input" list="csv-account-list" value={account} onChange={(e) => setAccount(e.target.value)} placeholder="例：國泰證券、國泰（太太）" />
-              <datalist id="csv-account-list">
-                {[...new Set(app.transactions.map((t) => t.broker).filter(Boolean))].map((a) => <option key={a} value={a} />)}
-              </datalist>
-              <span className="dim">同一家券商有兩個帳戶時，用不同名稱區分</span>
+            <p className="dim imp-hint">同一家券商有兩個帳戶時，用不同帳戶名稱區分。{presets.some((p) => p.name === broker) && ` 已有「${broker}」欄位對應預設，上傳後自動套用。`}</p>
+          </div>
+
+          <div className="imp-sec">
+            <h3 className="imp-sec-title"><span className="num">2</span>上傳對帳單檔案</h3>
+            <div
+              className={`dropzone ${over ? "over" : ""}`} role="button" tabIndex={0}
+              onClick={() => inputRef.current?.click()} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && inputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
+              onDrop={(e) => { e.preventDefault(); setOver(false); readFile(e.dataTransfer.files?.[0]); }}
+            >
+              <FileUp size={32} aria-hidden="true" />
+              <div className="dz-main">拖曳檔案到這裡，或點擊選擇檔案</div>
+              <div className="dim">支援 .xlsx 與 CSV（UTF-8、Big5）・從券商 App／網站匯出「交易明細」或「對帳單」</div>
+              <input ref={inputRef} type="file" accept=".csv,.txt,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={(e) => readFile(e.target.files?.[0])} />
             </div>
           </div>
-          <div
-            className={`dropzone ${over ? "over" : ""}`} role="button" tabIndex={0}
-            onClick={() => inputRef.current?.click()} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && inputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
-            onDrop={(e) => { e.preventDefault(); setOver(false); readFile(e.dataTransfer.files?.[0]); }}
-          >
-            <FileUp size={28} aria-hidden="true" />
-            <div style={{ fontWeight: 700, color: "var(--fg-2)", marginTop: 6 }}>拖曳 CSV／xlsx 到這裡，或點擊選擇檔案</div>
-            <div className="dim">支援 .xlsx 與 CSV（UTF-8、Big5）；從券商 App／網站匯出「交易明細」或「對帳單」</div>
-            <input ref={inputRef} type="file" accept=".csv,.txt,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={(e) => readFile(e.target.files?.[0])} />
-          </div>
-          {presets.some((p) => p.name === broker) && <div className="dim">已有「{broker}」欄位對應預設，上傳後自動套用。</div>}
         </div>
       )}
 
       {step === 2 && table && (
-        <div className="grid" style={{ gap: 12 }}>
-          <div className="dim">帳戶：<b>{account.trim() || broker}</b>・檔案：{fileName}，表頭在第 {table.headerLine + 1} 列，共 {table.rows.length} 筆資料。請確認每個欄位對應到正確的表頭（* 為必填，股數與張數擇一）。</div>
-          <div className="form-grid">
-            {FIELDS.map((f) => (
-              <div className="field" key={f.key}>
-                <label htmlFor={`map-${f.key}`}>{f.label}{f.required ? " *" : ""}</label>
-                <select id={`map-${f.key}`} className="input" value={mapping[f.key] || ""} onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value || undefined }))}>
-                  <option value="">（不使用）</option>
-                  {table.header.map((h, i) => <option key={`${h}-${i}`} value={h}>{h || `第 ${i + 1} 欄`}</option>)}
-                </select>
-              </div>
-            ))}
+        <div className="imp-body">
+          <div className="imp-summary">
+            <span>帳戶：<b>{account.trim() || broker}</b></span>
+            <span>檔案：{fileName}</span>
+            <span>表頭在第 {table.headerLine + 1} 列・共 {table.rows.length} 筆</span>
+          </div>
+          <div className="imp-sec">
+            <h3 className="imp-sec-title">必填欄位<span className="dim">每個都要對應到檔案的表頭</span></h3>
+            <div className="form-grid">{REQUIRED.map(fieldSelect)}</div>
+          </div>
+          <div className="imp-sec">
+            <h3 className="imp-sec-title">數量<span className="dim">成交股數與成交張數擇一即可</span></h3>
+            <div className="form-grid">{QTY.map(fieldSelect)}</div>
+          </div>
+          <div className="imp-sec">
+            <h3 className="imp-sec-title">選填欄位</h3>
+            <div className="form-grid">{EXTRA.map(fieldSelect)}</div>
           </div>
           {(missing.length > 0 || qtyMissing) && (
             <div className="notice warn">尚未對應：{[...missing.map((f) => f.label), ...(qtyMissing ? ["成交股數或張數"] : [])].join("、")}</div>
           )}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div className="imp-actions">
             <button type="button" className="btn" onClick={() => setStep(1)}>重新上傳</button>
             <button type="button" className="btn" onClick={savePreset}><Save size={16} />存成「{broker}」預設</button>
             <button type="button" className="btn primary" disabled={missing.length > 0 || qtyMissing} onClick={() => setStep(3)}>下一步：預覽</button>
@@ -147,13 +191,13 @@ export default function CsvImport({ onDone }) {
       )}
 
       {step === 3 && (
-        <div className="grid" style={{ gap: 12 }}>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <span className="badge blue">可匯入 {okRows.length} 筆</span>
-            {badRows.length > 0 && <span className="badge down" style={{ color: "#fca5a5", background: "rgba(239,68,68,.14)" }}>有問題 {badRows.length} 筆（不會匯入）</span>}
-            {splitRows.length > 0 && <span className="badge blue">股票分割 {splitRows.length} 筆（成本不變、不計損益）</span>}
-            <span className="dim">已存在的交易（同日期、代號、類別、股數、價格、費用）會自動略過</span>
+        <div className="imp-body">
+          <div className="imp-stats">
+            <div className="imp-stat ok"><b>{okRows.length}</b><span>可匯入</span></div>
+            <div className={`imp-stat ${badRows.length ? "bad" : ""}`}><b>{badRows.length}</b><span>有問題（不匯入）</span></div>
+            {splitRows.length > 0 && <div className="imp-stat"><b>{splitRows.length}</b><span>股票分割（成本不變）</span></div>}
           </div>
+          <p className="dim imp-hint">已存在的交易（同日期、代號、類別、股數、價格、費用）會自動略過，不會重複。</p>
           <div className="table-wrap" style={{ maxHeight: 420 }}>
             <table className="data">
               <thead><tr><th className="left">列</th><th className="left">日期</th><th className="left">股票</th><th className="left">類別</th><th>股數</th><th>價格</th><th>手續費</th><th>稅</th><th className="left">狀態</th></tr></thead>
@@ -182,7 +226,7 @@ export default function CsvImport({ onDone }) {
           </div>
           {converted.length > 200 && <div className="dim">僅預覽前 200 筆，匯入會包含全部 {okRows.length} 筆可匯入資料。</div>}
           {badRows.length > 0 && <div className="dim">有問題的列多半是小計、空白列或欄位對應錯誤；可回上一步調整對應。</div>}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div className="imp-actions">
             <button type="button" className="btn" onClick={() => setStep(2)}>上一步</button>
             <button type="button" className="btn primary" disabled={!okRows.length || busy} onClick={doImport}>{busy ? "匯入中…" : `匯入 ${okRows.length} 筆`}</button>
           </div>
@@ -190,15 +234,17 @@ export default function CsvImport({ onDone }) {
       )}
 
       {step === 4 && result && (
-        <div className="grid" style={{ gap: 12 }}>
-          <div className="notice">完成：新增 {result.inserted} 筆，略過重複 {result.skipped} 筆{result.bad ? `，有問題未匯入 ${result.bad} 筆` : ""}。已把欄位對應存成「{broker}」預設。</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="imp-body imp-done">
+          <CheckCircle2 size={40} aria-hidden="true" />
+          <h3>匯入完成</h3>
+          <p>新增 {result.inserted} 筆，略過重複 {result.skipped} 筆{result.bad ? `，有問題未匯入 ${result.bad} 筆` : ""}。<br />欄位對應已存成「{broker}」預設。</p>
+          <div className="imp-actions center">
             <button type="button" className="btn primary" onClick={() => onDone?.()}>查看持股</button>
             <button type="button" className="btn" onClick={() => { setStep(1); setTable(null); setResult(null); }}>再匯入一份</button>
           </div>
         </div>
       )}
       {err && <div className="notice err" style={{ marginTop: 10 }}>{err}<div style={{ marginTop: 6 }}><button type="button" className="btn sm" onClick={() => setErr("")}>知道了</button></div></div>}
-    </Card>
+    </section>
   );
 }
