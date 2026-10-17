@@ -1,3 +1,7 @@
+> ⚠️ 已過時（2026-10-18）：此文件描述的 Fly.io 後端已移除，僅供歷史參考
+>
+> 現況：所有 `/api/*` 路由已隨 Fly.io 後端移除。前端改讀靜態 JSON（`public/data/*`）、Supabase RPC（`market_quote`、`market_intraday`、`ai_explain`、`ai_pick`）與瀏覽器直連 FinMind。請見 [README.md](README.md)。
+
 # API Reference
 
 Base URL: `https://stock-analysis-api-ihun.onrender.com`

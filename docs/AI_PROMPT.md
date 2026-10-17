@@ -1,3 +1,7 @@
+> ⚠️ 已過時（2026-10-18）：此文件描述的 Fly.io 後端已移除，僅供歷史參考
+>
+> 現況：`/api/ai/context/{stock}` 與 `backend/rule_engine.py` 已移除。AI 解說現由 Supabase RPC `ai_explain` / `ai_pick` 呼叫 Groq（`supabase/migrations/005_ai_picker.sql`，金鑰存於 Supabase Vault）。下方的 prompt 範本僅供歷史參考。
+
 # AI Stock Analysis Prompt
 
 ## Flow

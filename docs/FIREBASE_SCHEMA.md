@@ -1,3 +1,7 @@
+> ⚠️ 部分過時（2026-10-18）：Fly.io 後端（`backend/main.py` 與 `/api/*` 路由）已移除，下列內容僅部分仍適用，使用前請對照程式碼。
+>
+> 資料庫已是 Supabase Postgres（`DATABASE_URL`，psycopg2）；`backend/firebase.py`、`firebase_cache.py` 為歷史命名，實際不是 Firebase/Firestore。`stock_daily`、`chip_daily` 定義於 `backend/schema.sql`，其餘資料表見 `supabase/migrations/`。下列 Firestore collection 結構與 `/api/firebase/*` 維護路由僅供歷史參考。
+
 # Firebase Schema
 
 This document describes Firestore collections used by the stock analysis system.

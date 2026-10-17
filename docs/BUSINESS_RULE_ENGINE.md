@@ -1,3 +1,7 @@
+> ⚠️ 部分過時（2026-10-18）：Fly.io 後端（`backend/main.py` 與 `/api/*` 路由）已移除，下列內容僅部分仍適用，使用前請對照程式碼。
+>
+> 仍存在：`backend/analysis_engine.py`、`perspective_engine.py`、`signal_engine.py`、`payload_builder.py`（由 `export_static_json.py` 產生靜態 JSON 時使用）。已移除：`backend/rule_engine.py`（`build_ai_rule_context`）、`/api/analysis`、`/api/ai/context`、`/api/backtest` 端點。`chip_routes.py` 現僅作為 helper 模組，其 `_install(app)` 路由安裝已無 FastAPI app 可掛。
+
 # Business Rule Engine
 
 This document describes how the backend converts stock rows and chip rows into scores, perspective cards, signals, trade plans, and backtests.

@@ -1,3 +1,25 @@
+> ⚠️ 部分過時（2026-10-18）：Fly.io 後端（`backend/main.py` 與 `/api/*` 路由）已移除，下列內容僅部分仍適用，使用前請對照程式碼。
+>
+> 以下「Current state」為現況；其後原內容（FastAPI／Firestore／路由）已過時。
+
+## Current state (2026-10-18)
+
+The FastAPI service (`backend/main.py`, `dashboard_service.py`, `rule_engine.py`, `queue_api.py`, `auto_routes.py`, `maintenance_routes.py`, `sitecustomize.py`, `batch_api.py`) and its Fly.io deployment were removed. The backend is now a set of Python scripts run by GitHub Actions (no HTTP server):
+
+| File | Role |
+|---|---|
+| `daily_job.py` | Daily update entry (run by `update-data.yml`) |
+| `track_new.py` | Fetch data for newly tracked stocks (`track_requests`) |
+| `export_static_json.py` | Export `public/data/*` (use `--source db`; `--source api` targets the retired fly.dev API and is dead) |
+| `fetch_financials_yearly.py` | Yearly financials (`update-financials.yml`) |
+| `probe_tpex.py` | TPEX probe (`probe.yml`) |
+| `payload_builder.py`, `analysis_engine.py`, `signal_engine.py`, `perspective_engine.py` | Build per-stock analysis payloads for the static JSON |
+| `jobs.py`, `stock_list.py`, `chip_routes.py` | Fetch/universe/chip helpers (library use only) |
+| `firebase.py`, `firebase_cache.py` | Legacy names; psycopg2 access to Supabase Postgres |
+| `local_*.py` | Manual local backfill scripts |
+
+---
+
 # Backend Architecture
 
 The backend is a FastAPI service that reads/writes Firestore, fetches Taiwan market data, runs analysis rules, and exposes dashboard APIs.

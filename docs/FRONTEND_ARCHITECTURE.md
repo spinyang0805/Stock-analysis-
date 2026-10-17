@@ -1,3 +1,13 @@
+> ⚠️ 部分過時（2026-10-18）：Fly.io 後端（`backend/main.py` 與 `/api/*` 路由）已移除，下列內容僅部分仍適用，使用前請對照程式碼。
+>
+> 以下「Current state」為現況；其後原內容（BatchPage、`/api/*` 呼叫、舊 tab 配置）已過時。
+
+## Current state (2026-10-18)
+
+The app is a Vite/React SPA with a hash router (`src/lib/router.js`). Shell and nav are in `src/App.jsx`; pages are in `src/pages/` (`StockPage`, `PortfolioPage`, `PnlPage`, `TransactionsPage`, `LegacyPages` for AI and admin). Routes: `/stock/:code`, `/portfolio`, `/pnl`, `/transactions`, `/ai`, `/admin` (admin role only). `BatchPage.jsx`, `DataTablesPage.jsx`, `SystemControlPanel.jsx` and the admin 資料維護 page were removed. Data sources: static `public/data/*`, Supabase (RPC and tables), FinMind from the browser. Deployed as a static site (Render static + GitHub Pages).
+
+---
+
 # Frontend Architecture
 
 The frontend is a React + Vite app for stock dashboard analysis, charting, and batch maintenance controls.

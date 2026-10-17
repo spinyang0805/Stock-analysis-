@@ -1,5 +1,33 @@
 # Deploy Guide
 
+## Current state (2026-10-18)
+
+| Part | How it deploys |
+|---|---|
+| Frontend | Static site. `render.yaml` defines only `stock-analysis-frontend` (`npm install && npm run build`, publish `dist`). Also published to GitHub Pages by `.github/workflows/deploy-pages.yml`. |
+| Backend | None. The Fly.io API and Render API service were retired. |
+| Database | Supabase Postgres. Schema: `backend/schema.sql` (`stock_daily`, `chip_daily`) plus `supabase/migrations/001-005`. Applied by `.github/workflows/db-migrate.yml`. |
+| Frontend env | `VITE_SUPABASE_ANON_KEY` (without it, quotes/portfolio/login are disabled; K-lines still work). |
+
+Scheduled workflows:
+
+| Workflow | Schedule | Does |
+|---|---|---|
+| `update-data.yml` | Weekdays 15:40 Taipei (cron `40 7 * * 1-5` UTC) | `backend/daily_job.py` -> SQL `ai_screen_refresh()` -> `track_new.py` -> `export_static_json.py --source db` -> commit `public/data` |
+| `track-stocks.yml` | Every 20 min | Track requested stocks, export their JSON |
+| `update-financials.yml` | Sunday | `fetch_financials_yearly.py` |
+| `probe.yml` | See workflow | `probe_tpex.py` |
+| `db-migrate.yml` | See workflow | Apply migrations |
+| `deploy-pages.yml` | After data update (`workflow_run`) | Test, build, publish Pages |
+
+Intraday quotes are captured by pg_cron inside Supabase (`supabase/migrations/004_intraday_capture.sql`). Removed workflows: `deploy-backend.yml`, `daily-data-update.yml`.
+
+---
+
+> ⚠️ 部分過時（2026-10-18）：Fly.io 後端（`backend/main.py` 與 `/api/*` 路由）已移除，下列內容僅部分仍適用，使用前請對照程式碼。
+>
+> 以下為舊版（Render API + Fly.io + `daily-data-update.yml`）部署說明，已過時。
+
 This project is configured for Render.
 
 ## Services

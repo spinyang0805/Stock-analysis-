@@ -1,3 +1,7 @@
+> ⚠️ 已過時（2026-10-18）：此文件描述的 Fly.io 後端已移除，僅供歷史參考
+>
+> 現況：此設計規格撰寫於 Render + FastAPI 時期。`src/BatchPage.jsx`、`SystemControlPanel.jsx`、`backend/main.py` 及 `/api/*` 皆已移除；前端為 hash 路由 SPA（個股／我的持股／損益分析／交易紀錄／AI 選股／帳號管理）。請見 [README.md](README.md)。
+
 # 台股分析網站規劃設計書
 
 > 給程式設計師、維運人員與 AI Agent 使用。  
