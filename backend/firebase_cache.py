@@ -8,16 +8,6 @@ from firebase import db, get_conn, return_conn
 
 TW_TZ = pytz.timezone("Asia/Taipei")
 
-try:
-    import auto_routes  # noqa: F401
-except Exception:
-    pass
-
-try:
-    import maintenance_routes  # noqa: F401
-except Exception:
-    pass
-
 
 def now_tw():
     return datetime.now(TW_TZ)

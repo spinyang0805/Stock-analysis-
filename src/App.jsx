@@ -1,8 +1,8 @@
 // App 殼層：導覽（桌機側欄／手機底部列）+ hash 路由
-// 個股頁、持股、交易、AI、批次工具、帳號管理各自在 src/pages/
+// 個股頁、持股、交易、AI、帳號管理各自在 src/pages/
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import {
-  BarChart3, Bot, ChevronsLeft, ChevronsRight, LineChart, ListOrdered, LogIn, LogOut, Users, Wallet, Wrench, UserCircle2,
+  BarChart3, Bot, ChevronsLeft, ChevronsRight, LineChart, ListOrdered, LogIn, LogOut, Users, Wallet, UserCircle2,
 } from "lucide-react";
 import { AppStateProvider, useApp } from "./lib/appState.jsx";
 import { navigate, useRoute } from "./lib/router.js";
@@ -14,7 +14,6 @@ import TransactionsPage from "./pages/TransactionsPage.jsx";
 
 const PnlPage = lazy(() => import("./pages/PnlPage.jsx"));
 
-const BatchPage = lazy(() => import("./BatchPage.jsx"));
 const LegacyAI = lazy(() => import("./pages/LegacyPages.jsx").then((m) => ({ default: m.AIChatPage })));
 const LegacyAdmin = lazy(() => import("./pages/LegacyPages.jsx").then((m) => ({ default: m.AdminPage })));
 
@@ -28,7 +27,6 @@ const NAV = [
   { id: "pnl", label: "損益分析", short: "損益", icon: BarChart3, href: () => "/pnl" },
   { id: "transactions", label: "交易紀錄", short: "交易", icon: ListOrdered, href: () => "/transactions" },
   { id: "ai", label: "AI 選股", short: "AI", icon: Bot, href: () => "/ai" },
-  { id: "batch", label: "資料維護", icon: Wrench, href: () => "/batch", role: "admin" },
   { id: "admin", label: "帳號管理", icon: Users, href: () => "/admin", role: "admin" },
 ];
 
@@ -90,7 +88,6 @@ function Shell() {
           {page === "transactions" && <TransactionsPage />}
           {page === "pnl" && <PnlPage />}
           {page === "ai" && <LegacyAI />}
-          {page === "batch" && app.role === "admin" && <BatchPage />}
           {page === "admin" && app.role === "admin" && <div className="page"><LegacyAdmin /></div>}
         </Suspense>
         </ErrorBoundary>
