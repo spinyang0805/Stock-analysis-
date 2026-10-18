@@ -36,6 +36,7 @@ if not DATABASE_URL:
 
 import psycopg2
 from psycopg2.extras import execute_values
+from instrument_filter import is_warrant
 
 # ── API endpoints ──────────────────────────────────────────────
 HEADERS = {
@@ -249,6 +250,7 @@ def batch_write(conn, date_str: str, t86: dict, margin: dict, tpex_t: dict, tpex
     # This excludes warrants (6-digit not starting "00") and CBBCs.
     if _ALLOWED_CODES:
         all_codes = {c for c in all_codes if c in _ALLOWED_CODES or c.startswith("00")}
+    all_codes = {c for c in all_codes if not is_warrant(c)}
 
     rows = []
     for code in all_codes:

@@ -5,6 +5,7 @@ import pytz
 from psycopg2.extras import execute_values
 
 from firebase import db, get_conn, return_conn
+from instrument_filter import is_warrant
 
 TW_TZ = pytz.timezone("Asia/Taipei")
 
@@ -83,6 +84,8 @@ def is_valid_stock_payload(payload: Dict[str, Any]) -> bool:
 def save_stock_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
     if db is None:
         return False
+    if is_warrant(stock_id, payload.get("product_type")):
+        return False
     if not is_valid_stock_payload(payload):
         return False
     sql = """
@@ -122,7 +125,7 @@ def save_stock_daily_bulk(rows: List[tuple]) -> int:
         return 0
     values = []
     for stock_id, date, payload in rows:
-        if not is_valid_stock_payload(payload):
+        if is_warrant(stock_id, payload.get("product_type")) or not is_valid_stock_payload(payload):
             continue
         close = _float(payload.get("close"))
         open_p = _float(payload.get("open")) or close
@@ -181,7 +184,7 @@ def _get_chip_allowed() -> set:
 
 
 def save_chip_daily(stock_id: str, date: str, payload: Dict[str, Any]) -> bool:
-    if db is None:
+    if db is None or is_warrant(stock_id):
         return False
     allowed = _get_chip_allowed()
     # Skip warrants / leveraged products not in product_universe
@@ -223,6 +226,8 @@ def save_chip_daily_bulk(rows: List[tuple]) -> int:
     allowed = _get_chip_allowed()
     values = []
     for stock_id, date, payload in rows:
+        if is_warrant(stock_id):
+            continue
         if allowed and stock_id not in allowed and not stock_id.startswith("00"):
             continue
         values.append((
