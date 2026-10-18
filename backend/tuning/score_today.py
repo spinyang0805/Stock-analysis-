@@ -21,8 +21,8 @@ if __package__ in (None, ""):
     __package__ = "tuning"
 
 from tuning import indicators as ind  # noqa: E402
-from tuning.data import OUT_DIR, log  # noqa: E402
-from tuning.run_tuning import prepare  # noqa: E402
+from tuning.data import OUT_DIR, log  # noqa: E402,F401
+from tuning.run_tuning import add_common_args, json_safe, prepare  # noqa: E402
 
 DEFAULT_SELL = ("s_atr_25", 10)
 
@@ -47,17 +47,13 @@ def parse_args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--source", choices=["parquet", "db"], required=True)
     ap.add_argument("--params", default=os.path.join(OUT_DIR, "stock_params.json"))
-    ap.add_argument("--out-dir", default=OUT_DIR)
     ap.add_argument("--as-of", default=None, help="YYYYMMDD: score as of this date (ignore later rows)")
     ap.add_argument("--years", type=float, default=1.8, help="history needed for indicators/percentiles")
     ap.add_argument("--top", type=int, default=10)
     ap.add_argument("--include-unreliable", action="store_true",
                     help="also list stocks labelled 'no reliable signal' (flagged; for diagnostics only)")
-    ap.add_argument("--holdings", default=None)
-    ap.add_argument("--no-holdings", action="store_true")
-    ap.add_argument("--finmind-budget", type=int, default=30)
-    ap.add_argument("--finmind-interval", type=float, default=2.0)
-    ap.add_argument("--finmind-offline", action="store_true")
+    add_common_args(ap)
+    ap.set_defaults(finmind_budget=30)
     return ap.parse_args(argv)
 
 
@@ -88,7 +84,7 @@ def quality_flags(p, g, last_date):
         fl.append("近 20 日含 yfinance 補值")
     if dq.get("unexplained_gaps") or dq.get("markers_unexplained"):
         fl.append("還原權值有未解釋缺口")
-    if dq.get("finmind") == "unavailable":
+    if dq.get("adj_source") == "unavailable":
         fl.append("除權息資料未取得")
     if p.get("short_history"):
         fl.append("歷史過短")
@@ -99,6 +95,10 @@ def run(args):
     with open(args.params, encoding="utf-8") as f:
         pj = json.load(f)
     params = {p["stock_id"]: p for p in pj["stocks"]}
+    p_asof = max((p.get("as_of") or "" for p in params.values()), default="")
+    if args.as_of and args.as_of < p_asof:
+        raise SystemExit(f"--as-of {args.as_of} is earlier than the params as_of {p_asof}: the params were tuned on "
+                         "later data, so this would not be a valid backtest (run run_tuning --end-date first).")
     prep = prepare(args, 0, args.years, codes=list(params), end_date=args.as_of)
     adjusted, holdings = prep["adjusted"], set(prep["holdings"])
     last_date = max(g["date"].iloc[-1] for g in adjusted.values())
@@ -118,19 +118,22 @@ def run(args):
         if p and fresh and (p["reliable"] or args.include_unreliable):
             fired = [s for s in p["buy_signals"] if s["signal"] in buys and bool(buys[s["signal"]].iloc[-1])]
             if fired:
-                risk = abs(p.get("oos_mae_med") or 0.0) or 0.03
-                exp_ret = p.get("oos_mean")
-                exp_ret = exp_ret if exp_ret is not None and np.isfinite(exp_ret) else 0.0
-                score = exp_ret / max(risk, 0.01) * (p["confidence"] if p["reliable"] else 0.0)
-                atr_stop = close - p.get("stop_atr_mult", 2.5) * float(last["atr"])
-                mae_stop = close * (1 + p["mae_p20"]) if p.get("mae_p20") is not None else None
+                mae = fin(p.get("oos_mae_med"))
+                risk = abs(mae) if mae else 0.03
+                exp_ret = fin(p.get("oos_mean")) or 0.0
+                score = exp_ret / max(risk, 0.01) * ((fin(p.get("confidence")) or 0.0) if p["reliable"] else 0.0)
+                atr = fin(float(last["atr"]))
+                stop_pct = -p.get("stop_atr_mult", 2.5) * atr / close if atr else None   # from the actual fill
+                tp_pct = fin(p.get("tp_pct"))
                 buys_out.append({
                     "stock_id": sid, "name": p["name"], "reliable": p["reliable"], "level": p["level"],
                     "signals": [{"signal": s["signal"], "desc": s["desc"], "h": s["h"]} for s in fired],
-                    "trigger_price": rnd(close), "entry": "次日開盤（漲停開出不追）",
-                    "stop_loss": rnd(atr_stop, "down"), "stop_mae_p20": rnd(mae_stop, "down"),
-                    "take_profit": rnd(close * (1 + p["tp_pct"]), "up") if p.get("tp_pct") else None,
-                    "hold_days": fired[0]["h"], "oos_n": p["oos_n"], "oos_win": p["oos_win"],
+                    "ref_close": rnd(close),
+                    "entry": "次日開盤市價（開盤漲幅 >= 9.5% 不追）；停損停利以實際成交價乘上百分比",
+                    "stop_pct": stop_pct, "take_profit_pct": tp_pct, "mae_p20_pct": fin(p.get("mae_p20")),
+                    "stop_loss_if_fill_at_ref": rnd(close * (1 + stop_pct), "down") if stop_pct else None,
+                    "take_profit_if_fill_at_ref": rnd(close * (1 + tp_pct), "up") if tp_pct else None,
+                    "hold_days": fired[0]["h"], "hold_days_unit": "該股交易日（列數）", "oos_n": p["oos_n"], "oos_win": p["oos_win"],
                     "oos_mean": p["oos_mean"], "oos_xnet": p.get("oos_xnet"), "oos_mae_med": p.get("oos_mae_med"),
                     "confidence": p["confidence"], "score": score, "flags": flags,
                     "holding": sid in holdings,
@@ -157,7 +160,7 @@ def run(args):
                 "trailing_stop": levels[sid]["trailing_stop"], "ma20_break": levels[sid]["ma20_break"],
                 "take_profit_pct": tp, "flags": flags,
             })
-    buys_out.sort(key=lambda r: (not r["reliable"], -r["score"], -(r["oos_mean"] or 0)))
+    buys_out.sort(key=lambda r: (not r["reliable"], -(fin(r["score"]) or 0.0), -(fin(r["oos_mean"]) or 0.0)))
     out = {"as_of": last_date, "generated_at": datetime.now().isoformat(timespec="seconds"),
            "params_generated_at": pj.get("generated_at"), "include_unreliable": args.include_unreliable,
            "n_scored": len(adjusted), "n_reliable_params": sum(1 for p in params.values() if p["reliable"]),
@@ -165,12 +168,21 @@ def run(args):
     os.makedirs(args.out_dir, exist_ok=True)
     jp = os.path.join(args.out_dir, f"recommendations_{last_date}.json")
     with open(jp, "w", encoding="utf-8") as f:
-        json.dump(out, f, ensure_ascii=False, indent=1, default=lambda o: float(o) if isinstance(o, np.floating) else str(o))
+        json.dump(json_safe(out), f, ensure_ascii=False, indent=1, allow_nan=False)
     md = render_md(out, args.top)
     with open(os.path.join(args.out_dir, f"recommendations_{last_date}.md"), "w", encoding="utf-8") as f:
         f.write(md)
     log(f"[score] {len(buys_out)} buy candidates, {sum(s['alert'] for s in sells_out)}/{len(sells_out)} holding alerts → {jp}")
     return out
+
+
+def fin(x):
+    """float(x) if finite else None (NaN / inf / None / non-numeric → None)."""
+    try:
+        x = float(x)
+    except (TypeError, ValueError):
+        return None
+    return x if np.isfinite(x) else None
 
 
 def _p(x, d=1):
@@ -189,13 +201,16 @@ def render_md(out, top):
     if not out["buy"]:
         L.append("今日無觸發。")
     else:
-        L.append("| # | 代號 | 名稱 | 訊號 | 觸發價 | 停損 | 停利 | 持有日 | OOS 勝率 | OOS n | OOS 平均淨 | 信心 | 註記 |")
+        L.append("進場＝次日開盤；停損／停利為相對實際成交價的百分比，括號內為以參考收盤成交時的價位。")
+        L.append("")
+        L.append("| # | 代號 | 名稱 | 訊號 | 參考收盤 | 停損 | 停利 | 持有日 | OOS 勝率 | OOS n | OOS 平均淨 | 信心 | 註記 |")
         L.append("|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|")
         for i, b in enumerate(out["buy"][:top], 1):
             flags = list(b["flags"]) + ([] if b["reliable"] else ["未通過驗證"])
             L.append(f"| {i} | {b['stock_id']} | {b['name']} | {'、'.join(s['desc'] for s in b['signals'])} | "
-                     f"{b['trigger_price']} | {b['stop_loss'] or '–'} | {b['take_profit'] or '–'} | {b['hold_days']} | "
-                     f"{_p(b['oos_win'], 0)} | {b['oos_n']} | {_p(b['oos_mean'])} | {b['confidence']:.2f} | "
+                     f"{b['ref_close']} | {_p(b['stop_pct'])} ({b['stop_loss_if_fill_at_ref'] or '–'}) | "
+                     f"{_p(b['take_profit_pct'])} ({b['take_profit_if_fill_at_ref'] or '–'}) | {b['hold_days']} | "
+                     f"{_p(b['oos_win'], 0)} | {b['oos_n']} | {_p(b['oos_mean'])} | {fin(b['confidence']) or 0:.2f} | "
                      f"{'；'.join(flags) or ''} |")
     L.append("")
     L.append("## 持股出場警示")

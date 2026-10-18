@@ -148,7 +148,8 @@ def select(train, groups, cfg, side="buy"):
     col = "xpd" if side == "buy" else "apd"
     tr = train[train["side"] == side].copy()
     if tr.empty:
-        return {"stock": {}, "group": {}, "uniform": [], "cand": pd.DataFrame()}
+        return {"stock": {}, "group": {}, "uniform": [], "group_stats": pd.DataFrame(), "uniform_stats": pd.DataFrame(),
+                "cand": pd.DataFrame(columns=["stock_id", "signal", "h", "n", "mean", "t", "score", "p", "fdr_pass"])}
     tr["group"] = tr["stock_id"].map(groups)
     st = agg_stats(tr, ["stock_id", "signal", "h"], col).reset_index()
     gs = agg_stats(tr, ["group", "signal", "h"], col).reset_index()
@@ -159,6 +160,11 @@ def select(train, groups, cfg, side="buy"):
     w = st["n"] / (st["n"] + cfg.shrink_k)
     st["score"] = w * st["mean"] + (1 - w) * st["g_mean"].fillna(0)
     st["p"] = [pvalue(t) for t in st["t"]]
+    # in-sample BH per stock, only over candidates with n >= min_train_events (informational flag)
+    st["fdr_pass"] = False
+    big = st[st["n"] >= cfg.min_train_events]
+    for _, d in big.groupby("stock_id"):
+        st.loc[d.index, "fdr_pass"] = bh_reject(d["p"].to_numpy(), cfg.fdr_q) | (d["t"].abs() > cfg.t_alt).to_numpy()
 
     def top3(df, score_col, min_n):
         df = df[(df["n"] >= min_n) & (df[score_col] > 0)].sort_values(score_col, ascending=False)
@@ -173,20 +179,33 @@ def select(train, groups, cfg, side="buy"):
             "group_stats": gs, "uniform_stats": us}
 
 
+def non_overlap(d):
+    """Greedy one-position-at-a-time filter: a new trade's signal day must be >= the previous exit day
+    (positions p / xp on the global calendar). d sorted by p."""
+    keep, last = [], -1
+    for i, p, xp in zip(d.index, d["p"].to_numpy(), d["xp"].to_numpy()):
+        if p >= last:
+            keep.append(i)
+            last = xp
+    return d.loc[keep]
+
+
 def strategy_trades(test, choices_by_stock, side="buy"):
-    """Simulated trades: on each stock-day take the highest-ranked chosen signal that fired."""
+    """Simulated trades per stock: on each day take the highest-ranked chosen signal that fired, then keep
+    only non-overlapping trades (never two open positions in the same stock) → per-stock n is effective n."""
     te = test[test["side"] == side]
+    by = dict(tuple(te.groupby("stock_id"))) if len(te) else {}
     rows = []
     for sid, chosen in choices_by_stock.items():
-        if not chosen:
+        if not chosen or sid not in by:
             continue
         rank = {(s, h): i for i, (s, h) in enumerate(chosen)}
-        d = te[te["stock_id"] == sid]
-        if d.empty:
-            continue
+        d = by[sid]
         key = list(zip(d["signal"], d["h"]))
         r = np.array([rank.get(k, -1) for k in key])
         d = d[r >= 0].assign(_r=r[r >= 0]).sort_values(["date", "_r"]).drop_duplicates("date")
+        if "p" in d:
+            d = non_overlap(d.sort_values("p"))
         rows.append(d)
     return pd.concat(rows, ignore_index=True) if rows else te.iloc[:0]
 
@@ -196,14 +215,40 @@ def _t(x):
     return float(x.mean() / (sd / math.sqrt(len(x)))) if len(x) > 1 and sd > 0 else 0.0
 
 
-def summarize(tr, col="net"):
-    """OOS trade summary. mean/median/win/t on net return; xnet/xt on market-relative net return."""
+CLUSTER_DAYS = 20  # pooled stats: trades whose signal days fall in the same 20-session block share a cluster
+
+
+def t_cluster(x, cl):
+    """Cluster-robust (CR0) t-stat of the mean; returns (t, number of clusters)."""
+    x = np.asarray(x, float)
+    cl = np.asarray(cl)
+    n = len(x)
+    if n < 2:
+        return 0.0, int(len(set(cl)))
+    e = pd.Series(x - x.mean()).groupby(cl).sum().to_numpy()
+    g = len(e)
+    if g < 2:
+        return 0.0, g
+    se = math.sqrt((e ** 2).sum() * g / (g - 1)) / n
+    return (float(x.mean() / se) if se > 0 else 0.0), g
+
+
+def summarize(tr, col="net", pooled=False):
+    """OOS trade summary. mean/median/win/t on net return; xnet/xt on market-relative net return.
+    Per stock (pooled=False) trades are non-overlapping → plain t, n_eff = n.
+    Pooled across stocks (pooled=True) → t clustered by 20-session signal-date blocks, n_eff = #clusters."""
     if tr.empty:
-        return {"n": 0, "mean": np.nan, "median": np.nan, "win": np.nan, "t": 0.0, "excess": np.nan,
+        return {"n": 0, "n_eff": 0, "mean": np.nan, "median": np.nan, "win": np.nan, "t": 0.0, "excess": np.nan,
                 "xnet": np.nan, "xt": 0.0, "mae_med": np.nan, "mfe_med": np.nan}
     x = tr[col].astype(float)
     xn = tr["xnet"].astype(float) if "xnet" in tr else x * np.nan
-    return {"n": int(len(x)), "mean": float(x.mean()), "median": float(x.median()), "win": float((x > 0).mean()),
-            "t": _t(x), "excess": float(tr["excess"].mean()) if "excess" in tr else np.nan,
-            "xnet": float(xn.mean()), "xt": _t(xn),
+    if pooled and "p" in tr:
+        cl = (tr["p"].to_numpy() // CLUSTER_DAYS)
+        t, n_eff = t_cluster(x, cl)
+        xt, _ = t_cluster(xn, cl)
+    else:
+        t, xt, n_eff = _t(x), _t(xn), int(len(x))
+    return {"n": int(len(x)), "n_eff": int(n_eff), "mean": float(x.mean()), "median": float(x.median()),
+            "win": float((x > 0).mean()), "t": t, "excess": float(tr["excess"].mean()) if "excess" in tr else np.nan,
+            "xnet": float(xn.mean()), "xt": xt,
             "mae_med": float(tr["mae"].median()), "mfe_med": float(tr["mfe"].median())}

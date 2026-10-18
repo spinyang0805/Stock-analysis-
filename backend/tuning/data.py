@@ -139,12 +139,15 @@ def load_chips(source, start_date, codes):
 
 
 def load_holdings():
-    """Codes with net shares > 0 in Supabase `transactions` (buy + stock_dividend - sell). Read-only."""
+    """Codes with net shares > 0 in Supabase `transactions`. Read-only.
+    side enum (CHECK constraint): buy | sell | cash_dividend | stock_dividend.
+    Whitelist: buy, stock_dividend → +shares; sell → -shares; anything else (cash_dividend) ignored."""
     conn = connect_readonly()
     try:
         df = _query_df(conn, """
             SELECT stock_id,
-                   SUM(CASE WHEN side = 'sell' THEN -shares ELSE shares END) AS net
+                   SUM(CASE WHEN side IN ('buy', 'stock_dividend') THEN shares
+                            WHEN side = 'sell' THEN -shares ELSE 0 END) AS net
             FROM transactions GROUP BY stock_id""")
     finally:
         conn.rollback()
@@ -285,6 +288,30 @@ def select_universe(clean, size, holdings, lookback=60):
     have = set(clean["stock_id"].unique())
     extra = [h for h in holdings if h in have and h not in top]
     return top + extra, {c: i + 1 for i, c in enumerate(top)}
+
+
+def pit_membership(clean, cal, size, lookback=60, every=21):
+    """Point-in-time universe. Every `every` trading days (rebalance at calendar position r) take the top
+    `size` 4-digit non-ETF stocks by average turnover over the `lookback` sessions BEFORE r (positions
+    r-lookback..r-1, so only data known at the close of r-1). Membership holds until the next rebalance.
+    Missing days count as zero turnover (a stock not yet listed cannot rank).
+    Returns (long DataFrame[date, stock_id] of in-universe days, list of (rebalance date, members),
+             current members ranked with data up to the last date)."""
+    rec = clean[clean["stock_id"].map(lambda c: bool(FOUR_DIGIT.match(c)) and not is_etf(c))]
+    tv = rec["turnover"].where(rec["turnover"] > 0, rec["close"] * rec["volume"])
+    piv = (rec.assign(tv=tv).pivot_table(index="date", columns="stock_id", values="tv", aggfunc="last")
+           .reindex(cal).fillna(0.0))
+    roll = piv.rolling(lookback, min_periods=lookback).mean()
+    rows, schedule = [], []
+    for r in range(lookback, len(cal), every):
+        members = list(roll.iloc[r - 1].sort_values(ascending=False).index[:size])
+        schedule.append((cal[r], members))
+        block = cal[r:r + every]
+        rows.append(pd.DataFrame({"date": np.repeat(block, len(members)),
+                                  "stock_id": np.tile(members, len(block))}))
+    inu = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=["date", "stock_id"])
+    current = list(roll.iloc[-1].sort_values(ascending=False).index[:size]) if len(roll) else []
+    return inu, schedule, current
 
 
 def stock_meta(clean):

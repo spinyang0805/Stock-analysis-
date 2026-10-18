@@ -20,6 +20,7 @@ flagged in the coverage table, never patched.
 """
 import json
 import os
+import re
 import time
 
 import numpy as np
@@ -40,15 +41,63 @@ DATASETS = {  # dataset → (date field, before field, after field)
 }
 
 
-class FinMindFetcher:
+def read_cache(path):
+    """Cached JSON or None (missing / corrupt → None, caller re-fetches)."""
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            obj = json.load(f)
+        return obj if isinstance(obj, dict) and isinstance(obj.get("data"), list) else None
+    except (OSError, ValueError):
+        log(f"[adjust] corrupt cache ignored: {os.path.basename(path)}")
+        return None
+
+
+def write_cache(path, data):
+    """Atomic write: temp file in the same directory + os.replace."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"_fetched_at": time.time(), "data": data}, f, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+class _Throttle:
+    """Shared request policy: interval, budget, stop on quota error or after N consecutive network errors."""
+
+    def __init__(self, budget, interval, offline, max_errors=3):
+        self.budget, self.interval, self.offline, self.max_errors = budget, interval, offline, max_errors
+        self.blocked, self.fetched, self.errors, self._last = False, 0, 0, 0.0
+
+    def can_fetch(self):
+        return not (self.offline or self.blocked or self.fetched >= self.budget)
+
+    def wait(self):
+        w = self.interval - (time.time() - self._last)
+        if w > 0:
+            time.sleep(w)
+        self._last = time.time()
+
+    def network_error(self, what, e):
+        self.errors += 1
+        log(f"[adjust] {what} error {type(e).__name__} ({self.errors} consecutive)")
+        if self.errors >= self.max_errors:
+            self.blocked = True
+            log("[adjust] too many consecutive network errors → no more fetches this run")
+
+    def ok(self):
+        self.errors = 0
+        self.fetched += 1
+
+
+class FinMindFetcher(_Throttle):
     def __init__(self, budget=300, interval=2.0, ttl_days=7, offline=False):
-        self.budget, self.interval, self.ttl = budget, interval, ttl_days * 86400
-        self.offline, self.blocked, self.fetched, self._last = offline, False, 0, 0.0
+        super().__init__(budget, interval, offline)
+        self.ttl = ttl_days * 86400
 
     def _path(self, dataset, code):
-        d = os.path.join(FINMIND_CACHE, dataset)
-        os.makedirs(d, exist_ok=True)
-        return os.path.join(d, f"{code or '_all'}.json")
+        return os.path.join(FINMIND_CACHE, dataset, f"{code or '_all'}.json")
 
     def events(self, dataset, code=None, start_date="2010-01-01"):
         """(events DataFrame[stock_id, date, factor], status: cached|fetched|unavailable)."""
@@ -68,43 +117,116 @@ class FinMindFetcher:
 
     def _rows(self, dataset, code, start_date):
         p = self._path(dataset, code)
-        cached = None
-        if os.path.exists(p):
-            with open(p, encoding="utf-8") as f:
-                cached = json.load(f)
-            if time.time() - cached.get("_fetched_at", 0) < self.ttl or not self._can_fetch():
-                return cached.get("data", []), "cached"
-        if not self._can_fetch():
-            return [], "unavailable"
-        wait = self.interval - (time.time() - self._last)
-        if wait > 0:
-            time.sleep(wait)
-        self._last = time.time()
+        cached = read_cache(p)
+        if cached is not None and (time.time() - cached.get("_fetched_at", 0) < self.ttl or not self.can_fetch()):
+            return cached["data"], "cached"
+        fallback = (cached["data"], "cached") if cached is not None else ([], "unavailable")
+        if not self.can_fetch():
+            return fallback
+        self.wait()
         params = {"dataset": dataset, "start_date": start_date}
         if code:
             params["data_id"] = code
         headers = {}
         if os.environ.get("FINMIND_TOKEN"):
             headers["Authorization"] = "Bearer " + os.environ["FINMIND_TOKEN"]
-        fallback = (cached.get("data", []), "cached") if cached else ([], "unavailable")
         try:
             j = requests.get(FINMIND_URL, params=params, headers=headers, timeout=30).json()
         except Exception as e:
-            log(f"[adjust] FinMind {dataset} {code} error {type(e).__name__}")
+            self.network_error(f"FinMind {dataset} {code}", e)
             return fallback
         if j.get("status") != 200:
             self.blocked = True
             log(f"[adjust] FinMind stopped after {self.fetched} fetches (status={j.get('status')})")
             return fallback
-        self.fetched += 1
+        self.ok()
         dk, bk, ak = DATASETS[dataset]
         data = [{k: d.get(k) for k in ("stock_id", dk, bk, ak)} for d in j.get("data", [])]
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump({"_fetched_at": time.time(), "data": data}, f)
+        write_cache(p, data)
         return data, "fetched"
 
-    def _can_fetch(self):
-        return not (self.offline or self.blocked or self.fetched >= self.budget)
+
+EXCHANGE_CACHE = os.path.join(CACHE_DIR, "exchange")
+TWSE_TWT49U = "https://www.twse.com.tw/rwd/zh/exRight/TWT49U"
+TPEX_EXDAILYQ = "https://www.tpex.org.tw/www/zh-tw/bulletin/exDailyQ"
+
+
+def roc_to_ymd(s):
+    """'114年06月02日' or '114/06/02' → '20250602'."""
+    digits = [int(x) for x in re.findall(r"\d+", str(s))]
+    if len(digits) < 3:
+        return None
+    return f"{digits[0] + 1911:04d}{digits[1]:02d}{digits[2]:02d}"
+
+
+class ExchangeFetcher(_Throttle):
+    """Official ex-rights/ex-dividend results for all stocks, one request per market-month:
+    TWSE TWT49U (除權除息計算結果表) and TPEx exDailyQ (除權除息計算結果). factor = 參考價 / 前收盤價.
+    Cached under history/cache/exchange/<market>/<YYYYMM>.json; closed months are never re-fetched, the
+    current month is refreshed after 1 day. Does NOT cover splits / par-value changes / capital reductions."""
+
+    def __init__(self, budget=200, interval=3.0, offline=False):
+        super().__init__(budget, interval, offline)
+
+    def _month(self, market, ym):
+        p = os.path.join(EXCHANGE_CACHE, market, f"{ym}.json")
+        cached = read_cache(p)
+        closed = ym < time.strftime("%Y%m")
+        if cached is not None and (closed or time.time() - cached.get("_fetched_at", 0) < 86400
+                                   or not self.can_fetch()):
+            return cached["data"], "cached"
+        fallback = (cached["data"], "cached") if cached is not None else ([], "unavailable")
+        if not self.can_fetch():
+            return fallback
+        self.wait()
+        y, m = int(ym[:4]), int(ym[4:])
+        last = (pd.Timestamp(y, m, 1) + pd.offsets.MonthEnd(0)).day
+        hdr = {"User-Agent": "Mozilla/5.0"}
+        try:
+            if market == "twse":
+                j = requests.get(TWSE_TWT49U, params={"startDate": f"{ym}01", "endDate": f"{ym}{last:02d}",
+                                                      "response": "json"}, headers=hdr, timeout=30).json()
+                stat = str(j.get("stat", ""))
+                raw = j.get("data", []) if stat == "OK" else ([] if "沒有符合" in stat else None)
+            else:
+                j = requests.get(TPEX_EXDAILYQ, params={"startDate": f"{y}/{m:02d}/01",
+                                                        "endDate": f"{y}/{m:02d}/{last:02d}", "response": "json"},
+                                 headers=hdr, timeout=30).json()
+                tables = j.get("tables") or []
+                raw = tables[0].get("data", []) if tables else []
+                stat = "OK"
+        except Exception as e:
+            self.network_error(f"exchange {market} {ym}", e)
+            return fallback
+        if raw is None:
+            self.network_error(f"exchange {market} {ym}", ValueError(stat[:40]))
+            return fallback
+        self.ok()
+        data = []
+        for row in raw:  # positional on both exchanges: 0 date, 1 code, 3 前收盤價, 4 參考價
+            try:
+                data.append({"stock_id": str(row[1]).strip(), "date": roc_to_ymd(row[0]),
+                             "before": float(str(row[3]).replace(",", "")),
+                             "after": float(str(row[4]).replace(",", ""))})
+            except (ValueError, IndexError, TypeError):
+                continue
+        write_cache(p, data)
+        return data, "fetched"
+
+    def load(self, start_ymd, end_ymd):
+        """Events of both markets between the dates → (DataFrame[stock_id, date, factor], months unavailable)."""
+        months = pd.period_range(pd.Timestamp(start_ymd), pd.Timestamp(end_ymd), freq="M").strftime("%Y%m")
+        rows, missing = [], 0
+        for ym in months:
+            for mk in ("twse", "tpex"):
+                d, st = self._month(mk, ym)
+                missing += st == "unavailable"
+                rows.extend(d)
+        df = pd.DataFrame(rows, columns=["stock_id", "date", "before", "after"]).dropna()
+        df = df[(df["before"] > 0) & (df["after"] > 0)].copy()
+        df["factor"] = df["after"] / df["before"]
+        df = df[(df["factor"] - 1).abs() > 1e-6]
+        return df[["stock_id", "date", "factor"]].drop_duplicates(["stock_id", "date"], keep="last"), int(missing)
 
 
 def implied_events(g):
@@ -177,9 +299,18 @@ def adjust_stock(g, fin):
     return g, cov
 
 
-def adjust_all(clean, codes, fetcher):
-    """Returns (dict code → adjusted DataFrame indexed 0..n-1, coverage DataFrame)."""
+def adjust_all(clean, codes, fetcher, source="finmind", exchange=None):
+    """Returns (dict code → adjusted DataFrame indexed 0..n-1, coverage DataFrame).
+    source='finmind': per-stock TaiwanStockDividendResult (default).
+    source='exchange': dividend events from ExchangeFetcher (TWSE TWT49U + TPEx exDailyQ), one request per
+    market-month. In both modes ParValueChange (1 call) and the lazy split / capital-reduction lookups use FinMind."""
     out, covs = {}, []
+    ex_ev = None
+    if source == "exchange":
+        exchange = exchange or ExchangeFetcher()
+        ex_df, ex_missing = exchange.load(clean["date"].min(), clean["date"].max())
+        ex_ev = ex_df.groupby("stock_id")
+        log(f"[adjust] exchange events {len(ex_df)} (months unavailable: {ex_missing}, requests {exchange.fetched})")
     par, _ = fetcher.events("TaiwanStockParValueChange")
     par = par.groupby("stock_id")
     groups = {k: v for k, v in clean[clean["stock_id"].isin(set(codes))].groupby("stock_id")}
@@ -187,7 +318,11 @@ def adjust_all(clean, codes, fetcher):
         if sid not in groups:
             continue
         g = groups[sid].sort_values("date").reset_index(drop=True)
-        div, st = fetcher.events("TaiwanStockDividendResult", sid)
+        if ex_ev is not None:
+            div = ex_ev.get_group(sid) if sid in ex_ev.groups else pd.DataFrame(columns=["stock_id", "date", "factor"])
+            st = "exchange" if not ex_missing else "exchange_partial"
+        else:
+            div, st = fetcher.events("TaiwanStockDividendResult", sid)
         fin = pd.concat([div, par.get_group(sid) if sid in par.groups else div.iloc[:0]], ignore_index=True)
         a, cov = adjust_stock(g, fin)
         extra = []
