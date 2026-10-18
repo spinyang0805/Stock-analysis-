@@ -44,6 +44,8 @@ def fetch_day(d):
         jobs.save_chip_daily_bulk = real_save
     if any("server returned data for" in e for e in res["errors"]):
         return None, "mismatch"
+    if not n_insti and not n_margin and not res["errors"]:
+        return None, "closed"  # 休市日：TPEx 回空表
     if not n_insti or not n_margin:
         return None, "error: " + "; ".join(res["errors"][:2])
     out = {}
@@ -72,12 +74,16 @@ def main():
     print(f"mode={'APPLY' if a.apply else 'DRY-RUN'} dates={len(dates)} ({a.start}..{a.end})", flush=True)
 
     fails = 0
-    tot = {"change": 0, "missing": 0, "mismatch_days": 0}
+    tot = {"change": 0, "missing": 0, "mismatch_days": 0, "closed_days": 0}
     t0 = time.time()
     for i, d in enumerate(dates):
         if i:
             time.sleep(THROTTLE)
         data, status = fetch_day(d)
+        if status == "closed":
+            tot["closed_days"] += 1
+            print(f"{d} no TPEx data (closed), skipped", flush=True)
+            continue
         if status == "mismatch":
             tot["mismatch_days"] += 1
             print(f"{d} payload for another day (non-trading?), skipped", flush=True)
@@ -114,7 +120,7 @@ def main():
                 FROM (VALUES %s) AS v(sid, dt, {', '.join(FIELDS)})
                 WHERE c.stock_id=v.sid AND c.date=v.dt AND c.market='TPEx'""", upd, page_size=500)
             conn.commit()
-    print(f"TOTAL to_update={tot['change']} not_in_db={tot['missing']} mismatch_days={tot['mismatch_days']} "
+    print(f"TOTAL to_update={tot['change']} not_in_db={tot['missing']} mismatch_days={tot['mismatch_days']} closed_days={tot['closed_days']} "
           f"elapsed={time.time() - t0:.0f}s", flush=True)
 
 

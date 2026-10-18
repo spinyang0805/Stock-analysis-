@@ -777,6 +777,9 @@ def cmd_fix_tpex_chips(args):
         if any("server returned data for" in e for e in res["errors"]):
             log(f"  [{i}/{len(dates)}] {d} TPEx 回其他日期資料（休市？），略過不改")
             continue
+        if not n1 and not n2 and not res["errors"]:
+            log(f"  [{i}/{len(dates)}] {d} TPEx 無資料（休市），略過不改")
+            continue
         if not n1 or not n2:
             fails += 1
             log(f"  [{i}/{len(dates)}] {d} 失敗 (連續 {fails}): {'; '.join(res['errors'][:2])[:150]}")
