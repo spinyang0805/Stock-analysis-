@@ -8,6 +8,11 @@ name: Tuning data (valuation / revenue / market / SBL / TDCC)
 on:
   schedule:
     - cron: "30 9 * * *"      # 17:30 Taipei daily: after update-data (15:40), before daily-picks (19:30)
+  # right after a history backfill (new years of prices/chips) → fetch the extras for those years at once,
+  # then start a full re-tuning (see the last step)
+  workflow_run:
+    workflows: ["History backfill (Parquet)"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       kinds:
@@ -19,6 +24,7 @@ on:
 
 permissions:
   contents: write
+  actions: write            # dispatch weekly-tuning after a backfill-triggered run
 
 concurrency:
   group: tuning-data
@@ -26,14 +32,16 @@ concurrency:
 
 jobs:
   fetch:
+    # backfill-triggered runs only when the backfill succeeded
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 350
     env:
       PYTHONUNBUFFERED: "1"
       GH_TOKEN: ${{ github.token }}
       TAG: tuning-data
-      KINDS: ${{ github.event.inputs.kinds || 'market,revenue,valuation,sbl,tdcc' }}
-      MINUTES: ${{ github.event.inputs.minutes || '70' }}
+      KINDS: ${{ github.event.inputs.kinds || (github.event_name == 'workflow_run' && 'market,revenue,valuation,sbl') || 'market,revenue,valuation,sbl,tdcc' }}
+      MINUTES: ${{ github.event.inputs.minutes || (github.event_name == 'workflow_run' && '150') || '70' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -139,3 +147,7 @@ jobs:
           done
           [ ${#up[@]} -gt 0 ] && gh release upload "$TAG" "${up[@]}" --clobber
           echo "uploaded ${#up[@]} files"
+
+      - name: Start full re-tuning (after a backfill)
+        if: success() && github.event_name == 'workflow_run'
+        run: gh workflow run weekly-tuning.yml -f universe=500 -f years=8
