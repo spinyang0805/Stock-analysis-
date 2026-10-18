@@ -1,0 +1,134 @@
+name: Tuning data (valuation / revenue / market / SBL / TDCC)
+
+# Extra history for the tuning engine, stored as assets of the GitHub Release `tuning-data`.
+# Every run is incremental and resumable: each fetcher skips what is already stored and stops
+# cleanly at its time budget, so the daily schedule keeps going until the backfills are complete,
+# then only adds the new days / weeks / months. Never writes Supabase.
+
+on:
+  schedule:
+    - cron: "0 12 * * *"      # 20:00 Taipei daily (after update-data 15:40)
+  workflow_dispatch:
+    inputs:
+      kinds:
+        description: "comma list: market,revenue,valuation,sbl,tdcc (default all)"
+        default: "market,revenue,valuation,sbl,tdcc"
+      minutes:
+        description: "time budget per long fetcher (minutes; 3 long fetchers + short ones must fit in 350)"
+        default: "70"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tuning-data
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
+      TAG: tuning-data
+      KINDS: ${{ github.event.inputs.kinds || 'market,revenue,valuation,sbl,tdcc' }}
+      MINUTES: ${{ github.event.inputs.minutes || '70' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install pandas numpy requests pytz pyarrow lxml html5lib psycopg2-binary duckdb
+
+      - name: Validate inputs
+        run: |
+          set -eu
+          case "$MINUTES" in ''|*[!0-9]*) echo "minutes must be numeric"; exit 1;; esac
+          for k in $(echo "$KINDS" | tr ',' ' '); do
+            case "$k" in market|revenue|valuation|sbl|tdcc) ;; *) echo "bad kind $k"; exit 1;; esac
+          done
+
+      - name: Download stores
+        # prices (trading calendar + top-500 list) from history-data; extras from tuning-data.
+        # A missing tuning-data release is an error (seeded once from a local run) so a failed
+        # download can never be followed by an upload of a smaller, freshly started file.
+        run: |
+          set -eu
+          mkdir -p history
+          gh release download history-data -p 'prices_*.parquet' -p 'manifest.json' -D history --clobber
+          gh release view "$TAG" --json assets -q '.assets[].name' > /tmp/assets.txt
+          if [ -s /tmp/assets.txt ]; then
+            gh release download "$TAG" -D history --clobber
+          fi
+          # every asset the release lists must now exist locally, otherwise stop before any fetch/upload
+          while read -r a; do
+            [ -f "history/$a" ] || { echo "::error::asset $a missing after download"; exit 1; }
+          done < /tmp/assets.txt
+          ls -la history
+
+      - name: Record sizes before
+        # baseline = the release's own assets (all verified present above)
+        run: |
+          set -eu
+          : > /tmp/before.txt
+          while read -r a; do
+            case "$a" in *.parquet)
+              echo "$a $(python -c "import pyarrow.parquet as p,sys;print(p.ParquetFile(sys.argv[1]).metadata.num_rows)" "history/$a")" >> /tmp/before.txt;;
+            esac
+          done < /tmp/assets.txt
+          cat /tmp/before.txt
+
+      # each fetcher is independent: one source failing must not skip the others (continue-on-error)
+      - name: market
+        if: contains(env.KINDS, 'market')
+        continue-on-error: true
+        run: python backend/tuning/fetch_extra.py market --start 20210101 --sleep 1.5
+
+      - name: revenue
+        if: contains(env.KINDS, 'revenue')
+        continue-on-error: true
+        run: python backend/tuning/fetch_extra.py revenue --start 20220101 --sleep 3
+
+      - name: tdcc weekly
+        if: contains(env.KINDS, 'tdcc')
+        continue-on-error: true
+        run: python backend/tuning/fetch_tdcc.py weekly
+
+      - name: valuation
+        if: contains(env.KINDS, 'valuation')
+        continue-on-error: true
+        run: python backend/tuning/fetch_valuation.py --start 20220101 --sleep 2 --max-minutes "$MINUTES"
+
+      - name: sbl
+        if: contains(env.KINDS, 'sbl')
+        continue-on-error: true
+        run: python backend/tuning/fetch_extra.py sbl --start 20220101 --sleep 2 --max-minutes "$MINUTES"
+
+      - name: tdcc backfill (last ~51 weeks, top 500)
+        if: contains(env.KINDS, 'tdcc')
+        continue-on-error: true
+        run: python backend/tuning/fetch_tdcc.py backfill --top 500 --sleep 0.8 --max-minutes "$MINUTES"
+
+      - name: Upload (refuse to shrink)
+        if: always()
+        run: |
+          set -eu
+          shopt -s nullglob
+          files=(history/valuation_*.parquet history/sbl_*.parquet history/revenue.parquet \
+                 history/market_index.parquet history/tdcc.parquet)
+          up=()
+          for f in "${files[@]}"; do
+            n=$(python -c "import pyarrow.parquet as p,sys;print(p.ParquetFile(sys.argv[1]).metadata.num_rows)" "$f")
+            old=$(awk -v b="$(basename "$f")" '$1==b{print $2}' /tmp/before.txt)
+            if [ -n "$old" ] && [ "$n" -lt "$old" ]; then
+              echo "::error::$f shrank $old -> $n, not uploading"; exit 1
+            fi
+            up+=("$f")
+          done
+          [ ${#up[@]} -gt 0 ] && gh release upload "$TAG" "${up[@]}" --clobber
+          echo "uploaded ${#up[@]} files"

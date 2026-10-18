@@ -583,6 +583,26 @@ def weekdays_desc(start, end):
         e -= timedelta(days=1)
 
 
+def replace_yf_prices(new):
+    """官方單日全市場行情取代 yfinance 補值：對 new 涵蓋的日期，刪掉該日所有 yfinance 列
+    （官方沒有的代號 = 當日未交易，yfinance 列是假資料），再以官方列為準合併（prefer=new）。
+    非 yfinance 的既有列只在官方同 key 有資料時被覆蓋。"""
+    new = normalize(new, "prices")
+    for year, part in new.groupby(new["date"].str[:4]):
+        old = read_year("prices", year)
+        if old is None:
+            continue
+        dates = set(part["date"])
+        yf = old["date"].isin(dates) & old["source"].fillna("").str.startswith("yfinance")
+        kept = old[~yf]
+        combined = (pd.concat([kept, part], ignore_index=True)
+                    .drop_duplicates(["stock_id", "date"], keep="last")
+                    .sort_values(["stock_id", "date"]).reset_index(drop=True))
+        write_year("prices", year, combined)
+        log(f"  [store] prices_{year}.parquet 移除 yfinance {int(yf.sum()):,} 列，"
+            f"官方 {len(part):,} 列，rows={len(combined):,}")
+
+
 def cmd_backfill(args):
     load_env()
     _db_url = os.environ.get("DATABASE_URL")
@@ -638,9 +658,20 @@ def cmd_backfill(args):
     for k in kinds:
         df = read_all(k, columns=["date"])
         counts[k] = df["date"].value_counts().to_dict() if len(df) else {}
+    yf_dates = set()
+    if args.replace_yf:
+        if kinds != ["prices"]:
+            log("[backfill] --replace-yf 只能配 --kind prices")
+            return 1
+        src = read_all("prices", columns=["date", "source"])
+        yf_dates = set(src.loc[src["source"].fillna("").str.startswith("yfinance"), "date"])
     todo = []
     for d in weekdays_desc(start, end):
         if d in nontrading:
+            continue
+        if args.replace_yf:
+            if d in yf_dates:
+                todo.append((d, ["prices"]))
             continue
         need = [k for k in kinds if counts[k].get(d, 0) < MIN_ROWS[k]]
         if need:
@@ -661,6 +692,9 @@ def cmd_backfill(args):
     buf = {"prices": [], "chips": []}
 
     def flush():
+        if args.replace_yf and buf["prices"]:
+            replace_yf_prices(pd.DataFrame(buf["prices"]))
+            buf["prices"] = []
         for k in kinds:
             if buf[k]:
                 merge_into_store(k, pd.DataFrame(buf[k]), prefer="old")
@@ -688,7 +722,8 @@ def cmd_backfill(args):
             if status == "closed":
                 closed = True
                 if d in db_dates or any(counts[k].get(d, 0) for k in counts):
-                    log(f"  [{i}/{len(todo)}] {d} TWSE 回無資料但 DB/store 已有該日資料，不標休市")
+                    log(f"  [{i}/{len(todo)}] {d} TWSE 回無資料但 DB/store 已有該日資料，不標休市"
+                        + ("；其 yfinance 列未移除，確認休市後用 purge-dates 清除" if args.replace_yf else ""))
                 else:
                     nontrading.add(d)
                     log(f"  [{i}/{len(todo)}] {d} 休市")
@@ -1069,6 +1104,8 @@ def main():
     p.add_argument("--limit-dates", type=int)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--sleep", type=float, default=1.5, help="每次請求前的等待秒數")
+    p.add_argument("--replace-yf", action="store_true",
+                   help="只重抓含 yfinance 補值的日期，以官方行情取代（需 --kind prices）")
     p.set_defaults(fn=cmd_backfill)
     p = sub.add_parser("fix-tpex-chips")
     p.add_argument("--from-year", type=int)

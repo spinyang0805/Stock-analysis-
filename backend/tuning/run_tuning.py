@@ -123,6 +123,60 @@ def chip_net(chips, sid, dates, volume):
     return net.where(~bad).to_numpy()
 
 
+def chip_cols(chips, sid, dates, volume):
+    """Per-source chip columns aligned to dates: foreign / trust net buy (shares), margin / short balance (張).
+    Rows failing the |buy| <= volume or stale-duplicate checks are NaN."""
+    c = chips[chips["stock_id"] == sid] if len(chips) else chips
+    if c is None or c.empty:
+        return {}
+    c = c.set_index("date").reindex(dates)
+    vol = volume.to_numpy()
+    out = {}
+    fb, tb = c["foreign_buy"], c["investment_trust_buy"]
+    # stale copy = BOTH foreign and trust identical to the previous day (same rule as chip_net);
+    # a single series repeating (e.g. trust +100 張 two days in a row) is legitimate
+    stale = (fb == fb.shift(1)) & (tb == tb.shift(1)) & ((fb != 0) | (tb != 0))
+    for x, col in ((fb, "foreign"), (tb, "trust")):
+        out[col] = x.where(~((x.abs() > vol) | stale)).to_numpy()
+    for src, col in (("margin_balance", "margin"), ("short_balance", "short")):
+        out[col] = c[src].to_numpy()
+    return out
+
+
+def attach_extras(g, sid, meta, mkt_idx, rev, sbl, tdcc=None):
+    """Adds columns: mkt (index close of the stock's own market), rev_yoy / rev (latest monthly revenue
+    already PUBLIC on that date — as-of join on avail_date), sbl (借券賣出餘額),
+    p400 / p1000 / n_total (集保 week strictly BEFORE the row date — the week's table is published after it)."""
+    dates = g["date"].astype(str)
+    mk = "TPEX" if str((meta.get(sid) or {}).get("market", "")) in ("TPEx", "上櫃") else "TAIEX"
+    idx = mkt_idx.get(mk)
+    if idx is None:
+        idx = mkt_idx.get("TAIEX")
+    g["mkt"] = idx.reindex(dates.to_numpy()).ffill().to_numpy() if idx is not None else np.nan
+    g["rev"], g["rev_yoy"] = np.nan, np.nan
+    if rev is not None and len(rev):
+        r = rev.dropna(subset=["avail_date"]).sort_values(["avail_date", "ym"])
+        r = r.drop_duplicates("avail_date", keep="last")
+        rr = pd.DataFrame({"d": r["avail_date"].astype("int64").to_numpy(),
+                           "revenue": r["revenue"].astype(float).to_numpy(), "yoy": r["yoy"].astype(float).to_numpy()})
+        left = pd.DataFrame({"d": dates.astype("int64").to_numpy(), "_i": np.arange(len(g))})
+        m = pd.merge_asof(left.sort_values("d"), rr, on="d", direction="backward").sort_values("_i")
+        g["rev"], g["rev_yoy"] = m["revenue"].to_numpy(), m["yoy"].to_numpy()
+    g["sbl"] = (sbl.set_index("date")["sbl_balance"].reindex(dates.to_numpy()).to_numpy()
+                if sbl is not None and len(sbl) else np.nan)
+    for col in ("p400", "p1000", "n_total"):
+        g[col] = np.nan
+    if tdcc is not None and len(tdcc):
+        t = tdcc.sort_values("date")
+        tt = pd.DataFrame({"d": t["date"].astype("int64").to_numpy(),
+                           **{c: t[c].astype(float).to_numpy() for c in ("p400", "p1000", "n_total")}})
+        left = pd.DataFrame({"d": dates.astype("int64").to_numpy(), "_i": np.arange(len(g))})
+        m = pd.merge_asof(left.sort_values("d"), tt, on="d", direction="backward",
+                          allow_exact_matches=False).sort_values("_i")
+        for col in ("p400", "p1000", "n_total"):
+            g[col] = m[col].to_numpy()
+
+
 def prepare(args, universe_size, years, codes=None, end_date=None, cfg=None):
     """Load → clean → universe → adjust → chips.
     codes given (score_today): exactly those + holdings.  Otherwise point-in-time membership (pit_membership)
@@ -157,10 +211,29 @@ def prepare(args, universe_size, years, codes=None, end_date=None, cfg=None):
     log(f"[prepare] adjusted {len(adjusted)} stocks ({args.adjust_source}), FinMind requests {fetcher.fetched}"
         f"{' (stopped)' if fetcher.blocked else ''}, exchange requests {exchange.fetched} in {time.time() - t0:.0f}s")
     chips = data_mod.load_chips(args.source, start, list(adjusted))
+    val = data_mod.load_valuation(start, list(adjusted))
+    val_by = dict(tuple(val.groupby("stock_id"))) if len(val) else {}
+    mkt_idx = data_mod.load_market_index()
+    rev = data_mod.load_revenue(list(adjusted))
+    rev_by = dict(tuple(rev.groupby("stock_id"))) if len(rev) else {}
+    sbl = data_mod.load_sbl(start, list(adjusted))
+    sbl_by = dict(tuple(sbl.groupby("stock_id"))) if len(sbl) else {}
+    td = data_mod.load_tdcc(list(adjusted))
+    td_by = dict(tuple(td.groupby("stock_id"))) if len(td) else {}
+    log(f"[prepare] extras: valuation {len(val_by)} stocks, market {list(mkt_idx)}, revenue {len(rev_by)}, "
+        f"sbl {len(sbl_by)}, tdcc {len(td_by)}")
     chip_rows = {}
     for sid, g in adjusted.items():
         nb = chip_net(chips, sid, g["date"].to_numpy(), g["volume"])
         g["net_buy"] = nb if nb is not None else np.nan
+        cc = chip_cols(chips, sid, g["date"].to_numpy(), g["volume"])
+        for col in ("foreign", "trust", "margin", "short"):
+            g[col] = cc.get(col, np.nan)
+        v = val_by.get(sid)
+        vv = v.set_index("date").reindex(g["date"].to_numpy()) if v is not None else None
+        for col in ("pe", "pb", "dy"):
+            g[col] = vv[col].to_numpy() if vv is not None else np.nan
+        attach_extras(g, sid, meta, mkt_idx, rev_by.get(sid), sbl_by.get(sid), td_by.get(sid))
         chip_rows[sid] = int(pd.notna(g["net_buy"]).sum())
     quality = quality.reindex(list(adjusted)).assign(chip_valid_rows=pd.Series(chip_rows))
     return {"adjusted": adjusted, "coverage": coverage, "quality": quality, "meta": meta, "rank": rank,

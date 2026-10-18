@@ -21,6 +21,20 @@ def synth(n=400, seed=0):
     g = pd.DataFrame({"date": dates, "aopen": o, "ahigh": h, "alow": lo, "aclose": c,
                       "volume": rng.integers(1000, 5000, n).astype(float),
                       "net_buy": rng.normal(0, 300, n)})
+    g["foreign"], g["trust"] = rng.normal(0, 200, n), rng.normal(0, 100, n)
+    g["margin"] = 5000 + np.cumsum(rng.normal(0, 50, n))
+    g["short"] = 800 + np.cumsum(rng.normal(0, 10, n))
+    g["pe"] = 15 * c / c[0] * (1 + rng.normal(0, 0.01, n))
+    g["pb"], g["dy"] = 2 * c / c[0], 300 / c
+    g["mkt"] = 10000 * np.exp(np.cumsum(rng.normal(0, 0.01, n)))
+    month = np.arange(n) // 21                       # revenue changes once per "month"
+    g["rev"] = (1e6 * (1 + 0.05 * rng.normal(size=month.max() + 1)).cumprod())[month]
+    g["rev_yoy"] = rng.normal(10, 20, month.max() + 1)[month]
+    g["sbl"] = np.abs(1e5 + np.cumsum(rng.normal(0, 3e3, n)))
+    week = np.arange(n) // 5
+    g["p1000"] = (60 + np.cumsum(rng.normal(0, 0.3, week.max() + 1)))[week]
+    g["p400"] = g["p1000"] + 5
+    g["n_total"] = (50000 + np.cumsum(rng.normal(0, 300, week.max() + 1)))[week]
     return g
 
 
@@ -38,6 +52,20 @@ def test_signals_have_no_lookahead():
             assert (s.to_numpy() == ref.to_numpy()).all(), f"{name} changed with future data (cut={cut})"
         for col in ("rsi", "kd_k", "macd", "atr", "bb_lower", "hh20", "dev20"):
             np.testing.assert_allclose(pf[col].to_numpy(), full_f[col].iloc[:cut].to_numpy(), equal_nan=True)
+
+
+def test_attach_extras_point_in_time():
+    dates = ["20250610", "20250611", "20250613", "20250616"]
+    g = pd.DataFrame({"date": dates, "volume": 1.0})
+    rev = pd.DataFrame({"stock_id": "1111", "ym": ["202505"], "revenue": [100.0], "yoy": [12.0],
+                        "avail_date": ["20250611"]})
+    td = pd.DataFrame({"stock_id": "1111", "date": ["20250613"], "p400": [50.0], "p1000": [40.0],
+                       "n_total": [1000.0]})
+    mkt = {"TAIEX": pd.Series([1.0, 2.0, 3.0, 4.0], index=dates)}
+    run_tuning.attach_extras(g, "1111", {"1111": {"market": "TWSE"}}, mkt, rev, None, td)
+    assert np.isnan(g["rev"].iloc[0]) and g["rev"].iloc[1] == 100.0      # usable from avail_date on
+    assert np.isnan(g["p1000"].iloc[2]) and g["p1000"].iloc[3] == 40.0   # strictly after the TDCC data date
+    assert g["mkt"].tolist() == [1.0, 2.0, 3.0, 4.0]
 
 
 def test_past_percentile_excludes_today():
@@ -109,6 +137,8 @@ def test_future_perturbation_does_not_change_past_signals():
         g2.loc[t + 1:, c] = g2.loc[t + 1:, c] * rng.uniform(0.5, 1.5, len(g2) - t - 1)
     g2.loc[t + 1:, "volume"] *= 10
     g2.loc[t + 1:, "net_buy"] *= -5
+    for c in ("foreign", "trust", "margin", "short", "pe", "pb", "dy", "mkt", "rev", "rev_yoy", "sbl", "p400", "p1000", "n_total"):
+        g2.loc[t + 1:, c] = g2.loc[t + 1:, c] * -3
     f2 = indicators.features(g2)
     pert = {**indicators.buy_signals(f2), **indicators.sell_signals(f2)}
     for k in base:

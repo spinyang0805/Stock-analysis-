@@ -63,6 +63,9 @@ def stock_events(sid, g, horizons, costs, etf):
     f = ind.features(g)
     buys, sells = ind.buy_signals(f), ind.sell_signals(f)
     dates = g["date"].to_numpy()
+    # 階段標記（訊號日當下已知）：個股波段結構 1/0/-1、大盤多空 1/0/-1（無大盤資料 → 0）
+    st_reg = ind.patterns(f)["struct"].to_numpy()
+    mk_reg = f["mkt_regime"].fillna(0).astype(int).to_numpy() if "mkt_regime" in f else np.zeros(len(f), int)
     rows, fwd_all = [], []
     for h in horizons:
         fr = forward_returns(g, h)
@@ -78,9 +81,10 @@ def stock_events(sid, g, horizons, costs, etf):
                 rows.append(pd.DataFrame({
                     "stock_id": sid, "side": side, "signal": name, "h": h, "date": dates[pos],
                     "exit_date": sub["exit_date"].to_numpy(), "gross": sub["gross"].to_numpy(),
-                    "mae": sub["mae"].to_numpy(), "mfe": sub["mfe"].to_numpy()}))
+                    "mae": sub["mae"].to_numpy(), "mfe": sub["mfe"].to_numpy(),
+                    "struct": st_reg[pos], "mkt": mk_reg[pos]}))
     ev = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(
-        columns=["stock_id", "side", "signal", "h", "date", "exit_date", "gross", "mae", "mfe"])
+        columns=["stock_id", "side", "signal", "h", "date", "exit_date", "gross", "mae", "mfe", "struct", "mkt"])
     ev["net"] = np.where(ev["side"] == "buy", costs.net(ev["gross"].astype(float), etf), np.nan)
     return ev, pd.concat(fwd_all, ignore_index=True), f, buys, sells
 

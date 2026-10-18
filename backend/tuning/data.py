@@ -138,6 +138,64 @@ def load_chips(source, start_date, codes):
     return df.drop_duplicates(["stock_id", "date"], keep="last")
 
 
+VAL_COLS = ["stock_id", "date", "pe", "pb", "dy"]
+
+
+def load_valuation(start_date, codes):
+    """Daily PE / PB / dividend yield from history/valuation_YYYY.parquet (fetch_valuation.py).
+    Parquet only — Supabase keeps just the latest snapshot. Missing files → empty frame (signals skipped)."""
+    try:
+        df = _read_parquet_kind("valuation", start_date, VAL_COLS)
+    except SystemExit:
+        return pd.DataFrame(columns=VAL_COLS)
+    df["stock_id"] = df["stock_id"].astype(str)
+    df = df[df["stock_id"].isin(set(codes))].copy()
+    for c in ("pe", "pb", "dy"):
+        df[c] = pd.to_numeric(df[c], errors="coerce").astype("float64")
+    return df.drop_duplicates(["stock_id", "date"], keep="last")
+
+
+def load_market_index():
+    """{'TAIEX': Series(date→close), 'TPEX': ...} from history/market_index.parquet (fetch_extra.py market)."""
+    p = os.path.join(HISTORY_DIR, "market_index.parquet")
+    if not os.path.exists(p):
+        return {}
+    df = pd.read_parquet(p)
+    return {k: d.set_index("date")["close"].astype(float).sort_index() for k, d in df.groupby("index")}
+
+
+def load_revenue(codes):
+    """Monthly revenue rows with avail_date (first day the figure is public). Empty if not fetched."""
+    p = os.path.join(HISTORY_DIR, "revenue.parquet")
+    if not os.path.exists(p):
+        return pd.DataFrame(columns=["stock_id", "ym", "revenue", "yoy", "avail_date"])
+    df = pd.read_parquet(p)
+    df["stock_id"] = df["stock_id"].astype(str)
+    return df[df["stock_id"].isin(set(codes))]
+
+
+def load_sbl(start_date, codes):
+    """借券賣出餘額 (shares) from history/sbl_YYYY.parquet. Empty if not fetched."""
+    try:
+        df = _read_parquet_kind("sbl", start_date, ["stock_id", "date", "sbl_balance"])
+    except SystemExit:
+        return pd.DataFrame(columns=["stock_id", "date", "sbl_balance"])
+    df["stock_id"] = df["stock_id"].astype(str)
+    df = df[df["stock_id"].isin(set(codes))].copy()
+    df["sbl_balance"] = pd.to_numeric(df["sbl_balance"], errors="coerce").astype("float64")
+    return df.drop_duplicates(["stock_id", "date"], keep="last")
+
+
+def load_tdcc(codes):
+    """集保大戶持股週資料 (fetch_tdcc.py). Empty if not fetched."""
+    p = os.path.join(HISTORY_DIR, "tdcc.parquet")
+    if not os.path.exists(p):
+        return pd.DataFrame(columns=["stock_id", "date", "p400", "p1000", "n_total"])
+    df = pd.read_parquet(p)
+    df["stock_id"] = df["stock_id"].astype(str)
+    return df[df["stock_id"].isin(set(codes))]
+
+
 def load_holdings():
     """Codes with net shares > 0 in Supabase `transactions`. Read-only.
     side enum (CHECK constraint): buy | sell | cash_dividend | stock_dividend.
