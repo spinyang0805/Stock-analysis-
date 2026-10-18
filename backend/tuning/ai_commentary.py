@@ -30,19 +30,21 @@ INSTRUCTION = (
     "不要給保證獲利的說法；最後一行加「以上為 AI 解讀，非投資建議」。只輸出解讀內文。"
 )
 MERGE = (
-    "以下是三個 AI 對同一份每日股票報告的解讀草稿（A/B/C），以及原始報告。請整合成一份最好的繁體中文解讀"
-    "（300～500 字）：保留三者一致的重點；若彼此矛盾，以原始報告的數字為準並刪除錯誤內容；不可加入報告沒有的"
-    "數字或事實；最後一行「以上為 AI 解讀（Claude × Codex × Gemini 整合），非投資建議」。只輸出內文。"
+    "以下是 {n} 個 AI 對同一份每日股票報告的解讀草稿，以及原始報告。請整合成一份最好的繁體中文解讀"
+    "（300～500 字）：保留彼此一致的重點；若彼此矛盾，以原始報告的數字為準並刪除錯誤內容；不可加入報告沒有的"
+    "數字或事實；最後一行「以上為 AI 解讀（{names} 整合），非投資建議」。只輸出內文。"
 )
+NAMES = {"claude": "Claude", "codex": "Codex", "gemini": "Gemini"}
 
 
 def _run(cmd, stdin_text, cwd=None):
     exe = shutil.which(cmd[0])
     if not exe:
         return None, f"{cmd[0]} not found"
+    env = dict(os.environ, GEMINI_CLI_TRUST_WORKSPACE="true")   # headless gemini needs an explicit trust flag
     try:
         r = subprocess.run([exe] + cmd[1:], input=stdin_text, capture_output=True, text=True, encoding="utf-8",
-                           timeout=TIMEOUT, cwd=cwd)
+                           timeout=TIMEOUT, cwd=cwd, env=env)
     except subprocess.TimeoutExpired:
         return None, "timeout"
     except OSError as exc:
@@ -70,7 +72,8 @@ def run_cli(report):
     if len(ok) == 1:
         return next(iter(ok.values())), list(ok)
     body = "\n\n".join(f"### 草稿 {chr(65 + i)}\n{t}" for i, t in enumerate(ok.values()))
-    merged, err = _run(["claude", "-p", MERGE], body + "\n\n### 原始報告\n" + report, tmp)
+    merge = MERGE.format(n=len(ok), names=" × ".join(NAMES[k] for k in ok))
+    merged, err = _run(["claude", "-p", merge], body + "\n\n### 原始報告\n" + report, tmp)
     if not merged:
         print(f"[ai] merge failed ({err}); using the first draft")
         merged = next(iter(ok.values()))
