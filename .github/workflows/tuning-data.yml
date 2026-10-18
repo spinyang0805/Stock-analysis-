@@ -92,7 +92,7 @@ jobs:
       - name: revenue
         if: contains(env.KINDS, 'revenue')
         continue-on-error: true
-        run: python backend/tuning/fetch_extra.py revenue --start 20220101 --sleep 3
+        run: python backend/tuning/fetch_extra.py revenue --start 20190101 --sleep 3
 
       - name: revenue → fundamentals (website)
         if: contains(env.KINDS, 'revenue')
@@ -109,12 +109,12 @@ jobs:
       - name: valuation
         if: contains(env.KINDS, 'valuation')
         continue-on-error: true
-        run: python backend/tuning/fetch_valuation.py --start 20220101 --sleep 2 --max-minutes "$MINUTES"
+        run: python backend/tuning/fetch_valuation.py --start 20190101 --sleep 2 --max-minutes "$MINUTES"
 
       - name: sbl
         if: contains(env.KINDS, 'sbl')
         continue-on-error: true
-        run: python backend/tuning/fetch_extra.py sbl --start 20220101 --sleep 2 --max-minutes "$MINUTES"
+        run: python backend/tuning/fetch_extra.py sbl --start 20190101 --sleep 2 --max-minutes "$MINUTES"
 
       - name: tdcc backfill (last ~51 weeks, top 500)
         if: contains(env.KINDS, 'tdcc')

@@ -14,7 +14,7 @@ on:
         default: "500"
       years:
         description: "history years"
-        default: "5"
+        default: "8"
 
 permissions:
   contents: write
@@ -31,7 +31,7 @@ jobs:
       PYTHONUNBUFFERED: "1"
       GH_TOKEN: ${{ github.token }}
       UNIVERSE: ${{ github.event.inputs.universe || '500' }}
-      YEARS: ${{ github.event.inputs.years || '5' }}
+      YEARS: ${{ github.event.inputs.years || '8' }}
     steps:
       - uses: actions/checkout@v4
 
