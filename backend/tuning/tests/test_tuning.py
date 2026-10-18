@@ -169,6 +169,16 @@ def test_block_bootstrap_calibration_under_dependent_null():
     assert evaluate.block_boot_p(x) < 0.05
 
 
+def test_select_single_stock_group_has_no_loo_prior():
+    rows = [{"stock_id": "1111", "side": "buy", "signal": "brk_20", "h": 5, "date": f"2024{i:04d}",
+             "xpd": 0.01, "apd": 0.0, "stat": True} for i in range(1, 40)]
+    tr = pd.DataFrame(rows)
+    cfg = run_tuning.Cfg()
+    sel = evaluate.select(tr, {"1111": "TWSE-midvol"}, cfg, "buy")
+    c = sel["cand"]
+    assert c["g_mean_loo"].isna().all() and np.isfinite(c["score"]).all()
+
+
 def test_bh():
     rej = evaluate.bh_reject([0.001, 0.02, 0.03, 0.5], q=0.1)
     assert rej.tolist() == [True, True, True, False]

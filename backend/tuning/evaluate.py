@@ -211,8 +211,9 @@ def select(train, groups, cfg, side="buy"):
     st = st.merge(gs[["group", "signal", "h", "mean", "n", "t"]].rename(
         columns={"mean": "g_mean", "n": "g_n", "t": "g_t"}), on=["group", "signal", "h"], how="left")
     # leave-one-stock-out group prior: the stock's own events must not sit inside the prior it is shrunk to
-    rest_n = st["g_n"] - st["n"]
-    st["g_mean_loo"] = ((st["g_mean"] * st["g_n"] - st["mean"] * st["n"]) / rest_n).where(rest_n > 0)
+    rest_n = (st["g_n"] - st["n"]).astype(float)
+    # a stock alone in its group has no leave-one-out prior (NaN → falls back to 0 below); never divide by 0
+    st["g_mean_loo"] = (st["g_mean"] * st["g_n"] - st["mean"] * st["n"]).astype(float) / rest_n.where(rest_n > 0)
     w = st["n"] / (st["n"] + cfg.shrink_k)
     st["score"] = w * st["mean"] + (1 - w) * st["g_mean_loo"].fillna(0)
     st["p"] = [pvalue(t) for t in st["t"]]
