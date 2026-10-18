@@ -72,6 +72,26 @@ def _get(url, params, headers=None, retries=2):
     return None
 
 
+def _date_ok(data: dict, date_str: str) -> bool:
+    """回應自報的資料日若與請求日不同（休市日被靜默回最新交易日），視為無資料，避免誤標寫入。"""
+    if not isinstance(data, dict):
+        return True
+    cands = [data.get("date")]
+    tables = data.get("tables")
+    if isinstance(tables, list) and tables:
+        cands.append((tables[0] or {}).get("date"))
+    for v in cands:
+        t = str(v or "").strip()
+        if "/" in t:
+            y, m, d = t.split("/")
+            t = f"{int(y) + 1911 if int(y) < 1911 else int(y)}{int(m):02d}{int(d):02d}"
+        elif t.isdigit() and len(t) == 7:
+            t = f"{int(t[:3]) + 1911}{t[3:]}"
+        if t.isdigit() and len(t) == 8:
+            return t == date_str
+    return True
+
+
 def _safe_int(v):
     if v in (None, "", "-", "--", "N/A"):
         return None
@@ -85,7 +105,7 @@ def _safe_int(v):
 def fetch_twse_t86(date_str: str) -> Optional[dict]:
     """TWSE T86: 三大法人. Returns {code: {foreign, trust, dealer, total}} or None."""
     data = _get(TWSE_T86, {"response": "json", "date": date_str, "selectType": "ALL"})
-    if not data:
+    if not data or not _date_ok(data, date_str):
         return None
     rows = data.get("data") or data.get("aaData", [])
     fields = data.get("fields") or data.get("head", [])
@@ -136,7 +156,7 @@ def _tables_data(data: dict, table_idx: int = 0):
 def fetch_twse_margin(date_str: str) -> Optional[dict]:
     """TWSE margin: 融資融券. tables[1] has per-stock data; margin@6, short@12."""
     data = _get(TWSE_MARGIN, {"response": "json", "date": date_str, "selectType": "ALL"})
-    if not data:
+    if not data or not _date_ok(data, date_str):
         return None
     rows, _ = _tables_data(data, table_idx=1)   # table[1] = per-stock data
     if not rows:
@@ -160,7 +180,7 @@ def fetch_twse_margin(date_str: str) -> Optional[dict]:
 def fetch_tpex_insti(date_str: str) -> Optional[dict]:
     """TPEx institutional. YYYYMMDD format. tables[0]. Uses _parse_tpex_insti_row logic."""
     data = _get(TPEX_INSTI, {"response": "json", "date": date_str, "sect": "AL", "type": "Daily"}, headers=TPEX_HEADERS)
-    if not data:
+    if not data or not _date_ok(data, date_str):
         return None
     rows, _ = _tables_data(data, table_idx=0)
     if not rows:
@@ -190,7 +210,7 @@ def fetch_tpex_insti(date_str: str) -> Optional[dict]:
 def fetch_tpex_margin(date_str: str) -> Optional[dict]:
     """TPEx margin. YYYYMMDD format. tables[0]. margin@6, short@14."""
     data = _get(TPEX_MARGIN, {"response": "json", "date": date_str}, headers=TPEX_HEADERS)
-    if not data:
+    if not data or not _date_ok(data, date_str):
         return None
     rows, _ = _tables_data(data, table_idx=0)
     if not rows:
@@ -281,16 +301,9 @@ def batch_write(conn, date_str: str, t86: dict, margin: dict, tpex_t: dict, tpex
 
 # ── Trading date helpers ───────────────────────────────────────
 def trading_dates_between(start: str, end: str) -> list:
-    """Generate weekday dates from start to end (YYYYMMDD), newest first."""
-    s = datetime.strptime(start, "%Y%m%d")
-    e = datetime.strptime(end, "%Y%m%d")
-    dates = []
-    cur = e
-    while cur >= s:
-        if cur.weekday() < 5:
-            dates.append(cur.strftime("%Y%m%d"))
-        cur -= timedelta(days=1)
-    return dates  # newest first
+    """Trading days (weekdays minus TWSE holidays) from start to end (YYYYMMDD), newest first."""
+    import trading_calendar
+    return list(reversed(trading_calendar.trading_days(start, end)))
 
 
 def find_valid_date(target: str, days_back: int = 7) -> Optional[str]:

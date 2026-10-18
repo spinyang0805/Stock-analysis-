@@ -40,3 +40,6 @@ tmp_audit.json
 
 # Parquet history store (local copy)
 history/
+
+# trading calendar cache
+backend/.cache/

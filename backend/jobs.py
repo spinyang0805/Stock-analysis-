@@ -3,6 +3,8 @@ import time
 import requests
 import urllib3
 
+import trading_calendar
+
 from firebase_cache import (
     save_stock_daily, save_chip_daily, save_job_log,
     save_stock_daily_bulk, save_chip_daily_bulk, save_fundamentals_bulk,
@@ -492,6 +494,15 @@ def run_on_demand_backfill(stock_id: str, months: int = 12, market: str = "TWSE"
     return result
 
 
+def _payload_date_mismatch(payload, date_text: str):
+    """回傳回應自報的資料日（與請求日 date_text 不同時），否則 None。
+    TWSE/TPEx 對休市日常靜默回「最新交易日」的資料；以回應自己的日期為準，避免誤標寫入。"""
+    actual = _tpex_payload_date(payload)
+    if actual and actual != date_text:
+        return actual
+    return None
+
+
 def write_t86_chips(start_date: str, result: dict):
     for d in back_dates_from(start_date, 10):
         payload, err = fetch_json(TWSE_T86, params={"response": "json", "date": d, "selectType": "ALL"})
@@ -499,6 +510,10 @@ def write_t86_chips(start_date: str, result: dict):
             result["errors"].append(f"T86 {d}: {err}")
         rows = _rows(payload)
         if not rows:
+            continue
+        actual = _payload_date_mismatch(payload, d)
+        if actual:
+            result["errors"].append(f"T86 {d}: server returned data for {actual}, skipped to avoid mislabeling")
             continue
         fields = _fields(payload)
         code_i = _idx(fields, "證券", "代號", default=0)
@@ -586,6 +601,10 @@ def write_margin_chips(start_date: str, result: dict):
             result["errors"].append(f"margin {d}: {exc}")
             return 0
         if not rows:
+            continue
+        actual = _payload_date_mismatch(payload, d)
+        if actual:
+            result["errors"].append(f"margin {d}: server returned data for {actual}, skipped to avoid mislabeling")
             continue
         code_i, margin_i, short_i = 0, 6, 12
         bulk_rows = []
@@ -872,6 +891,10 @@ def write_tpex_insti_chips(date_text: str, result: dict):
     rows, _ = _table_rows(payload)
     if not rows:
         return 0
+    actual = _payload_date_mismatch(payload, date_text)
+    if actual:
+        result["errors"].append(f"TPEx insti {date_text}: server returned data for {actual}, skipped to avoid mislabeling")
+        return 0
     bulk_rows = []
     for row in rows:
         try:
@@ -892,6 +915,10 @@ def write_tpex_margin_chips(date_text: str, result: dict):
         result["errors"].append(f"TPEx margin {date_text}: {err}")
     rows, fields = _table_rows(payload)
     if not rows:
+        return 0
+    actual = _payload_date_mismatch(payload, date_text)
+    if actual:
+        result["errors"].append(f"TPEx margin {date_text}: server returned data for {actual}, skipped to avoid mislabeling")
         return 0
     code_i = _idx(fields, "代號", default=0)
     name_i = _idx(fields, "名稱", default=1)
@@ -1033,9 +1060,13 @@ def _write_twse_day(date_text: str, result: dict):
     # CSV 版多了「日期」欄且伺服器可能忽略 date 參數只回最新交易日 —
     # 以資料列自己的日期為準，與請求日不符就跳過，避免誤標寫入。
     date_i = _idx(fields, "日期")
-    if rows and date_i is not None:
-        row_date = _roc_any_to_yyyymmdd(_row_value(rows[0], date_i))
-        if row_date and row_date != date_text:
+    if rows:
+        row_date = (_roc_any_to_yyyymmdd(_row_value(rows[0], date_i)) if date_i is not None
+                    else _tpex_payload_date(payload))
+        if not row_date:
+            result["errors"].append(f"TWSE {date_text}: response carries no data date, skipped to avoid mislabeling")
+            return 0, False
+        if row_date != date_text:
             result["errors"].append(
                 f"TWSE {date_text}: server returned data for {row_date}, skipped to avoid mislabeling")
             return 0, False
@@ -1176,6 +1207,8 @@ def run_daily_update(lookback_days: int = 5):
     twse_latest_date = None
     tpex_latest_date = None
     for d in recent_dates(lookback_days + 3):
+        if not trading_calendar.is_trading_day(d):
+            continue  # 週末/休市日：TWSE 會靜默回最新交易日資料，不可寫在這個日期下
         twse_written, twse_found = _write_twse_day(d, result)
         if twse_found:
             result["stocks"] += twse_written
