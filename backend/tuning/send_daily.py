@@ -18,6 +18,8 @@ from datetime import datetime, timedelta
 
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BACKEND)
+if __package__ in (None, ""):
+    __package__ = "tuning"
 import notify  # noqa: E402
 import trading_calendar as cal  # noqa: E402
 
@@ -102,6 +104,7 @@ def main(argv=None):
         print(res)
         return 1
     d = meta["as_of"]
+    report += ai_section(a.dir, d)
     subject = f"{'（延遲）' if late else ''}每日股票報告 {d[:4]}/{d[4:6]}/{d[6:]}"
     todo_full = [c for c in FULL_CHANNELS if sent.get(c) != "ok"]
     res = notify.notify(subject, report + note, channels=todo_full) if todo_full else {}
@@ -114,6 +117,26 @@ def main(argv=None):
     _save(sent_path, sent)
     failed = [k for k, v in res.items() if v.startswith("error")]
     return 1 if failed else 0
+
+
+def ai_section(dir_, d):
+    """AI commentary: the PC's 3-model version if it was uploaded (ai_<d>.md in release daily-picks),
+    else a Groq fallback generated here; empty string if neither works (the report goes out numbers-only)."""
+    path = os.path.join(dir_, f"ai_{d}.md")
+    if not os.path.exists(path) and os.environ.get("GH_TOKEN"):
+        import subprocess
+        subprocess.run(["gh", "release", "download", "daily-picks", "-p", f"ai_{d}.md", "-D", dir_, "--clobber"],
+                       capture_output=True)
+    if not os.path.exists(path):
+        try:
+            from tuning import ai_commentary
+            ai_commentary.main(["--mode", "groq", "--as-of", d, "--dir", dir_])
+        except Exception as exc:
+            print(f"[send] AI fallback failed: {exc}")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            return "\n\n---\n\n" + f.read()
+    return ""
 
 
 def _save(path, data):

@@ -1,0 +1,5 @@
+# Confirmed TWSE/TPEx full-day closures that the holidaySchedule API cache may not cover
+# (past years the API no longer returns, typhoon closures announced the day before).
+# One YYYYMMDD per line; read by trading_calendar.is_trading_day together with
+# maintenance/closed_dates_extra.txt.
+20251024

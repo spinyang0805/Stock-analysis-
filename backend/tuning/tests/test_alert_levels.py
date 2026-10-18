@@ -21,3 +21,10 @@ def test_build_levels_priorities_and_dedup():
     assert ("2317", "take_profit") not in rows and ("1101", "stop") not in rows
     assert rows[("2330", "trailing_stop")][2] == "below" and rows[("2330", "take_profit")][2] == "above"
     assert rows[("2330", "ma20_break")][5] == 2
+
+
+def test_duplicate_level_keeps_higher_priority():
+    state = [{"stock_id": "2330", "name": "A", "status": "open", "user_holds": False, "stop_price": 100.0},
+             {"stock_id": "2330", "name": "A", "status": "exit_signalled", "user_holds": True, "stop_price": 101.0}]
+    rows = {(r[0], r[1]): r for r in alert_levels.build({}, state)}
+    assert rows[("2330", "stop")][5] == 1 and rows[("2330", "stop")][3] == 101.0

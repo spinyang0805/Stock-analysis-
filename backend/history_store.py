@@ -421,7 +421,15 @@ def stream_table(conn, kind, where="", params=(), chunk=100_000, columns=None):
             yield pd.DataFrame(rows, columns=cols)
 
 
-def export_db(since=None):
+RECENT_DAYS = 20   # DB is the source of truth only for recent rows; older store rows were rebuilt/verified
+
+
+def export_db(since=None, recent_days=RECENT_DAYS):
+    """Merge Supabase rows into the store. Rows from the last `recent_days` calendar days win (prefer=new:
+    the daily writers' latest values); OLDER rows only fill keys / NULL fields the store lacks (prefer=old),
+    so a repaired store (TPEx chips rebuild, dealer fix, yfinance replacement) is never overwritten with
+    older DB values."""
+    recent = (today_tw() - timedelta(days=recent_days)).strftime("%Y%m%d")
     conn = connect(readonly=True)
     try:
         for kind in KINDS:
@@ -432,8 +440,11 @@ def export_db(since=None):
                 n += len(df)
                 log(f"  [export] {kind}: {n:,} rows")
             if frames:
-                merge_into_store(kind, pd.concat(frames, ignore_index=True), prefer="new")  # DB 為近期資料真實來源
-            log(f"[export-db] {kind}: {n:,} rows merged")
+                allf = pd.concat(frames, ignore_index=True)
+                new_part, old_part = allf[allf["date"] >= recent], allf[allf["date"] < recent]
+                merge_into_store(kind, new_part, prefer="new")
+                merge_into_store(kind, old_part, prefer="old")
+            log(f"[export-db] {kind}: {n:,} rows merged (>= {recent} prefer DB, older fill-only)")
     finally:
         conn.rollback()
         conn.close()

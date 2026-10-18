@@ -92,21 +92,24 @@ def evaluate(state, adjusted, holdings, as_of, costs=Costs()):
         f = ind.features(g)
         sells = ind.sell_signals(f)
         rule = (p.get("sell_rule") or {}).get("signal")
-        sim = simulate_position(g, f, sells, e, p["plan_hold"], p["stop_pct"], p.get("tp_pct"), rule,
+        # take-profit is NOT an exit rule (the backtest of the deployed policy has none); tp_pct is shown only
+        # as a reference target price
+        sim = simulate_position(g, f, sells, e, p["plan_hold"], p["stop_pct"], None, rule,
                                 ind.ATR_MULT.get(rule, 2.5))
         etf = str(p["stock_id"]).startswith("00")
         last = len(g) - 1
         if sim["status"] == "skipped":
             if holds:                                  # the user bought anyway → follow it from that open
-                sim = simulate_position(g, f, sells, e, p["plan_hold"], p["stop_pct"], p.get("tp_pct"), rule,
+                sim = simulate_position(g, f, sells, e, p["plan_hold"], p["stop_pct"], None, rule,
                                         ind.ATR_MULT.get(rule, 2.5), gap_skip=np.inf)
             if sim["status"] == "skipped":             # not held, or no valid entry fill at all
                 p.update(status="skipped", action="未進場", reason=sim["reason"], exit_date=dates[sim["exit_i"]],
                          closed_on=as_of)
                 closed_today.append(p)
                 continue
+        target = float(g["aopen"].iloc[e]) * (1 + p["tp_pct"]) if p.get("tp_pct") else None
         p.update(entry_date=dates[e], entry_price=_r(float(g["open"].iloc[e])),
-                 days_held=sim["held"], stop_price=_r(sim["stop"]), tp_price=_r(sim["tp"]),
+                 days_held=sim["held"], stop_price=_r(sim["stop"]), tp_price=_r(target) if target else None,
                  last_close=_r(float(g["close"].iloc[last])),
                  ret_net=round(float(costs.net(sim["ret"], etf)), 4) if sim["ret"] is not None else None)
         stale_note = f"（資料停在 {dates[-1]}）" if stale else ""

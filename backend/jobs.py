@@ -550,8 +550,9 @@ def write_t86_chips(start_date: str, result: dict):
         # which also contains "自營商", causing both foreign_i and dealer_i to land on index 4.
         foreign_i = _idx(fields, "外陸資", "買賣超", default=4)
         trust_i = _idx(fields, "投信", "買賣超", default=10)
-        # "自營商買賣超股數" is a longer unique key that won't match index 4
-        dealer_i = _idx(fields, "自營商買賣超股數", default=11)
+        # exact match: a substring search hits "外資自營商買賣超股數" (index 7, foreign dealers, almost always 0)
+        # before the real "自營商買賣超股數" (index 11) — that bug stored dealer = 0 for every stock
+        dealer_i = _idx_exact(fields, "自營商買賣超股數", default=11)
         total_i = _idx(fields, "三大法人", "買賣超", default=18)
         bulk_rows = []
         for row in rows:

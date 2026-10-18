@@ -71,6 +71,7 @@ jobs:
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}     # AI commentary fallback when the PC's version is absent
           NO_WAIT: ${{ github.event.inputs.no_wait }}
         run: |
           if [ "$NO_WAIT" = "true" ]; then python backend/tuning/send_daily.py --no-wait

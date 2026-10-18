@@ -21,7 +21,14 @@ def setup(tmp_path, monkeypatch, as_of, fail=()):
     monkeypatch.setattr(send_daily.notify, "load_env", lambda: None)
     monkeypatch.setattr(send_daily.cal, "is_trading_day", lambda d: True)
     monkeypatch.setattr(send_daily, "prev_trading_day", lambda now: "20261016")
+    monkeypatch.setattr(send_daily, "ai_section", lambda dir_, d: "")
     return calls
+
+
+def test_ai_section_appends_pc_commentary(tmp_path, monkeypatch):
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    (tmp_path / "ai_20261016.md").write_text("## AI 解讀\n內容", encoding="utf-8")
+    assert "AI 解讀" in send_daily.ai_section(str(tmp_path), "20261016")
 
 
 def test_sends_once_per_channel_and_retries_only_failed(tmp_path, monkeypatch):

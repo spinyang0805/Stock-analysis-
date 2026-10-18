@@ -224,6 +224,43 @@ def heal_stale_stocks(limit: int, months: int = 2, min_recent_rows: int = 25,
     print(f"[heal] done (budget exhausted): healed={healed} noop={noop} failed={failed}")
 
 
+def heal_chip_dates(days: int = 30, max_dates: int = 10, min_ratio: float = 0.7):
+    """Re-fetch chips for recent trading days whose chip rows (per market) are far below that day's price rows.
+    The daily writers only cover the latest session, so a failed T86 / MI_MARGN / TPEx fetch used to leave a
+    permanent hole (e.g. TWSE chips 2026-04-01..04-22). Covers both markets and all four chip sources."""
+    import trading_calendar as cal
+    from datetime import date, timedelta as td
+    from firebase_cache import _run
+    from jobs import write_margin_chips, write_t86_chips, write_tpex_insti_chips, write_tpex_margin_chips
+    end = date.today()
+    tdays = cal.trading_days((end - td(days=days)).strftime("%Y%m%d"), (end - td(days=1)).strftime("%Y%m%d"))
+    if not tdays:
+        return
+    rows, err = _run(
+        """SELECT s.date, s.market, s.n, COALESCE(c.n, 0)
+             FROM (SELECT date, market, count(*) n FROM stock_daily WHERE date = ANY(%s) GROUP BY 1, 2) s
+             LEFT JOIN (SELECT date, market, count(*) n FROM chip_daily WHERE date = ANY(%s) GROUP BY 1, 2) c
+               ON c.date = s.date AND c.market = s.market""",
+        (tdays, tdays), fetch="all")
+    if err:
+        print(f"[heal-chips] scan failed: {err}")
+        return
+    bad = sorted({(r[0], r[1]) for r in rows or [] if r[1] in ("TWSE", "TPEx") and r[3] < min_ratio * r[2]},
+                 reverse=True)[:max_dates]
+    print(f"[heal-chips] {len(bad)} (date, market) with chips < {min_ratio:.0%} of prices: {bad}")
+    for d, mk in bad:
+        res = {"errors": [], "chips": 0, "margin_rows": 0}
+        try:
+            if mk == "TWSE":
+                n1, n2 = write_t86_chips(d, res), write_margin_chips(d, res)
+            else:
+                n1, n2 = write_tpex_insti_chips(d, res), write_tpex_margin_chips(d, res)
+            print(f"[heal-chips] {d} {mk}: insti={n1} margin={n2} errors={res['errors'][:2]}")
+        except Exception as exc:
+            print(f"[heal-chips] {d} {mk} failed: {exc}")
+        time.sleep(1.5)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Daily stock data update")
     parser.add_argument("--lookback", type=int, default=5)
@@ -258,6 +295,11 @@ def main():
               f"TPEx={val.get('tpex_valuation_written', 0)}")
     except Exception as exc:
         print(f"[daily] valuation failed: {exc}")
+
+    try:
+        heal_chip_dates()
+    except Exception as exc:
+        print(f"[daily] heal-chips failed: {exc}")
 
     if args.heal:
         heal_stale_stocks(args.heal_limit, months=args.heal_months,

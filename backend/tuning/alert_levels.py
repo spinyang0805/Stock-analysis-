@@ -36,7 +36,7 @@ def build(out, state):
         if price is None or not price > 0:
             return
         key = (code, kind)
-        if key not in rows or priority < rows[key][4]:
+        if key not in rows or priority < rows[key][5]:
             rows[key] = (code, kind, direction, float(price), label, priority)
 
     for p in state:
@@ -44,7 +44,7 @@ def build(out, state):
             continue
         pri = 1 if p.get("user_holds") else 2
         add(p["stock_id"], "stop", "below", p.get("stop_price"), f"{p['name']} 追蹤停損", pri)
-        add(p["stock_id"], "take_profit", "above", p.get("tp_price"), f"{p['name']} 停利價", 2)
+        add(p["stock_id"], "take_profit", "above", p.get("tp_price"), f"{p['name']} 達目標價（參考）", 2)
     for s in out.get("sell_alerts", []):
         lv = out.get("intraday_levels", {}).get(s["stock_id"], {})
         add(s["stock_id"], "trailing_stop", "below", lv.get("trailing_stop"), f"{s['name']} 持股移動停損", 1)

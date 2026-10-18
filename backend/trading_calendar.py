@@ -121,10 +121,32 @@ def holiday_name(yyyymmdd: str):
     return _state["holidays"].get(yyyymmdd)
 
 
+_CLOSURE_FILES = (os.path.join(BACKEND_DIR, "known_closures.txt"),
+                  os.path.join(BACKEND_DIR, "maintenance", "closed_dates_extra.txt"))
+_known_closed = None
+
+
+def known_closures() -> set:
+    """Confirmed closures kept in the repo (older years, typhoon days) — complements the API / cache."""
+    global _known_closed
+    if _known_closed is None:
+        s = set()
+        for p in _CLOSURE_FILES:
+            try:
+                with open(p, encoding="utf-8") as f:
+                    s |= {ln.strip() for ln in f if re.fullmatch(r"\d{8}", ln.strip())}
+            except OSError:
+                pass
+        _known_closed = s
+    return _known_closed
+
+
 def is_trading_day(yyyymmdd: str) -> bool:
     if yyyymmdd in MAKEUP_SATURDAYS:
         return True
     if datetime.strptime(yyyymmdd, "%Y%m%d").weekday() >= 5:
+        return False
+    if yyyymmdd in known_closures():
         return False
     load()
     return yyyymmdd not in _state["holidays"]

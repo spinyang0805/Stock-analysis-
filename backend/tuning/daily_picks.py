@@ -44,7 +44,7 @@ def render(out, state, added, closed_today, top):
     if not buys:
         L.append("今日無符合條件的股票。")
     else:
-        L.append("| # | 代號 | 名稱 | 訊號 | 參考收盤 | 停損 | 停利 | 持有日 | 回測勝率 | 回測次數 |")
+        L.append("| # | 代號 | 名稱 | 訊號 | 參考收盤 | 停損 | 目標（參考） | 持有日 | 回測勝率 | 回測次數 |")
         L.append("|---:|---|---|---|---:|---:|---:|---:|---:|---:|")
         for i, b in enumerate(buys, 1):
             tag = "" if b.get("reliable") else "（試行）"
@@ -57,7 +57,7 @@ def render(out, state, added, closed_today, top):
     if not act:
         L.append("目前沒有追蹤中的推薦。")
     else:
-        L.append("| 代號 | 名稱 | 推薦日 | 進場價 | 收盤 | 報酬(扣成本) | 持有/計畫 | 停損 | 停利 | 建議 | 原因 |")
+        L.append("| 代號 | 名稱 | 推薦日 | 進場價 | 收盤 | 報酬(扣成本) | 持有/計畫 | 停損 | 目標（參考） | 建議 | 原因 |")
         L.append("|---|---|---|---:|---:|---:|---:|---:|---:|---|---|")
         order = {"出場": 0, "注意": 1, "續抱": 2, "待進場": 3}
         for p in sorted(act, key=lambda p: order.get(p.get("action"), 9)):

@@ -44,7 +44,8 @@ from tuning.data import OUT_DIR, log  # noqa: E402
 
 LEVELS = ("stock", "group", "uniform")
 LEVEL_W = {"stock": 1.0, "group": 0.8, "uniform": 0.6, "none": 0.0}  # confidence discount by evidence level
-DEFAULT_LEVEL = "group"  # train-only prior when the inner validation window has no trades
+DEFAULT_LEVEL = "group"  # train-only prior when the inner validation window has too few trades
+MIN_VAL_TRADES = 2       # a level competes in the inner validation only with at least this many trades
 
 
 @dataclass
@@ -60,6 +61,7 @@ class Cfg:
     max_signals: int = 3
     min_train_events: int = 10
     exploratory: bool = True    # until Phase B (calibrated inference + deployed-exit simulation) is done
+    holdout_days: int = 126     # last ~6 months: excluded from every fold, evaluated once at the end
     stable_frac: float = 2 / 3
     rebalance_days: int = 21
     turnover_lookback: int = 60
@@ -290,9 +292,11 @@ def make_folds(prep, cfg):
     train = min(cfg.train_days, max(cfg.min_train_days, avail - 2 * cfg.test_days))
     if avail - train < max(cfg.horizons) + 5 or train <= cfg.test_days:
         raise SystemExit(f"not enough history: {avail} trading days available, train {train}")
+    # the last holdout_days sessions are never a fold test window (final check, see holdout_eval)
+    end = len(cal) - cfg.holdout_days
     folds, s = [], start + train
-    while s < len(cal) - min(cfg.horizons):
-        folds.append({"k": len(folds), "train_lo": s - train, "test_lo": s, "test_hi": min(s + cfg.test_days, len(cal))})
+    while s < end - min(cfg.horizons):
+        folds.append({"k": len(folds), "train_lo": s - train, "test_lo": s, "test_hi": min(s + cfg.test_days, end)})
         s += cfg.test_days
     return cal, pos, folds, train, avail
 
@@ -314,8 +318,12 @@ def nested_choose(events, lo, hi, groups_at, cfg, sids):
     g_in = groups_at(v)
     s_in = ev_mod.select(tr[(tr["p"] < v) & (tr["xp"] < v)], g_in, cfg, "buy")
     val = tr[tr["p"] >= v]
-    vscore = {lv: ev_mod.strategy_trades(val, ch, "buy").groupby("stock_id")["xnet"].mean()
-              for lv, ch in level_choices(s_in, g_in, sids).items()}
+    # same objective as candidate selection (excess per holding day, xpd) and a minimum of validation
+    # evidence: a level needs >= MIN_VAL_TRADES validation trades to compete, otherwise DEFAULT_LEVEL
+    vscore = {}
+    for lv, ch in level_choices(s_in, g_in, sids).items():
+        vt = ev_mod.strategy_trades(val, ch, "buy").groupby("stock_id")["xpd"].agg(["mean", "size"])
+        vscore[lv] = vt.loc[vt["size"] >= MIN_VAL_TRADES, "mean"]
     g_full = groups_at(hi)
     s_full = ev_mod.select(tr, g_full, cfg, "buy")
     full = level_choices(s_full, g_full, sids)
@@ -351,6 +359,7 @@ def run(args):
     all_sids = list(prep["adjusted"])
     trades, sell_trades, hold_trades = [], [], []
     busy = {}                     # (strategy) → {stock: exit position of its last OOS trade}, carried across folds
+    sell_by_fold = {}             # fold → {stock: (sell signal, h)} chosen on that fold's train window
     for fd in folds:
         lo, hi, th = fd["train_lo"], fd["test_lo"], fd["test_hi"]
         levels, choices, s_full, groups, tr = nested_choose(events, lo, hi, groups_at, cfg, all_sids)
@@ -367,6 +376,8 @@ def run(args):
                                     "buy", busy.setdefault("_hold", {}))
         hold_trades.append(ht.assign(fold=fd["k"]))
         ssel = ev_mod.select(tr, groups, cfg, "sell")
+        sell_by_fold[fd["k"]] = {sid: (ssel["stock"].get(sid) or ssel["group"].get(groups.get(sid))
+                                       or [DEFAULT_SELL])[0] for sid in all_sids}
         st = ev_mod.strategy_trades(te, ssel["stock"], "sell", busy.setdefault("_sell", {}))
         sell_trades.append(st.assign(fold=fd["k"], avoid=-st["gross"], xavoid=-st["excess"]))
         lv_cnt = pd.Series(levels).loc[lambda s: s.index.isin(set(te["stock_id"]))].value_counts().to_dict()
@@ -375,6 +386,12 @@ def run(args):
     trades = pd.concat(trades, ignore_index=True)
     sell_trades = pd.concat(sell_trades, ignore_index=True)
     hold_trades = pd.concat(hold_trades, ignore_index=True)
+    # deployed exit policy (stop / ATR trailing / tuned sell signal / time) on the adaptive OOS entries
+    ad_mask = trades["strategy"] == "adaptive"
+    dep = deployed_eval(trades[ad_mask], prep, sell_by_fold, costs)
+    trades.loc[ad_mask, "dep_net"] = dep["dep_net"].to_numpy()
+    trades.loc[ad_mask, "dep_reason"] = dep["dep_reason"].to_numpy()
+    holdout = holdout_eval(events, cal, groups_at, cfg, all_sids, train_days, prep, costs)
 
     # production choice: same nested procedure on the most recent window (all completed events)
     n = len(cal)
@@ -383,8 +400,63 @@ def run(args):
     fsell = ev_mod.select(final_tr, groups, cfg, "sell")
     params = decide(prep, cfg, trades, hold_trades, sell_trades, flevels, fchoices, fsel, fsell, groups,
                     events, train_days)
-    write_outputs(args, cfg, prep, params, trades, sell_trades, folds, cal, train_days, avail, fsel, time.time() - t0)
+    write_outputs(args, cfg, prep, params, trades, sell_trades, folds, cal, train_days, avail, fsel, time.time() - t0,
+                  holdout)
     return params, trades
+
+
+DEFAULT_SELL = ("s_atr_25", 10)
+DEPLOY_STOP_ATR = 2.5   # initial stop = entry − 2.5 × ATR (same as score_today's stop_pct)
+
+
+def deployed_eval(tr, prep, sell_by_fold, costs):
+    """Re-simulate OOS entries with the exit policy the tracker actually uses (simulate.py): initial ATR stop,
+    ATR trailing stop, the fold's tuned sell signal, planned holding days; exits at the next valid open.
+    Returns a frame aligned to tr with dep_net / dep_reason (NaN when the entry is not simulable)."""
+    from tuning.simulate import simulate_position
+    out_net = np.full(len(tr), np.nan)
+    out_why = np.array([None] * len(tr), dtype=object)
+    if not len(tr):
+        return pd.DataFrame({"dep_net": out_net, "dep_reason": out_why})
+    pos_in = np.arange(len(tr))
+    for sid, idx in pd.Series(pos_in, index=tr["stock_id"].to_numpy()).groupby(level=0):
+        g = prep["adjusted"].get(sid)
+        if g is None:
+            continue
+        g = g.reset_index(drop=True)
+        f = ind.features(g)
+        sells = ind.sell_signals(f)
+        di = {d: i for i, d in enumerate(g["date"].astype(str))}
+        etf = bool(prep["meta"][sid]["etf"])
+        atr, ac = f["atr"].to_numpy(float), g["aclose"].to_numpy(float)
+        for k in idx.to_numpy():
+            r = tr.iloc[k]
+            t = di.get(str(r["date"]))
+            if t is None:
+                continue
+            rule, _ = sell_by_fold.get(int(r["fold"]), {}).get(sid, DEFAULT_SELL)
+            mult = ind.ATR_MULT.get(rule, DEPLOY_STOP_ATR)       # = params stop_atr_mult used by score_today
+            stop_pct = -mult * atr[t] / ac[t] if np.isfinite(atr[t]) and ac[t] > 0 else -0.08
+            sim = simulate_position(g, f, sells, t + 1, int(r["h"]), stop_pct, None, rule,
+                                    ind.ATR_MULT.get(rule, 2.5))
+            if sim["status"] == "closed":
+                out_net[k] = costs.net(sim["ret"], etf)
+                out_why[k] = sim["reason"]
+    return pd.DataFrame({"dep_net": out_net, "dep_reason": out_why})
+
+
+def holdout_eval(events, cal, groups_at, cfg, sids, train_days, prep, costs):
+    """Choose on the train window that ends where the holdout starts, then trade the untouched holdout once."""
+    n, H = len(cal), cfg.holdout_days
+    if H <= 0 or n - H - train_days < 0:
+        return None
+    levels, choices, s_full, groups, tr = nested_choose(events, n - H - train_days, n - H, groups_at, cfg, sids)
+    te = events[(events["p"] >= n - H) & events["in_u"]]
+    out = {}
+    for name, ch in {**level_choices(s_full, groups, sids), "adaptive": choices}.items():
+        t = ev_mod.strategy_trades(te, ch, "buy")
+        out[name] = ev_mod.summarize(t) if len(t) else None
+    return {"start": cal[n - H], "end": cal[-1], "by_strategy": out}
 
 
 def fold_stability(tr, col="xnet"):
@@ -411,7 +483,13 @@ def decide(prep, cfg, trades, hold_trades, sell_trades, flevels, fchoices, fsel,
         t = by_stock.get(sid, ad.iloc[:0])
         s = ev_mod.summarize(t)
         nf, npos = fold_stability(t) if len(t) else (0, 0)
-        s.update(folds=nf, folds_pos=npos, p_oos=one_sided_p(s["xt"]) if s["n"] >= cfg.n_min else 1.0)
+        if s["n"] >= cfg.n_min:
+            # conservative: the larger of the normal-t p and a block-bootstrap p on the dated trade sequence
+            xs = t.sort_values("date")["xnet"].to_numpy()
+            p_oos = max(one_sided_p(s["xt"]), ev_mod.block_boot_p(xs, seed=int(sid) if sid.isdigit() else 0))
+        else:
+            p_oos = 1.0
+        s.update(folds=nf, folds_pos=npos, p_oos=p_oos)
         summ[sid] = s
     tested = [sid for sid in summ if sid in cur or by_stock.get(sid) is not None]
     rej = ev_mod.bh_reject([summ[s]["p_oos"] for s in tested], cfg.fdr_q)
@@ -426,8 +504,12 @@ def decide(prep, cfg, trades, hold_trades, sell_trades, flevels, fchoices, fsel,
         s = summ[sid]
         in_u = sid in cur
         chosen = fchoices.get(sid, [])
+        dt = by_stock.get(sid)
+        dep_mean = float(dt["dep_net"].mean()) if dt is not None and "dep_net" in dt and dt["dep_net"].notna().any() \
+            else float("nan")
         gates = {"in_universe": in_u, "n_min": s["n"] >= cfg.n_min, "mean_pos": bool(s["mean"] > 0),
                  "xnet_pos": bool(s["xnet"] > 0),
+                 "deployed_pos": bool(np.isfinite(dep_mean) and dep_mean > 0),   # the exits actually used
                  "stable": s["folds"] > 0 and s["folds_pos"] / s["folds"] >= cfg.stable_frac,
                  "oos_bh": bool(bh.get(sid, False)), "has_signals": bool(chosen)}
         gates_all = all(gates.values())
@@ -467,6 +549,7 @@ def decide(prep, cfg, trades, hold_trades, sell_trades, flevels, fchoices, fsel,
             "oos_n": s["n"], "oos_n_eff": s["n_eff"], "oos_mean": s["mean"], "oos_median": s["median"],
             "oos_win": s["win"], "oos_t": s["t"], "oos_excess": s["excess"], "oos_xnet": s["xnet"], "oos_xt": s["xt"],
             "oos_p": s["p_oos"], "oos_mae_med": s["mae_med"], "oos_mfe_med": s["mfe_med"],
+            "oos_deployed_mean": dep_mean if np.isfinite(dep_mean) else None,
             "oos_folds": s["folds"], "oos_folds_pos": s["folds_pos"],
             "holding_only_oos": ev_mod.summarize(ht) if ht is not None else None,
             "confidence": round(conf, 4), "tp_pct": tp, "mae_p20": mae20,
@@ -509,7 +592,8 @@ def _fmt(x, pct=True, d=2):
     return f"{x * 100:.{d}f}%" if pct else f"{x:.{d}f}"
 
 
-def write_outputs(args, cfg, prep, params, trades, sell_trades, folds, cal, train_days, avail, fsel, runtime):
+def write_outputs(args, cfg, prep, params, trades, sell_trades, folds, cal, train_days, avail, fsel, runtime,
+                  holdout=None):
     os.makedirs(args.out_dir, exist_ok=True)
     doc = json_safe({"generated_at": datetime.now().isoformat(timespec="seconds"),
                      "config": asdict(cfg) | {"source": args.source, "universe": args.universe, "years": args.years,
@@ -566,6 +650,20 @@ def write_outputs(args, cfg, prep, params, trades, sell_trades, folds, cal, trai
     if len(ad):
         L.append("adaptive 各層級 OOS：" + "，".join(
             f"{lv} n={len(d)} 淨超額 {_fmt(d['xnet'].mean())}" for lv, d in ad.groupby("level")))
+    if len(ad) and "dep_net" in ad:
+        dp = ad.dropna(subset=["dep_net"])
+        L.append("\n## 實際部署出場規則的 OOS（同一批進場；初始停損 2.5×ATR、移動停損、該 fold 的出場訊號、到期，皆隔日開盤出場）\n")
+        L.append(f"- 可模擬 {len(dp)} / {len(ad)} 筆：平均淨報酬 {_fmt(dp['dep_net'].mean())}（固定持有天數 {_fmt(dp['net'].mean())}），"
+                 f"勝率 {_fmt((dp['dep_net'] > 0).mean(), d=1)}")
+        why = dp["dep_reason"].fillna("").str.replace(r"（.*", "", regex=True).str.replace(r"持有 \d+ 日.*", "到期", regex=True)
+        L.append("- 出場原因：" + "，".join(f"{k or '?'} {v}" for k, v in why.value_counts().items()))
+    if holdout:
+        L.append(f"\n## 保留驗證期（{holdout['start']}..{holdout['end']}，不參與任何 fold，只在這裡用一次）\n")
+        L.append("| 策略 | 交易數 | 平均淨報酬 | 勝率 | 淨超額 |\n|---|---:|---:|---:|---:|")
+        for name in ("adaptive", "stock", "group", "uniform"):
+            s = holdout["by_strategy"].get(name)
+            L.append(f"| {names[name]} | {s['n'] if s else 0} | {_fmt(s['mean']) if s else '–'} | "
+                     f"{_fmt(s['win'], d=1) if s else '–'} | {_fmt(s['xnet']) if s else '–'} |")
     df = pd.DataFrame(params)
     gate_df = pd.DataFrame(list(df["gates"]))
     L.append("\n## 可靠度閘門（只用 OOS；BH 跨全部股票）\n")

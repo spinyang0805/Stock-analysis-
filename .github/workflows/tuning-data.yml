@@ -94,6 +94,13 @@ jobs:
         continue-on-error: true
         run: python backend/tuning/fetch_extra.py revenue --start 20220101 --sleep 3
 
+      - name: revenue → fundamentals (website)
+        if: contains(env.KINDS, 'revenue')
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}   # updates fundamentals.revenue* only, newer months only
+        run: python backend/maintenance/update_fundamentals_revenue.py --apply
+
       - name: tdcc weekly
         if: contains(env.KINDS, 'tdcc')
         continue-on-error: true

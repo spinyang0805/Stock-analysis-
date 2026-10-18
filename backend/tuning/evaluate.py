@@ -94,15 +94,19 @@ def stock_events(sid, g, horizons, costs, etf):
                 pos = np.flatnonzero((s & (ok if side == "buy" else fr["gross"].notna())).to_numpy())
                 if not len(pos):
                     continue
-                pos = thin(pos, h)
+                # keep every causal event; 'stat' marks the non-overlapping subset used for selection
+                # statistics (t-stats are not inflated), while strategy simulation sees all events and enforces
+                # one-position-at-a-time itself — so a thinned-out event can still be traded live-like
+                keep = set(thin(pos, h))
                 sub = fr.iloc[pos]
                 rows.append(pd.DataFrame({
                     "stock_id": sid, "side": side, "signal": name, "h": h, "date": dates[pos],
+                    "stat": [i in keep for i in pos],
                     "exit_date": sub["exit_date"].to_numpy(), "gross": sub["gross"].to_numpy(),
                     "mae": sub["mae"].to_numpy(), "mfe": sub["mfe"].to_numpy(),
                     "struct": st_reg[pos], "mkt": mk_reg[pos]}))
     ev = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(
-        columns=["stock_id", "side", "signal", "h", "date", "exit_date", "gross", "mae", "mfe", "struct", "mkt"])
+        columns=["stock_id", "side", "signal", "h", "date", "stat", "exit_date", "gross", "mae", "mfe", "struct", "mkt"])
     ev["net"] = np.where(ev["side"] == "buy", costs.net(ev["gross"].astype(float), etf), np.nan)
     return ev, pd.concat(fwd_all, ignore_index=True), f, buys, sells
 
@@ -119,6 +123,26 @@ def agg_stats(df, keys, col="net"):
     st["t"] = st["mean"] / (st["sd"] / np.sqrt(st["n"])).replace(0, np.nan)
     st["t"] = st["t"].fillna(0.0)
     return st
+
+
+def block_boot_p(x, block=3, n_boot=2000, seed=0):
+    """One-sided p-value for mean(x) > 0 by a centred moving-block bootstrap of the chronologically ordered
+    trade returns (keeps short-range serial dependence and heavy tails; no normality assumption).
+    p = share of bootstrap means of the centred series that are >= the observed mean."""
+    x = np.asarray(x, float)
+    x = x[np.isfinite(x)]
+    n = len(x)
+    if n < 5:
+        return 1.0
+    m = x.mean()
+    c = x - m
+    b = max(1, min(block, n))
+    starts = np.arange(n - b + 1)
+    k = int(np.ceil(n / b))
+    rng = np.random.default_rng(seed)
+    idx = (rng.choice(starts, size=(n_boot, k))[:, :, None] + np.arange(b)[None, None, :]).reshape(n_boot, -1)[:, :n]
+    bm = c[idx].mean(axis=1)
+    return float((np.sum(bm >= m) + 1) / (n_boot + 1))
 
 
 def bh_reject(p, q=0.10):
@@ -168,7 +192,10 @@ def select(train, groups, cfg, side="buy"):
     and the scored candidate table. Ranking column: xpd (buy) / apd (sell).
     Score = shrunk mean = w*stock + (1-w)*group, w = n/(n+k)."""
     col = "xpd" if side == "buy" else "apd"
-    tr = train[train["side"] == side].copy()
+    tr = train[train["side"] == side]
+    if "stat" in tr:                       # selection statistics on the non-overlapping subset only
+        tr = tr[tr["stat"].astype(bool)]
+    tr = tr.copy()
     if tr.empty:
         return {"stock": {}, "group": {}, "uniform": [], "group_stats": pd.DataFrame(), "uniform_stats": pd.DataFrame(),
                 "cand": pd.DataFrame(columns=["stock_id", "signal", "h", "n", "mean", "t", "score", "p", "fdr_pass"])}
