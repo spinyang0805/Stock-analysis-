@@ -16,6 +16,7 @@ Outputs (history/out/ by default):
   stock_params.parquet / stock_params.json   per-stock choice, OOS metrics, confidence, flags
   tuning_report.md                           method summary + strategy comparison
   oos_trades.parquet                         every OOS trade of every strategy (audit)
+  deployed_trades.parquet                    event-driven deployed-policy OOS record (reliability gates)
   adjust_coverage.csv / data_quality.csv     adjustment + cleaning stats per stock
 Nothing is written to the database (all DB access is READ ONLY).
 """
@@ -428,58 +429,65 @@ def deployed_trades(events, choices_by_fold, sell_by_fold, prep, cal, costs):
     end = next(iter(choices_by_fold.values()))[1]["end"]
     cut = cal[end] if end < len(cal) else None
     pos = {d: i for i, d in enumerate(cal)}
-    panel = pd.DataFrame({sid: g.set_index("date")["aopen"] for sid, g in prep["adjusted"].items()}).reindex(cal)
-    pa = panel.to_numpy(float)
-    ev = events[(events["side"] == "buy") & events["in_u"]]
-    ev_by = dict(tuple(ev.groupby("stock_id"))) if len(ev) else {}
+    sids = list(prep["adjusted"])
+    col = {s: j for j, s in enumerate(sids)}
+    pa = pd.DataFrame({sid: g.set_index("date")["aopen"] for sid, g in prep["adjusted"].items()}) \
+        .reindex(cal)[sids].to_numpy(float)
+    inu = prep.get("inu")
+    if inu is not None:                    # point-in-time universe: members known on each signal date
+        mem = {d: np.array([col[s] for s in grp["stock_id"] if s in col], int)
+               for d, grp in inu.groupby("date")}
+        member = set(zip(inu["date"], inu["stock_id"]))
+    else:
+        mem, member = None, None
     rows = []
-    for sid, evs in ev_by.items():
-        chosen_any = any(ch.get(sid) for ch, _ in choices_by_fold.values())
-        g = prep["adjusted"].get(sid)
-        if not chosen_any or g is None:
+    for sid in sids:
+        if not any(ch.get(sid) for ch, _ in choices_by_fold.values()):
             continue
+        g = prep["adjusted"][sid]
         g = g[g["date"] < cut].reset_index(drop=True) if cut else g.reset_index(drop=True)
         if len(g) < 60:
             continue
+        # candidates from the CAUSAL buy signals (not from labelled events, which need a future fixed exit)
         f = ind.features(g)
-        sells = ind.sell_signals(f)
-        di = {d: i for i, d in enumerate(g["date"].astype(str))}
+        buys, sells = ind.buy_signals(f), ind.sell_signals(f)
+        dates = g["date"].astype(str).to_numpy()
+        gpos = np.array([pos.get(d, -1) for d in dates])
         atr, ac = f["atr"].to_numpy(float), g["aclose"].to_numpy(float)
         etf = bool(prep["meta"][sid]["etf"])
-        busy = -1                                         # calendar position until which a position is open
+        busy = -1                         # calendar position of the last exit (open of that session)
         for k in sorted(choices_by_fold):
             ch, fd = choices_by_fold[k]
-            chosen = ch.get(sid) or []
+            chosen = [(s, h) for s, h in (ch.get(sid) or []) if s in buys]
             if not chosen:
                 continue
-            rank = {(s, h): i for i, (s, h) in enumerate(chosen)}
-            d = evs[(evs["p"] >= fd["test_lo"]) & (evs["p"] < fd["test_hi"])]
-            d = d[[(s, h) in rank for s, h in zip(d["signal"], d["h"])]]
-            if not len(d):
-                continue
-            d = d.assign(_r=[rank[(s, h)] for s, h in zip(d["signal"], d["h"])]).sort_values(["p", "_r"])
-            d = d.drop_duplicates("p")
             rule, _ = sell_by_fold.get(k, {}).get(sid, DEFAULT_SELL)
             mult = ind.ATR_MULT.get(rule, DEPLOY_STOP_ATR)       # = params stop_atr_mult used by score_today
-            for r in d.itertuples():
-                if r.p < busy:
+            fired = np.column_stack([buys[s].to_numpy(bool) for s, _ in chosen])
+            window = (gpos >= fd["test_lo"]) & (gpos < fd["test_hi"])
+            for t in np.flatnonzero(window & fired.any(axis=1)):
+                # same rule as the live tracker: a stock exited on session X is not picked again on X's close
+                if gpos[t] <= busy:
                     continue
-                t = di.get(str(r.date))
-                if t is None:
+                if member is not None and (dates[t], sid) not in member:
                     continue
+                s, h = chosen[int(np.argmax(fired[t]))]          # best-ranked chosen signal that fired
                 stop_pct = -mult * atr[t] / ac[t] if np.isfinite(atr[t]) and ac[t] > 0 else -0.08
-                sim = simulate_position(g, f, sells, t + 1, int(r.h), stop_pct, None, rule, mult)
+                sim = simulate_position(g, f, sells, t + 1, int(h), stop_pct, None, rule, mult)
                 if sim["status"] == "skipped":
                     continue
                 if sim["status"] != "closed":             # still open when the holdout starts → not counted
                     busy = 10 ** 9
                     break
-                e_p, x_p = pos[g["date"].iloc[sim["entry_i"]]], pos[g["date"].iloc[sim["exit_i"]]]
+                e_p, x_p = gpos[sim["entry_i"]], gpos[sim["exit_i"]]
+                cols = mem.get(dates[t]) if mem is not None else None
                 with np.errstate(invalid="ignore", divide="ignore"):
-                    bench = float(np.nanmean(pa[x_p] / pa[e_p] - 1))
+                    r_all = pa[x_p] / pa[e_p] - 1
+                    bench = float(np.nanmean(r_all[cols] if cols is not None and len(cols) else r_all))
                 net = float(costs.net(sim["ret"], etf))
-                rows.append({"stock_id": sid, "fold": k, "date": r.date, "signal": r.signal, "h": int(r.h),
-                             "p": r.p, "xp": x_p, "dep_net": net, "dep_x": net - bench,
+                rows.append({"stock_id": sid, "fold": k, "date": dates[t], "signal": s, "h": int(h),
+                             "p": int(gpos[t]), "entry_date": dates[sim["entry_i"]], "exit_date": dates[sim["exit_i"]],
+                             "xp": int(x_p), "dep_net": net, "bench": bench, "dep_x": net - bench,
                              "dep_reason": sim["reason"]})
                 busy = x_p
     return pd.DataFrame(rows)
@@ -656,6 +664,8 @@ def write_outputs(args, cfg, prep, params, trades, sell_trades, folds, cal, trai
         flat[c] = flat[c].map(lambda v: json.dumps(v, ensure_ascii=False, allow_nan=False))
     flat.to_parquet(os.path.join(args.out_dir, "stock_params.parquet"), index=False)
     trades.to_parquet(os.path.join(args.out_dir, "oos_trades.parquet"), index=False)
+    if dep_trades is not None and len(dep_trades):          # the record the reliability gates are based on
+        dep_trades.to_parquet(os.path.join(args.out_dir, "deployed_trades.parquet"), index=False)
     prep["coverage"].to_csv(os.path.join(args.out_dir, "adjust_coverage.csv"), encoding="utf-8-sig")
     prep["quality"].to_csv(os.path.join(args.out_dir, "data_quality.csv"), encoding="utf-8-sig")
 

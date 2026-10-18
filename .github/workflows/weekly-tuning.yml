@@ -71,5 +71,6 @@ jobs:
             --notes "Latest per-stock tuning output (stock_params.json, tuning_report.md). Managed by weekly-tuning.yml." --latest=false
           python -c "import json;d=json.load(open('history/out/stock_params.json',encoding='utf-8'));assert len(d['stocks'])>=50,len(d['stocks'])"
           gh release upload tuning-out history/out/stock_params.json history/out/tuning_report.md --clobber
+          [ -f history/out/deployed_trades.parquet ] && gh release upload tuning-out history/out/deployed_trades.parquet --clobber || true
           echo "### Tuning report" >> "$GITHUB_STEP_SUMMARY"
           head -40 history/out/tuning_report.md >> "$GITHUB_STEP_SUMMARY"
