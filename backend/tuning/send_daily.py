@@ -125,8 +125,11 @@ def ai_section(dir_, d):
     path = os.path.join(dir_, f"ai_{d}.md")
     if not os.path.exists(path) and os.environ.get("GH_TOKEN"):
         import subprocess
-        subprocess.run(["gh", "release", "download", "daily-picks", "-p", f"ai_{d}.md", "-D", dir_, "--clobber"],
-                       capture_output=True)
+        try:                                   # bounded: a stalled / missing gh must never block delivery
+            subprocess.run(["gh", "release", "download", "daily-picks", "-p", f"ai_{d}.md", "-D", dir_,
+                            "--clobber"], capture_output=True, timeout=60)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            print(f"[send] AI download skipped: {exc}")
     if not os.path.exists(path):
         try:
             from tuning import ai_commentary

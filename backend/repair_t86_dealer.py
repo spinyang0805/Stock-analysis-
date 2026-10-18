@@ -51,9 +51,10 @@ def fetch_dealer(jobs, d, sleep):
 
 def bad_dates_store():
     g = os.path.join(HISTORY, "chips_*.parquet").replace("\\", "/")
-    r = duckdb.sql(f"""SELECT date, count(dealer_buy) nn, count(*) FILTER (WHERE dealer_buy <> 0) nz
+    # coverage by TWSE row count (an all-NULL dealer column is just as broken as an all-zero one)
+    r = duckdb.sql(f"""SELECT date, count(*) n, count(*) FILTER (WHERE dealer_buy <> 0) nz
                        FROM read_parquet('{g}', union_by_name=true) WHERE market = 'TWSE' GROUP BY 1""").df()
-    return sorted(r.loc[(r["nn"] > 100) & (r["nz"] <= 5), "date"])
+    return sorted(r.loc[(r["n"] > 100) & (r["nz"] <= 5), "date"])
 
 
 def fix_store(jobs, sleep):
@@ -95,7 +96,7 @@ def fix_db(jobs, sleep, apply):
     conn = connect()
     with conn.cursor() as cur:
         cur.execute("""SELECT date FROM chip_daily WHERE market = 'TWSE' AND date >= %s GROUP BY date
-                       HAVING count(dealer_buy) > 100 AND count(*) FILTER (WHERE dealer_buy <> 0) <= 5
+                       HAVING count(*) > 100 AND count(*) FILTER (WHERE dealer_buy <> 0) <= 5
                        ORDER BY date""", (cutoff,))
         dates = [r[0] for r in cur.fetchall()]
     conn.rollback()

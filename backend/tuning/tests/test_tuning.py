@@ -152,6 +152,23 @@ def test_position_state_carried_across_folds():
     assert f1["p"].tolist() == [70]
 
 
+def test_block_bootstrap_calibration_under_dependent_null():
+    """AR(1) (rho 0.4), zero-mean, heavy-tailed trade returns: rejection rate at 5% must stay near 5%."""
+    rng = np.random.default_rng(42)
+    rej, sims = 0, 300
+    for s in range(sims):
+        n = 60
+        e = rng.standard_t(4, n) * 0.03
+        x = np.zeros(n)
+        for i in range(1, n):
+            x[i] = 0.4 * x[i - 1] + e[i]
+        rej += evaluate.block_boot_p(x, n_boot=400, seed=s) < 0.05
+    assert rej / sims <= 0.10, rej / sims
+    # and it has power against a real positive mean
+    x = rng.standard_t(4, 60) * 0.03 + 0.02
+    assert evaluate.block_boot_p(x) < 0.05
+
+
 def test_bh():
     rej = evaluate.bh_reject([0.001, 0.02, 0.03, 0.5], q=0.1)
     assert rej.tolist() == [True, True, True, False]
@@ -232,12 +249,20 @@ def test_nested_choice_ignores_test_window():
 def test_make_folds_purged_and_ordered():
     cal = pd.bdate_range("2024-01-01", periods=400).strftime("%Y%m%d").tolist()
     prep = {"calendar": cal, "adjusted": {"1111": pd.DataFrame({"date": cal})}}
-    cfg = run_tuning.Cfg(train_days=150, min_train_days=100, test_days=50)
+    cfg = run_tuning.Cfg(train_days=150, min_train_days=100, test_days=50, holdout_days=0)
     _, _, folds, train, _ = run_tuning.make_folds(prep, cfg)
     assert train == 150 and folds
     for f in folds:
         assert f["train_lo"] < f["test_lo"] < f["test_hi"] and f["test_lo"] - f["train_lo"] == train
     assert all(b["test_lo"] == a["test_hi"] for a, b in zip(folds, folds[1:]))
+
+
+def test_folds_never_touch_the_holdout():
+    cal = pd.bdate_range("2023-01-01", periods=700).strftime("%Y%m%d").tolist()
+    prep = {"calendar": cal, "adjusted": {"1111": pd.DataFrame({"date": cal})}}
+    cfg = run_tuning.Cfg(train_days=200, min_train_days=100, test_days=50, holdout_days=126)
+    _, _, folds, _, _ = run_tuning.make_folds(prep, cfg)
+    assert folds and all(f["test_hi"] <= 700 - 126 and f["end"] == 700 - 126 for f in folds)
 
 
 def test_json_safe_and_fin():

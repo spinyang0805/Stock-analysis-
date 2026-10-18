@@ -236,25 +236,33 @@ def heal_chip_dates(days: int = 30, max_dates: int = 10, min_ratio: float = 0.7)
     tdays = cal.trading_days((end - td(days=days)).strftime("%Y%m%d"), (end - td(days=1)).strftime("%Y%m%d"))
     if not tdays:
         return
+    # completeness per SOURCE: institutional (foreign_buy) and margin (margin_balance) are written by different
+    # fetches into the same rows, so a row count alone cannot see one source missing
     rows, err = _run(
-        """SELECT s.date, s.market, s.n, COALESCE(c.n, 0)
+        """SELECT s.date, s.market, s.n, COALESCE(c.insti, 0), COALESCE(c.margin, 0)
              FROM (SELECT date, market, count(*) n FROM stock_daily WHERE date = ANY(%s) GROUP BY 1, 2) s
-             LEFT JOIN (SELECT date, market, count(*) n FROM chip_daily WHERE date = ANY(%s) GROUP BY 1, 2) c
+             LEFT JOIN (SELECT date, market, count(foreign_buy) insti, count(margin_balance) margin
+                          FROM chip_daily WHERE date = ANY(%s) GROUP BY 1, 2) c
                ON c.date = s.date AND c.market = s.market""",
         (tdays, tdays), fetch="all")
     if err:
         print(f"[heal-chips] scan failed: {err}")
         return
-    bad = sorted({(r[0], r[1]) for r in rows or [] if r[1] in ("TWSE", "TPEx") and r[3] < min_ratio * r[2]},
+    # margin covers fewer securities than prices (not every stock is marginable) → a looser floor
+    bad = sorted({(r[0], r[1], r[3] < min_ratio * r[2], r[4] < 0.5 * min_ratio * r[2]) for r in rows or []
+                  if r[1] in ("TWSE", "TPEx") and (r[3] < min_ratio * r[2] or r[4] < 0.5 * min_ratio * r[2])},
                  reverse=True)[:max_dates]
-    print(f"[heal-chips] {len(bad)} (date, market) with chips < {min_ratio:.0%} of prices: {bad}")
-    for d, mk in bad:
+    print(f"[heal-chips] {len(bad)} (date, market, insti_missing, margin_missing): {bad}")
+    for d, mk, need_insti, need_margin in bad:
         res = {"errors": [], "chips": 0, "margin_rows": 0}
         try:
+            n1 = n2 = 0
             if mk == "TWSE":
-                n1, n2 = write_t86_chips(d, res), write_margin_chips(d, res)
+                n1 = write_t86_chips(d, res) if need_insti else 0
+                n2 = write_margin_chips(d, res) if need_margin else 0
             else:
-                n1, n2 = write_tpex_insti_chips(d, res), write_tpex_margin_chips(d, res)
+                n1 = write_tpex_insti_chips(d, res) if need_insti else 0
+                n2 = write_tpex_margin_chips(d, res) if need_margin else 0
             print(f"[heal-chips] {d} {mk}: insti={n1} margin={n2} errors={res['errors'][:2]}")
         except Exception as exc:
             print(f"[heal-chips] {d} {mk} failed: {exc}")

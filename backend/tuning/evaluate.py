@@ -125,9 +125,11 @@ def agg_stats(df, keys, col="net"):
     return st
 
 
-def block_boot_p(x, block=3, n_boot=2000, seed=0):
+def block_boot_p(x, block=None, n_boot=2000, seed=0):
     """One-sided p-value for mean(x) > 0 by a centred moving-block bootstrap of the chronologically ordered
-    trade returns (keeps short-range serial dependence and heavy tails; no normality assumption).
+    trade returns (keeps serial dependence and heavy tails; no normality assumption).
+    Block length grows with the sample: b = max(3, ceil(1.5 · n^(1/3))) (the usual n^(1/3) rate for the
+    moving-block bootstrap of a mean); calibration is checked in tests on AR(1) nulls.
     p = share of bootstrap means of the centred series that are >= the observed mean."""
     x = np.asarray(x, float)
     x = x[np.isfinite(x)]
@@ -136,6 +138,8 @@ def block_boot_p(x, block=3, n_boot=2000, seed=0):
         return 1.0
     m = x.mean()
     c = x - m
+    if block is None:
+        block = max(3, int(np.ceil(1.5 * n ** (1 / 3))))
     b = max(1, min(block, n))
     starts = np.arange(n - b + 1)
     k = int(np.ceil(n / b))

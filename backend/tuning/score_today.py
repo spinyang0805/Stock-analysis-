@@ -130,7 +130,7 @@ def run(args, extra_codes=(), return_prep=False):
             if fired:
                 mae = fin(p.get("oos_mae_med"))
                 risk = abs(mae) if mae else 0.03
-                exp_ret = fin(p.get("oos_mean")) or 0.0
+                exp_ret = fin(p.get("oos_deployed_mean") if p.get("oos_deployed_n") else p.get("oos_mean")) or 0.0
                 score = exp_ret / max(risk, 0.01) * ((fin(p.get("confidence")) or 0.0) if p["reliable"] else 0.0)
                 atr = fin(float(last["atr"]))
                 stop_pct = -p.get("stop_atr_mult", 2.5) * atr / close if atr else None   # from the actual fill
@@ -143,8 +143,13 @@ def run(args, extra_codes=(), return_prep=False):
                     "stop_pct": stop_pct, "take_profit_pct": tp_pct, "mae_p20_pct": fin(p.get("mae_p20")),
                     "stop_loss_if_fill_at_ref": rnd(close * (1 + stop_pct), "down", etf) if stop_pct else None,
                     "take_profit_if_fill_at_ref": rnd(close * (1 + tp_pct), "up", etf) if tp_pct else None,
-                    "hold_days": fired[0]["h"], "hold_days_unit": "該股交易日（列數）", "oos_n": p["oos_n"], "oos_win": p["oos_win"],
-                    "oos_mean": p["oos_mean"], "oos_xnet": p.get("oos_xnet"), "oos_mae_med": p.get("oos_mae_med"),
+                    "hold_days": fired[0]["h"], "hold_days_unit": "該股交易日（列數）",
+                    # deployed-policy OOS record (the exits the tracker uses) when available, else fixed-horizon
+                    "oos_n": p.get("oos_deployed_n") or p["oos_n"],
+                    "oos_win": p.get("oos_deployed_win") if p.get("oos_deployed_n") else p["oos_win"],
+                    "oos_mean": p.get("oos_deployed_mean") if p.get("oos_deployed_n") else p["oos_mean"],
+                    "oos_xnet": p.get("oos_deployed_x") if p.get("oos_deployed_n") else p.get("oos_xnet"),
+                    "oos_mae_med": p.get("oos_mae_med"),
                     "confidence": p["confidence"], "score": score, "flags": flags,
                     "holding": sid in holdings, "sell_rule": p.get("sell_rule"),
                 })
