@@ -37,3 +37,6 @@ tmp_audit.json
 
 # Render / Fly build artifacts
 .fly/
+
+# Parquet history store (local copy)
+history/

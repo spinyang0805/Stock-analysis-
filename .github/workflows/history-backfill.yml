@@ -1,0 +1,84 @@
+name: History backfill (Parquet)
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "回補最近 N 年（未指定 from/to_year 時）"
+        default: "5"
+      from_year:
+        description: "只回補某一年起（例 2025；一年一次 dispatch，建議從新到舊）"
+        default: ""
+      to_year:
+        description: "回補到某一年止（例 2025）"
+        default: ""
+      kind:
+        description: "prices / chips / both"
+        default: "both"
+      limit_dates:
+        description: "最多處理 N 個交易日（空白=不限）"
+        default: ""
+      dry_run:
+        description: "只列出待補日期，不抓資料（true/false）"
+        default: "false"
+
+permissions:
+  contents: write
+
+# 獨立 group：避免長時間回補讓 update-data 的排程被擠成 pending 後取消；
+# 跨 workflow 的安全靠 history_store push 的 manifest-sha 檢查
+concurrency:
+  group: history
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install pandas numpy requests psycopg2-binary pytz pyarrow duckdb
+
+      - name: Pull existing store
+        run: python backend/history_store.py pull
+
+      - name: Export Supabase -> Parquet (read-only)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python backend/history_store.py export-db
+
+      - name: Backfill from TWSE/TPEx (Parquet only, never writes DB)
+        env:
+          IN_YEARS: ${{ github.event.inputs.years }}
+          IN_FROM: ${{ github.event.inputs.from_year }}
+          IN_TO: ${{ github.event.inputs.to_year }}
+          IN_KIND: ${{ github.event.inputs.kind }}
+          IN_LIMIT: ${{ github.event.inputs.limit_dates }}
+          IN_DRY: ${{ github.event.inputs.dry_run }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}  # 僅供唯讀查詢「DB 已有哪些日期」，backfill 不寫 DB
+        run: |
+          set -eu
+          case "${IN_KIND:-both}" in prices|chips|both) ;; *) echo "bad kind"; exit 1;; esac
+          for v in "${IN_YEARS:-5}" "$IN_FROM" "$IN_TO" "$IN_LIMIT"; do
+            case "$v" in ''|*[!0-9]*) [ -z "$v" ] || { echo "non-numeric input"; exit 1; };; esac
+          done
+          ARGS="--years ${IN_YEARS:-5} --kind ${IN_KIND:-both}"
+          [ -n "$IN_FROM" ] && ARGS="$ARGS --from-year $IN_FROM"
+          [ -n "$IN_TO" ] && ARGS="$ARGS --to-year $IN_TO"
+          [ -n "$IN_LIMIT" ] && ARGS="$ARGS --limit-dates $IN_LIMIT"
+          [ "$IN_DRY" = "true" ] && ARGS="$ARGS --dry-run"
+          python backend/history_store.py backfill $ARGS
+
+      - name: Push to release
+        if: always() && github.event.inputs.dry_run != 'true'
+        run: python backend/history_store.py push

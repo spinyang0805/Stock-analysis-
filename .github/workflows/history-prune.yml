@@ -1,0 +1,90 @@
+name: History prune (keep 13 months in DB)
+
+on:
+  schedule:
+    # 每月 2 日 19:00 UTC = 台北每月 3 日 03:00（網站低流量）
+    - cron: "0 19 2 * *"
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "true=真的刪除；false=只顯示會刪多少"
+        default: "false"
+      vacuum_full:
+        description: "刪除後 VACUUM FULL（會鎖表，僅夜間）"
+        default: "false"
+
+permissions:
+  contents: write
+  issues: write
+
+# 獨立 group：避免長時間回補讓 update-data 的排程被擠成 pending 後取消；
+# 跨 workflow 的安全靠 history_store push 的 manifest-sha 檢查
+concurrency:
+  group: history
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install pandas numpy requests psycopg2-binary pytz pyarrow duckdb
+
+      - name: Pull store
+        run: python backend/history_store.py pull
+
+      # 全量 export（約 1 分鐘）：確保 DB 內所有舊資料（含 track_new 回補的）都已進 store，verify 才會過
+      - name: Sync DB -> store
+        run: python backend/history_store.py export-db
+
+      - name: Push store
+        run: python backend/history_store.py push
+
+      # prune 會自己重新下載 Release、驗證 sha256 後才刪，且只刪「已確認在 Release 內」的 key。
+      # VACUUM FULL 會持有 ACCESS EXCLUSIVE 鎖（網站讀取會卡住），且需要約 2 倍表大小的剩餘磁碟；
+      # 只在凌晨排程使用。未加 --vacuum-full 時一般 VACUUM 不會縮小資料庫檔案。
+      - name: Prune old DB rows (verify against Release first)
+        env:
+          IN_APPLY: ${{ github.event.inputs.apply }}
+          IN_FULL: ${{ github.event.inputs.vacuum_full }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -eu
+          ARGS="--keep-months 13"
+          if [ "$EVENT" = "schedule" ] || [ "$IN_APPLY" = "true" ]; then ARGS="$ARGS --apply"; fi
+          # 排程只做 apply + 一般 VACUUM ANALYZE；VACUUM FULL 暫時需要額外約一張表大小的磁碟，
+          # 可能讓 500MB 額度的 DB 爆掉，所以只允許手動 dispatch 且確認剩餘空間後才開。
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$IN_FULL" = "true" ]; then ARGS="$ARGS --vacuum-full"; fi
+          python backend/history_store.py prune $ARGS
+
+      - name: Notify failure (open GitHub issue → email)
+        if: failure()
+        env:
+          REPO: ${{ github.repository }}
+          WF: ${{ github.workflow }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create pipeline-failure -R "$REPO" --color B60205 --description "自動排程失敗" --force >/dev/null 2>&1 || true
+          num=$(gh issue list -R "$REPO" --state open --label pipeline-failure --json number,title --jq "map(select(.title | contains(\"$WF\")))[0].number // empty")
+          if [ -n "$num" ]; then
+            gh issue comment "$num" -R "$REPO" --body "又失敗一次：$RUN_URL"
+          else
+            gh issue create -R "$REPO" --label pipeline-failure \
+              --title "[排程失敗] $WF" \
+              --body "@${{ github.repository_owner }} 「$WF」失敗（verify 未過或 DB 錯誤，未通過 verify 時不會刪除任何資料）。
+
+          - 執行紀錄：$RUN_URL
+          - 時間：$(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')（台北）"
+          fi

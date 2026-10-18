@@ -39,7 +39,7 @@ jobs:
           cache: pip
 
       - name: Install deps
-        run: pip install pandas numpy requests psycopg2-binary pytz fastapi yfinance
+        run: pip install pandas numpy requests psycopg2-binary pytz fastapi yfinance pyarrow
 
       - name: Update DB (TWSE + TPEx daily K / chips / valuation)
         env:
@@ -78,6 +78,34 @@ jobs:
             git commit -m "data: daily update $(date +%Y-%m-%d)"
             git pull --rebase origin main
             git push
+          fi
+
+      - name: Append to Parquet history store (non-blocking)
+        id: hist
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python backend/history_store.py pull
+          python backend/history_store.py append --days 15
+          python backend/history_store.py push
+
+      - name: Notify history failure (open GitHub issue)
+        if: steps.hist.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          T="[歷史資料倉] 每日 append 失敗"
+          gh label create pipeline-failure -R "$REPO" --color B60205 --description "自動排程失敗" --force >/dev/null 2>&1 || true
+          num=$(gh issue list -R "$REPO" --state open --label pipeline-failure --json number,title --jq "map(select(.title | contains(\"$T\")))[0].number // empty")
+          if [ -n "$num" ]; then
+            gh issue comment "$num" -R "$REPO" --body "又失敗一次：$RUN_URL"
+          else
+            gh issue create -R "$REPO" --label pipeline-failure --title "$T" \
+              --body "網站資料更新正常，但 Parquet 歷史資料倉 append/push 失敗（不影響網站）。紀錄：$RUN_URL。在修好前 history-prune 的 verify 會擋下刪除，不會遺失資料。"
           fi
 
       - name: Notify failure (open GitHub issue → email)

@@ -27,6 +27,7 @@
 - 其他排程：`track-stocks.yml`（每 20 分鐘）、`update-financials.yml`（週日）、`probe.yml`、`db-migrate.yml`。
 - 資料庫：Supabase Postgres（`DATABASE_URL`）；`backend/firebase.py`、`firebase_cache.py` 為歷史命名，實際是 psycopg2。
 - 盤中資料：pg_cron 擷取（`supabase/migrations/004`）；AI 為 Groq，金鑰在 Supabase Vault（`005`）。
+- 歷史資料倉：Supabase 只留近 13 個月 `stock_daily`/`chip_daily`；完整歷史（全部代號）存成 Parquet（依年份分檔，約為 DB 的 1/18 大小），放在 GitHub Release `history-data`。`backend/history_store.py`（pull/push/export-db/backfill/append/verify/prune/stats/query）；`update-data.yml` 最後一步 append 近 10 日（失敗不影響網站）、`history-backfill.yml` 手動回補（可一年一次）、`history-prune.yml` 每月 3 日凌晨驗證後刪除 13 個月前的 DB 資料。流程為先複製、verify 通過才 prune。本機副本在 `history/`（已 gitignore）。安全規則：pull 必須逐檔驗 sha256；push 必須先 pull、遠端 manifest 未變動、且不得縮小檔案（`--allow-shrink` 才可）、上傳後重新下載驗證；prune --apply 一律重新下載 Release 驗證，並只刪除已確認在 Release 內的 key。權證（`is_warrant`）不進資料倉。排程的 prune 只做一般 VACUUM；VACUUM FULL 僅手動 dispatch（暫時多佔約一張表大小的磁碟）。若 push 中途失敗導致 pull 一直 sha 不符：本機執行 `python backend/history_store.py pull --repair` 再 `push`（會依實際檔案重建 manifest；缺檔或列數變少會拒絕，需人工確認後加 `--allow-shrink`）。歷史資料倉的 workflow 使用獨立 concurrency group `history`。VACUUM FULL 會持有 ACCESS EXCLUSIVE 鎖且需約 2 倍表大小的剩餘磁碟，僅限夜間；一般 VACUUM 不會縮小資料庫檔案。
 - 注意：`export_static_json.py --source api` 指向已下線的 fly.dev，已失效。
 
 ## 常用入口
@@ -36,4 +37,5 @@
 - 靜態輸出：`backend/export_static_json.py`、`backend/payload_builder.py`
 - 分析引擎：`backend/analysis_engine.py`、`signal_engine.py`、`perspective_engine.py`
 - 資料表結構：`backend/schema.sql`、`supabase/migrations/`
+- 歷史資料倉：`backend/history_store.py`、`.github/workflows/history-*.yml`
 - 部署：`render.yaml`、`.github/workflows/`
