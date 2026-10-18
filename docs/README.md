@@ -12,6 +12,7 @@
 | [FRONTEND_ARCHITECTURE.md](FRONTEND_ARCHITECTURE.md) | 前端架構（開頭為現況，其後舊 tab／BatchPage 已過時） | 部分過時 | 2026-10-18 |
 | [BUSINESS_RULE_ENGINE.md](BUSINESS_RULE_ENGINE.md) | 評分、觀點卡、訊號、回測規則 | 部分過時 | 2026-10-18 |
 | [FIREBASE_SCHEMA.md](FIREBASE_SCHEMA.md) | 舊 Firestore 結構（現為 Supabase Postgres） | 部分過時 | 2026-10-18 |
+| [TUNING.md](TUNING.md) | 個股訊號調校與每日推薦（backend/tuning） | 現行（研究中，未接排程） | 2026-10-18 |
 | [API_REFERENCE.md](API_REFERENCE.md) | 舊 `/api/*` 路由說明 | 已過時 | 2026-10-18 |
 | [AI_PROMPT.md](AI_PROMPT.md) | 舊 `/api/ai/context` 與 prompt 範本 | 已過時 | 2026-10-18 |
 | [STOCK_WEBSITE_DESIGN_SPEC.md](STOCK_WEBSITE_DESIGN_SPEC.md) | Render + FastAPI 時期的完整設計規格 | 已過時 | 2026-10-18 |
