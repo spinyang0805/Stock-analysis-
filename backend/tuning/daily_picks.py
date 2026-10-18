@@ -39,6 +39,16 @@ def render(out, state, added, closed_today, top):
     L = [f"# 每日股票報告（{fmt_date(d)} 收盤後計算）", ""]
     if trial:
         L += ["> **試行**：目前沒有股票通過可靠度驗證，以下推薦依回測排序，僅供觀察，不構成投資建議。", ""]
+    u = out.get("uniform") or {}
+    if out.get("buy_mode") == "uniform":
+        sig = "、".join(f"{x['desc']}（持有 {x['h']} 日）" for x in u.get("signals", [])) or "–"
+        L.append(f"推薦依據：**全市場統一訊號**（{sig}）。出場與停損依各股自己的調參結果。")
+        o, hd = u.get("oos") or {}, u.get("holdout") or {}
+        if o or hd:
+            L.append(f"回測紀錄（扣成本）：模型沒看過的期間 {o.get('n', '–')} 筆，平均 {pct(o.get('mean'))}、"
+                     f"勝率 {pct(o.get('win'), 0).lstrip('+')}、比大盤 {pct(o.get('xnet'))}；"
+                     f"最後半年驗證 {hd.get('n', '–')} 筆，平均 {pct(hd.get('mean'))}、比大盤 {pct(hd.get('xnet'))}。")
+        L.append("")
     L += ["## 今日買進候選（明日開盤進場）", ""]
     buys = out["buy"][:top]
     if not buys:
@@ -50,7 +60,7 @@ def render(out, state, added, closed_today, top):
             tag = "" if b.get("reliable") else "（試行）"
             L.append(f"| {i} | {b['stock_id']} | {b['name']}{tag} | {'、'.join(s['desc'] for s in b['signals'])} | "
                      f"{b['ref_close']} | {pct(b['stop_pct'])} | {pct(b['take_profit_pct'])} | {b['hold_days']} | "
-                     f"{pct(b['oos_win'], 0).lstrip('+')} | {b['oos_n']} |")
+                     f"{pct(b['oos_win'], 0).lstrip('+')} | {b['oos_n'] if b.get('oos_n') is not None else '–'} |")
     L.append("")
     act = [p for p in state if p["status"] in track.ACTIVE]
     L += ["## 追蹤中（每日評估，直到出場或你賣出）", ""]

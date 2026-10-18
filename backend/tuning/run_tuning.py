@@ -632,6 +632,26 @@ def decide(prep, cfg, trades, hold_trades, sell_trades, flevels, fchoices, fsel,
     return out
 
 
+def uniform_block(fsel, trades, holdout):
+    """Market-wide signal set of the final train window, with POOLED stats (all universe stocks), plus the
+    uniform strategy's walk-forward OOS and holdout records — used by score_today --buy-mode uniform."""
+    us = fsel.get("uniform_stats")
+    sig = []
+    for s, h in fsel.get("uniform") or []:
+        r = None
+        if us is not None and len(us):
+            m = us[(us["signal"] == s) & (us["h"] == h)]
+            r = m.iloc[0] if len(m) else None
+        sig.append({"signal": s, "h": int(h), "desc": ind.BUY_DESC.get(s, s),
+                    "pooled_n": int(r["n"]) if r is not None else None,
+                    "pooled_mean_xpd": float(r["mean"]) if r is not None else None,
+                    "pooled_win": float(r["win"]) if r is not None else None,
+                    "pooled_t": float(r["t"]) if r is not None else None})
+    ut = trades[trades["strategy"] == "uniform"]
+    return {"signals": sig, "oos": ev_mod.summarize(ut) if len(ut) else None,
+            "holdout": (holdout or {}).get("by_strategy", {}).get("uniform")}
+
+
 def json_safe(o):
     """Recursively convert numpy scalars and NaN/inf → JSON-safe values (NaN/inf → None)."""
     if isinstance(o, dict):
@@ -662,6 +682,7 @@ def write_outputs(args, cfg, prep, params, trades, sell_trades, folds, cal, trai
                      "config": asdict(cfg) | {"source": args.source, "universe": args.universe, "years": args.years,
                                               "fee_discount": args.fee_discount, "adjust_source": args.adjust_source,
                                               "execution": "entry open t+1, exit open t+h+1"},
+                     "uniform": uniform_block(fsel, trades, holdout),
                      "stocks": params})
     with open(os.path.join(args.out_dir, "stock_params.json"), "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=1, allow_nan=False)

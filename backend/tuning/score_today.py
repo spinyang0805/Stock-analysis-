@@ -57,6 +57,9 @@ def parse_args(argv=None):
                     help="history loaded for indicators (default: the tuning run's own --years, so valuation "
                          "percentiles and zigzag state are rebuilt on the same history as in tuning)")
     ap.add_argument("--top", type=int, default=10)
+    ap.add_argument("--buy-mode", choices=["uniform", "stock"], default="uniform",
+                    help="uniform (default, decided 2026-10-19): BUY candidates from the market-wide signal set; "
+                         "stock: each stock's own tuned signals. Exits / stops always use the stock's own params.")
     ap.add_argument("--include-unreliable", action="store_true",
                     help="also list stocks labelled 'no reliable signal' (flagged; for diagnostics only)")
     add_common_args(ap)
@@ -112,7 +115,15 @@ def run(args, extra_codes=(), return_prep=False):
     adjusted, holdings = prep["adjusted"], set(prep["holdings"])
     last_date = max(g["date"].iloc[-1] for g in adjusted.values())
     buys_out, sells_out, levels = [], [], {}
+    uni = pj.get("uniform") or {}
+    uni_sigs = uni.get("signals") or []
+    if not uni_sigs:                      # older params files: take the set from a stock assigned to 'uniform'
+        u = next((p for p in params.values() if p.get("level") == "uniform" and p.get("buy_signals")), None)
+        uni_sigs = [{"signal": s["signal"], "h": s["h"], "desc": s["desc"]} for s in (u or {}).get("buy_signals", [])]
+    if args.buy_mode == "uniform":
+        log(f"[score] buy mode = market-wide signals: {[(s['signal'], s['h']) for s in uni_sigs]}")
     for sid, g in adjusted.items():
+        fired = []
         p = params.get(sid)
         f = ind.features(g)
         buys, sells = ind.buy_signals(f), ind.sell_signals(f)
@@ -125,8 +136,39 @@ def run(args, extra_codes=(), return_prep=False):
         flags = quality_flags(p or {}, g, last_date)
         close = float(g["close"].iloc[-1])          # raw (adj_factor of the last row is 1)
         # ── BUY ──
-        if p and fresh and (p["reliable"] or args.include_unreliable):
-            fired = [s for s in p["buy_signals"] if s["signal"] in buys and bool(buys[s["signal"]].iloc[-1])]
+        # uniform mode: every current-universe stock is scanned for the MARKET-WIDE signal set (pooled stats);
+        # stock mode: each stock's own tuned signals (only reliable ones unless --include-unreliable)
+        if args.buy_mode == "uniform":
+            eligible = bool(p and fresh and p.get("in_universe"))
+            sig_list = uni_sigs
+        else:
+            eligible = bool(p and fresh and (p["reliable"] or args.include_unreliable))
+            sig_list = p["buy_signals"] if p else []
+        if eligible:
+            fired = [s for s in sig_list if s["signal"] in buys and bool(buys[s["signal"]].iloc[-1])]
+        if eligible and fired and args.buy_mode == "uniform":
+            atr = fin(float(last["atr"]))
+            stop_pct = -p.get("stop_atr_mult", 2.5) * atr / close if atr else None
+            # rank: more market-wide signals firing together first, then the best pooled per-day excess
+            score = len(fired) + max((fin(s.get("pooled_mean_xpd")) or 0.0) for s in fired) * 100
+            uo = uni.get("oos") or {}
+            buys_out.append({
+                "stock_id": sid, "name": p["name"], "reliable": False, "level": "uniform",
+                "signals": [{"signal": s["signal"], "desc": s["desc"], "h": s["h"]} for s in fired],
+                "ref_close": rnd(close, "near", etf),
+                "entry": "次日開盤市價（開盤漲幅 >= 9.5% 不追）；停損以實際成交價乘上百分比",
+                "stop_pct": stop_pct, "take_profit_pct": None, "mae_p20_pct": fin(p.get("mae_p20")),
+                "stop_loss_if_fill_at_ref": rnd(close * (1 + stop_pct), "down", etf) if stop_pct else None,
+                "take_profit_if_fill_at_ref": None,
+                "hold_days": fired[0]["h"], "hold_days_unit": "該股交易日（列數）",
+                # market-wide record (all universe stocks), not this stock's own history
+                "oos_n": uo.get("n"), "oos_win": uo.get("win"), "oos_mean": uo.get("mean"),
+                "oos_xnet": uo.get("xnet"), "oos_mae_med": p.get("oos_mae_med"),
+                "confidence": 0.0, "score": score, "flags": flags + ["全市場統一訊號"],
+                "holding": sid in holdings, "sell_rule": p.get("sell_rule"),
+            })
+            fired = []                                   # handled
+        if eligible and fired:
             if fired:
                 mae = fin(p.get("oos_mae_med"))
                 risk = abs(mae) if mae else 0.03
@@ -181,6 +223,7 @@ def run(args, extra_codes=(), return_prep=False):
     out = {"as_of": last_date, "generated_at": datetime.now().isoformat(timespec="seconds"),
            "params_generated_at": pj.get("generated_at"), "include_unreliable": args.include_unreliable,
            "fee_discount": (pj.get("config") or {}).get("fee_discount"),
+           "buy_mode": args.buy_mode, "uniform": {"signals": uni_sigs, "oos": uni.get("oos"), "holdout": uni.get("holdout")},
            "n_scored": len(adjusted), "n_reliable_params": sum(1 for p in params.values() if p["reliable"]),
            "buy": buys_out, "sell_alerts": sells_out, "intraday_levels": levels}
     os.makedirs(args.out_dir, exist_ok=True)
