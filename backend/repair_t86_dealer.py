@@ -101,11 +101,12 @@ def fix_db(jobs, sleep, apply):
         dates = [r[0] for r in cur.fetchall()]
     conn.rollback()
     log(f"[db] {len(dates)} dates since {cutoff} with all-zero TWSE dealer")
+    from instrument_filter import is_warrant
     rows = []
     for d in dates:
         v = fetch_dealer(jobs, d, sleep)
         if v:
-            rows += [(s, d, val) for s, val in v.items() if val is not None]
+            rows += [(s, d, val) for s, val in v.items() if val is not None and not is_warrant(s)]
     log(f"[db] {len(rows):,} (stock, date) dealer values fetched")
     if not apply:
         log("Dry run only. Re-run with --apply to UPDATE chip_daily.dealer_buy (TWSE rows only).")
