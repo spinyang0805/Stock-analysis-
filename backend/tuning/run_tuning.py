@@ -475,6 +475,8 @@ def deployed_trades(events, choices_by_fold, sell_by_fold, prep, cal, costs):
                 stop_pct = -mult * atr[t] / ac[t] if np.isfinite(atr[t]) and ac[t] > 0 else -0.08
                 sim = simulate_position(g, f, sells, t + 1, int(h), stop_pct, None, rule, mult)
                 if sim["status"] == "skipped":
+                    # live: the skipped pick is recorded with exit_date = that session → not re-picked on its close
+                    busy = gpos[sim["exit_i"]] if sim.get("exit_i") is not None else gpos[min(t + 1, len(g) - 1)]
                     continue
                 if sim["status"] != "closed":             # still open when the holdout starts → not counted
                     busy = 10 ** 9
@@ -548,7 +550,9 @@ def decide(prep, cfg, trades, hold_trades, sell_trades, flevels, fchoices, fsel,
                  dep_win=float((dt["dep_net"] > 0).mean()) if dn else float("nan"),
                  folds=int(len(dfm)), folds_pos=int((dfm > 0).sum()), p_oos=p_oos)
         summ[sid] = s
-    tested = [sid for sid in summ if sid in cur or by_stock.get(sid) is not None]
+    # BH family = every stock evaluated under the deployed policy (current members + any stock with deployed or
+    # fixed-horizon OOS trades); insufficient samples stay in the family with p = 1
+    tested = [sid for sid in summ if sid in cur or sid in dep_by or by_stock.get(sid) is not None]
     rej = ev_mod.bh_reject([summ[s]["p_oos"] for s in tested], cfg.fdr_q)
     bh = dict(zip(tested, rej))
     by_events = dict(tuple(events[events["side"] == "buy"].groupby("stock_id")))
