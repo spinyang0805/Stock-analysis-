@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS stock_daily (
     updated_at   TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (stock_id, date)
 );
-CREATE INDEX IF NOT EXISTS idx_stock_daily_lookup ON stock_daily (stock_id, date DESC);
+-- 不另建 (stock_id, date DESC) 索引：主鍵 B-tree 可反向掃描，2026-10-18 已移除重複索引（省 ~43MB）
 
 CREATE TABLE IF NOT EXISTS chip_daily (
     stock_id              TEXT NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS chip_daily (
     updated_at            TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (stock_id, date)
 );
-CREATE INDEX IF NOT EXISTS idx_chip_daily_lookup ON chip_daily (stock_id, date DESC);
+-- 同上，不另建 idx_chip_daily_lookup（主鍵已涵蓋）
 
 CREATE TABLE IF NOT EXISTS analysis_cache (
     stock_id          TEXT PRIMARY KEY,
