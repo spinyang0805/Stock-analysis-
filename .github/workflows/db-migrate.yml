@@ -55,6 +55,35 @@ jobs:
           rm -f /tmp/groq_key
           echo "groq_api_key stored"
 
+      - name: Store notify secrets in Vault (intraday alerts)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: |
+          umask 077
+          for pair in "teams_webhook_url:TEAMS_WEBHOOK_URL" "line_channel_token:LINE_CHANNEL_TOKEN" "line_user_id:LINE_USER_ID"; do
+            name="${pair%%:*}"; var="${pair##*:}"; val="${!var:-}"
+            [ -z "$val" ] && { echo "$name: secret not set, skipped"; continue; }
+            printf '%s' "$val" > /tmp/v
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -v name="$name" <<'SQL'
+          \o /dev/null
+          \set val `cat /tmp/v`
+          select set_config('app.v', :'val', false), set_config('app.n', :'name', false);
+          do $$
+          begin
+            if exists (select 1 from vault.secrets where name = current_setting('app.n')) then
+              perform vault.update_secret((select id from vault.secrets where name = current_setting('app.n')), current_setting('app.v'));
+            else
+              perform vault.create_secret(current_setting('app.v'), current_setting('app.n'));
+            end if;
+          end $$;
+          SQL
+            rm -f /tmp/v
+            echo "$name stored"
+          done
+
       - name: Smoke test market functions
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -70,5 +99,8 @@ jobs:
           psql "$DATABASE_URL" -At -c "select jobname, schedule from cron.job order by jobname;"
           psql "$DATABASE_URL" -At -c "select code, count(*), max(minute) at time zone 'Asia/Taipei' from public.intraday_bars group by code order by 2 desc limit 5;"
           psql "$DATABASE_URL" -At -c "$AS_ANON select public.market_intraday('2330','1m','1d','上市')->>'source', jsonb_array_length(public.market_intraday('2330','1m','1d','上市')->'t');"
+          echo "--- intraday alerts"
+          psql "$DATABASE_URL" -At -c "select public.intraday_alerts();"
+          psql "$DATABASE_URL" -At -c "select (select count(*) from vault.secrets where name in ('teams_webhook_url','line_channel_token','line_user_id')) as vault_secrets, (select count(*) from public.alert_levels) as levels;"
           echo "--- ai screen"
           psql "$DATABASE_URL" -At -c "select signal, jsonb_array_length(rows), data_date from public.ai_screen order by signal;"

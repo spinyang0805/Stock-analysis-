@@ -35,6 +35,7 @@ PRICE_COLS = ["stock_id", "date", "open", "high", "low", "close", "volume", "tur
 CHIP_COLS = ["stock_id", "date", "foreign_buy", "investment_trust_buy", "dealer_buy",
              "margin_balance", "short_balance", "source"]
 FOUR_DIGIT = re.compile(r"^\d{4}$")
+MIN_SEG = 60   # a price segment separated by a > max_gap hole is kept only if it has at least this many rows
 
 
 def log(msg):
@@ -274,8 +275,8 @@ def clean_prices(df, max_gap=20):
     cal = set(calendar)
     noncal = df[~df["date"].isin(cal)].groupby("stock_id").size()
     df = df[df["date"].isin(cal) & (df["close"] > 0)]
-    # keep only each stock's last contiguous segment (no hole > max_gap business days) — sparse old rows
-    # (single probe days years ago) would otherwise create fake multi-year "daily" returns
+    # segments split at holes > max_gap business days: short residue segments (single probe days years ago)
+    # would otherwise create fake multi-year "daily" returns, so only those are dropped (see MIN_SEG)
     df = df.sort_values(["stock_id", "date"])
     dt = pd.to_datetime(df["date"], format="%Y%m%d").to_numpy().astype("datetime64[D]")
     prev = pd.Series(dt).groupby(df["stock_id"].to_numpy()).shift(1).to_numpy().astype("datetime64[D]")
@@ -285,11 +286,18 @@ def clean_prices(df, max_gap=20):
     hole = pd.Series(bd > max_gap, index=df.index)
     seg = hole.astype(int).groupby(df["stock_id"]).cumsum()
     last_seg = seg.groupby(df["stock_id"]).transform("max")
-    old = df[seg < last_seg].groupby("stock_id").size()
-    df = df[seg == last_seg]
+    # drop only short residue segments (probe rows) — a real earlier trading history (≥ MIN_SEG rows) before a
+    # long suspension is kept and stitched, as charting software does (the suspension is a genuine holding risk)
+    seg_len = seg.groupby([df["stock_id"], seg]).transform("size")
+    keep = (seg == last_seg) | (seg_len >= MIN_SEG)
+    old = df[~keep].groupby("stock_id").size()
+    df = df[keep]
     # official beats yfinance on the same date
     df = df.sort_values(["stock_id", "date", "yf", "bulk"]).drop_duplicates(["stock_id", "date"], keep="first")
     df = df.reset_index(drop=True)
+    # executable session: a real traded open and positive volume (before any OHLC repair below);
+    # backtests and the tracker never fill an entry / exit on a bar without it
+    df["fill_ok"] = (df["open"] > 0) & (df["volume"].fillna(0) > 0)
     for c in ["open", "high", "low"]:
         df[c] = df[c].where(df[c] > 0, df["close"])
     df["yf_rescaled"] = False

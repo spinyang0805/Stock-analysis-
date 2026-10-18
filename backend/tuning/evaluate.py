@@ -1,7 +1,10 @@
 """evaluate.py — event study, walk-forward selection, multiple-testing guard, shrinkage.
 
-Event (signal known at close t):  entry = adjusted OPEN of t+1, exit = adjusted CLOSE of t+h.
-Skipped when open(t+1) >= close(t) * (1 + LIMIT_SKIP) (≈ limit-up, cannot be filled).
+Event (signal known at close t):  entry = adjusted OPEN of t+1; the position is held through h session
+closes (t+1 … t+h) and exits at the adjusted OPEN of t+h+1 — the same convention the live tracker uses
+(every close-based decision is executed at the next open, after the morning report).
+Skipped when open(t+1) >= close(t) * (1 + LIMIT_SKIP) (≈ limit-up, cannot be filled) or when the entry /
+exit bar has no valid traded open (fill_ok == False).
 Events of one (stock, signal, h) are thinned to be >= h trading days apart (non-overlapping) so the
 t-stat is not inflated by overlapping holding periods.
 Net return = (1+gross)(1-sell_cost)/(1+buy_cost) - 1, buy_cost = fee*discount,
@@ -24,28 +27,43 @@ class Costs:
     discount: float = 0.6
     tax_stock: float = 0.003
     tax_etf: float = 0.001
+    slippage: float = 0.0     # per side, fraction of price (adverse fill); sensitivity runs use e.g. 0.001
 
     def buy(self):
-        return self.fee * self.discount
+        return self.fee * self.discount + self.slippage
 
     def sell(self, etf):
-        return self.fee * self.discount + (self.tax_etf if etf else self.tax_stock)
+        return self.fee * self.discount + (self.tax_etf if etf else self.tax_stock) + self.slippage
 
     def net(self, gross, etf):
         return (1 + gross) * (1 - self.sell(etf)) / (1 + self.buy()) - 1
 
 
 def forward_returns(g, h):
-    """Per-row forward outcome for horizon h (entry next open, exit close t+h). No lookahead in the
-    signal: everything here is strictly after t and is only used as the label."""
-    entry = g["aopen"].shift(-1)
-    exit_ = g["aclose"].shift(-h)
-    gross = exit_ / entry - 1
-    mae = g["alow"].rolling(h, min_periods=h).min().shift(-h) / entry - 1
-    mfe = g["ahigh"].rolling(h, min_periods=h).max().shift(-h) / entry - 1
-    limit_up = (entry / g["aclose"] - 1) >= LIMIT_SKIP
-    return pd.DataFrame({"gross": gross, "mae": mae, "mfe": mfe, "limit_up": limit_up,
-                         "exit_date": g["date"].shift(-h)})
+    """Per-row forward outcome for horizon h (entry open t+1, exit open t+h+1). No lookahead in the
+    signal: everything here is strictly after t and is only used as the label.
+    mae / mfe cover the holding sessions t+1 … t+h (the exit open is included in the return only)."""
+    n = len(g)
+    ok = (g["fill_ok"] if "fill_ok" in g else pd.Series(True, index=g.index)).to_numpy(bool)
+    ao = g["aopen"].to_numpy(float)
+    # next bar index >= j with a valid fill (n = none) — a planned exit on an unfillable bar is deferred
+    nxt = np.full(n + 1, n)
+    for j in range(n - 1, -1, -1):
+        nxt[j] = j if ok[j] else nxt[j + 1]
+    pos = np.arange(n)
+    e = pos + 1
+    entry = np.where((e < n) & ok[np.minimum(e, n - 1)], ao[np.minimum(e, n - 1)], np.nan)
+    xi = nxt[np.minimum(pos + h + 1, n)]
+    has_x = xi < n
+    exit_ = np.where(has_x, ao[np.minimum(xi, n - 1)], np.nan)
+    gross = pd.Series(exit_ / entry - 1, index=g.index)
+    ent = pd.Series(entry, index=g.index)
+    mae = g["alow"].rolling(h, min_periods=h).min().shift(-h) / ent - 1
+    mfe = g["ahigh"].rolling(h, min_periods=h).max().shift(-h) / ent - 1
+    limit_up = (ent / g["aclose"] - 1) >= LIMIT_SKIP
+    dates = g["date"].to_numpy()
+    exit_date = pd.Series(np.where(has_x, dates[np.minimum(xi, n - 1)], None), index=g.index)
+    return pd.DataFrame({"gross": gross, "mae": mae, "mfe": mfe, "limit_up": limit_up, "exit_date": exit_date})
 
 
 def thin(idx, h):
@@ -161,14 +179,20 @@ def select(train, groups, cfg, side="buy"):
     st["group"] = st["stock_id"].map(groups)
     st = st.merge(gs[["group", "signal", "h", "mean", "n", "t"]].rename(
         columns={"mean": "g_mean", "n": "g_n", "t": "g_t"}), on=["group", "signal", "h"], how="left")
+    # leave-one-stock-out group prior: the stock's own events must not sit inside the prior it is shrunk to
+    rest_n = st["g_n"] - st["n"]
+    st["g_mean_loo"] = ((st["g_mean"] * st["g_n"] - st["mean"] * st["n"]) / rest_n).where(rest_n > 0)
     w = st["n"] / (st["n"] + cfg.shrink_k)
-    st["score"] = w * st["mean"] + (1 - w) * st["g_mean"].fillna(0)
+    st["score"] = w * st["mean"] + (1 - w) * st["g_mean_loo"].fillna(0)
     st["p"] = [pvalue(t) for t in st["t"]]
-    # in-sample BH per stock, only over candidates with n >= min_train_events (informational flag)
-    st["fdr_pass"] = False
+    # diagnostics only (selection does not use them): in-sample BH per stock over candidates with
+    # n >= min_train_events, in the intended direction (mean > 0); strong-t kept as a separate flag
+    st["bh_pass"] = False
     big = st[st["n"] >= cfg.min_train_events]
     for _, d in big.groupby("stock_id"):
-        st.loc[d.index, "fdr_pass"] = bh_reject(d["p"].to_numpy(), cfg.fdr_q) | (d["t"].abs() > cfg.t_alt).to_numpy()
+        st.loc[d.index, "bh_pass"] = bh_reject(d["p"].to_numpy(), cfg.fdr_q) & (d["t"] > 0).to_numpy()
+    st["strong_t"] = st["t"] > cfg.t_alt
+    st["fdr_pass"] = st["bh_pass"]
 
     def top3(df, score_col, min_n):
         df = df[(df["n"] >= min_n) & (df[score_col] > 0)].sort_values(score_col, ascending=False)
@@ -194,9 +218,11 @@ def non_overlap(d):
     return d.loc[keep]
 
 
-def strategy_trades(test, choices_by_stock, side="buy"):
+def strategy_trades(test, choices_by_stock, side="buy", busy=None):
     """Simulated trades per stock: on each day take the highest-ranked chosen signal that fired, then keep
-    only non-overlapping trades (never two open positions in the same stock) → per-stock n is effective n."""
+    only non-overlapping trades (never two open positions in the same stock) → per-stock n is effective n.
+    busy: optional {stock_id: exit position of the last trade} carried ACROSS folds — candidates before it are
+    dropped (a position opened in the previous fold may still be open), and it is updated in place."""
     te = test[test["side"] == side]
     by = dict(tuple(te.groupby("stock_id"))) if len(te) else {}
     rows = []
@@ -209,7 +235,11 @@ def strategy_trades(test, choices_by_stock, side="buy"):
         r = np.array([rank.get(k, -1) for k in key])
         d = d[r >= 0].assign(_r=r[r >= 0]).sort_values(["date", "_r"]).drop_duplicates("date")
         if "p" in d:
+            if busy is not None and sid in busy:
+                d = d[d["p"] >= busy[sid]]
             d = non_overlap(d.sort_values("p"))
+            if busy is not None and len(d):
+                busy[sid] = int(d["xp"].iloc[-1])
         rows.append(d)
     return pd.concat(rows, ignore_index=True) if rows else te.iloc[:0]
 

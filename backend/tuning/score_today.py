@@ -27,20 +27,25 @@ from tuning.run_tuning import add_common_args, json_safe, prepare  # noqa: E402
 DEFAULT_SELL = ("s_atr_25", 10)
 
 
-def tick(price):
-    """Taiwan stock tick size."""
+def tick(price, etf=False):
+    """Taiwan tick size (stocks: 0.01 … 5; ETFs / ETNs: 0.01 below 50, 0.05 from 50)."""
+    if etf:
+        return 0.01 if price < 50 else 0.05
     for lim, t in ((10, 0.01), (50, 0.05), (100, 0.1), (500, 0.5), (1000, 1.0)):
         if price < lim:
             return t
     return 5.0
 
 
-def rnd(x, mode="near"):
+def rnd(x, mode="near", etf=False):
+    """Round to a valid tick. mode 'above' = the first tick STRICTLY above x (breakout trigger prices)."""
     if x is None or not np.isfinite(x) or x <= 0:
         return None
-    t = tick(x)
+    t = tick(x, etf)
+    if mode == "above":
+        return round(float((np.floor(x / t + 1e-9) + 1) * t), 2)
     f = {"near": np.round, "up": np.ceil, "down": np.floor}[mode]
-    return round(float(f(x / t) * t), 2)
+    return round(float(f(x / t - (1e-9 if mode == "up" else 0)) * t), 2)
 
 
 def parse_args(argv=None):
@@ -48,7 +53,9 @@ def parse_args(argv=None):
     ap.add_argument("--source", choices=["parquet", "db"], required=True)
     ap.add_argument("--params", default=os.path.join(OUT_DIR, "stock_params.json"))
     ap.add_argument("--as-of", default=None, help="YYYYMMDD: score as of this date (ignore later rows)")
-    ap.add_argument("--years", type=float, default=1.8, help="history needed for indicators/percentiles")
+    ap.add_argument("--years", type=float, default=None,
+                    help="history loaded for indicators (default: the tuning run's own --years, so valuation "
+                         "percentiles and zigzag state are rebuilt on the same history as in tuning)")
     ap.add_argument("--top", type=int, default=10)
     ap.add_argument("--include-unreliable", action="store_true",
                     help="also list stocks labelled 'no reliable signal' (flagged; for diagnostics only)")
@@ -57,7 +64,7 @@ def parse_args(argv=None):
     return ap.parse_args(argv)
 
 
-def intraday_levels(f, sell_mult):
+def intraday_levels(f, sell_mult, etf=False):
     c = f["close"].to_numpy()
     last = f.iloc[-1]
     hh20 = f["high"].iloc[-20:].max() if len(f) >= 20 else np.nan
@@ -65,12 +72,12 @@ def intraday_levels(f, sell_mult):
     trail = last["hc22"] - sell_mult * last["atr"]
     ma20_next = c[-19:].sum() / 19 if len(c) >= 19 else np.nan   # x < this ⇒ close below tomorrow's MA20
     return {
-        "breakout_20": rnd(hh20, "up"), "breakout_55": rnd(hh55, "up"),
-        "ma5_over_ma20": rnd(ind.ma_cross_level(c, 5, 20), "up"),
-        "ma20_over_ma60": rnd(ind.ma_cross_level(c, 20, 60), "up"),
-        "bb_lower_touch": rnd(ind.bb_lower_level(c), "down"),
-        "ma20_break": rnd(ma20_next, "down"),
-        "trailing_stop": rnd(trail, "down"),
+        "breakout_20": rnd(hh20, "above", etf), "breakout_55": rnd(hh55, "above", etf),
+        "ma5_over_ma20": rnd(ind.ma_cross_level(c, 5, 20), "above", etf),
+        "ma20_over_ma60": rnd(ind.ma_cross_level(c, 20, 60), "above", etf),
+        "bb_lower_touch": rnd(ind.bb_lower_level(c), "down", etf),
+        "ma20_break": rnd(ma20_next, "down", etf),
+        "trailing_stop": rnd(trail, "down", etf),
         "note": "價格為下一交易日盤中觸發價（以今日收盤後資料推算；突破類以收盤確認為準）",
     }
 
@@ -91,7 +98,7 @@ def quality_flags(p, g, last_date):
     return fl
 
 
-def run(args):
+def run(args, extra_codes=(), return_prep=False):
     with open(args.params, encoding="utf-8") as f:
         pj = json.load(f)
     params = {p["stock_id"]: p for p in pj["stocks"]}
@@ -99,7 +106,9 @@ def run(args):
     if args.as_of and args.as_of < p_asof:
         raise SystemExit(f"--as-of {args.as_of} is earlier than the params as_of {p_asof}: the params were tuned on "
                          "later data, so this would not be a valid backtest (run run_tuning --end-date first).")
-    prep = prepare(args, 0, args.years, codes=list(params), end_date=args.as_of)
+    codes = list(dict.fromkeys(list(params) + [c for c in extra_codes if c]))   # + tracked picks
+    years = args.years or float((pj.get("config") or {}).get("years") or 5.0)
+    prep = prepare(args, 0, years, codes=codes, end_date=args.as_of)
     adjusted, holdings = prep["adjusted"], set(prep["holdings"])
     last_date = max(g["date"].iloc[-1] for g in adjusted.values())
     buys_out, sells_out, levels = [], [], {}
@@ -110,7 +119,8 @@ def run(args):
         last = f.iloc[-1]
         sell_sig, sell_h = (p["sell_rule"]["signal"], p["sell_rule"]["h"]) if p else DEFAULT_SELL
         mult = ind.ATR_MULT.get(sell_sig, 2.5)
-        levels[sid] = intraday_levels(f, mult)
+        etf = str(sid).startswith("00")
+        levels[sid] = intraday_levels(f, mult, etf)
         fresh = g["date"].iloc[-1] == last_date
         flags = quality_flags(p or {}, g, last_date)
         close = float(g["close"].iloc[-1])          # raw (adj_factor of the last row is 1)
@@ -128,15 +138,15 @@ def run(args):
                 buys_out.append({
                     "stock_id": sid, "name": p["name"], "reliable": p["reliable"], "level": p["level"],
                     "signals": [{"signal": s["signal"], "desc": s["desc"], "h": s["h"]} for s in fired],
-                    "ref_close": rnd(close),
+                    "ref_close": rnd(close, "near", etf),
                     "entry": "次日開盤市價（開盤漲幅 >= 9.5% 不追）；停損停利以實際成交價乘上百分比",
                     "stop_pct": stop_pct, "take_profit_pct": tp_pct, "mae_p20_pct": fin(p.get("mae_p20")),
-                    "stop_loss_if_fill_at_ref": rnd(close * (1 + stop_pct), "down") if stop_pct else None,
-                    "take_profit_if_fill_at_ref": rnd(close * (1 + tp_pct), "up") if tp_pct else None,
+                    "stop_loss_if_fill_at_ref": rnd(close * (1 + stop_pct), "down", etf) if stop_pct else None,
+                    "take_profit_if_fill_at_ref": rnd(close * (1 + tp_pct), "up", etf) if tp_pct else None,
                     "hold_days": fired[0]["h"], "hold_days_unit": "該股交易日（列數）", "oos_n": p["oos_n"], "oos_win": p["oos_win"],
                     "oos_mean": p["oos_mean"], "oos_xnet": p.get("oos_xnet"), "oos_mae_med": p.get("oos_mae_med"),
                     "confidence": p["confidence"], "score": score, "flags": flags,
-                    "holding": sid in holdings,
+                    "holding": sid in holdings, "sell_rule": p.get("sell_rule"),
                 })
         # ── SELL (holdings) ──
         if sid in holdings:
@@ -152,8 +162,10 @@ def run(args):
             if bool(sells["s_rsi_p90"].iloc[-1]) and sell_sig != "s_rsi_p90":
                 reasons.append("RSI 高於自身 P90（參考）")
             tp = p.get("tp_pct") if p else None
+            nm = (p or {}).get("name") or (str(g["name"].dropna().iloc[-1]).strip()
+                                           if "name" in g and g["name"].notna().any() else "")
             sells_out.append({
-                "stock_id": sid, "name": (p or {}).get("name", ""), "close": rnd(close),
+                "stock_id": sid, "name": nm, "close": rnd(close, "near", etf),
                 "alert": bool(reasons), "reasons": reasons,
                 "sell_rule": {"signal": sell_sig, "h": sell_h, "desc": ind.SELL_DESC[sell_sig],
                               "oos_n": (p or {}).get("sell_rule", {}).get("oos_n")},
@@ -163,6 +175,7 @@ def run(args):
     buys_out.sort(key=lambda r: (not r["reliable"], -(fin(r["score"]) or 0.0), -(fin(r["oos_mean"]) or 0.0)))
     out = {"as_of": last_date, "generated_at": datetime.now().isoformat(timespec="seconds"),
            "params_generated_at": pj.get("generated_at"), "include_unreliable": args.include_unreliable,
+           "fee_discount": (pj.get("config") or {}).get("fee_discount"),
            "n_scored": len(adjusted), "n_reliable_params": sum(1 for p in params.values() if p["reliable"]),
            "buy": buys_out, "sell_alerts": sells_out, "intraday_levels": levels}
     os.makedirs(args.out_dir, exist_ok=True)
@@ -173,7 +186,7 @@ def run(args):
     with open(os.path.join(args.out_dir, f"recommendations_{last_date}.md"), "w", encoding="utf-8") as f:
         f.write(md)
     log(f"[score] {len(buys_out)} buy candidates, {sum(s['alert'] for s in sells_out)}/{len(sells_out)} holding alerts → {jp}")
-    return out
+    return (out, prep) if return_prep else out
 
 
 def fin(x):

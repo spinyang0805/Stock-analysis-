@@ -1,0 +1,113 @@
+name: Daily picks (evening compute)
+
+# After the close: score signals with the latest tuned params, re-simulate every tracked pick and write the
+# morning report. Nothing is sent here — daily-send.yml delivers it at 08:50 the next trading day.
+# State (tracked_picks.json) and reports live in release `daily-picks`. Read-only on Supabase.
+
+on:
+  schedule:
+    - cron: "30 11 * * 1-6"    # 19:30 Taipei (Mon–Sat: make-up Saturday sessions); after update-data 15:40
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-picks
+  cancel-in-progress: false
+
+jobs:
+  compute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install pandas numpy requests psycopg2-binary pytz pyarrow duckdb
+
+      - name: Trading day?
+        id: day
+        run: |
+          python - <<'EOF' >> "$GITHUB_OUTPUT"
+          import sys; sys.path.insert(0, "backend")
+          from datetime import datetime, timedelta, timezone
+          import trading_calendar as cal
+          d = datetime.now(timezone(timedelta(hours=8))).strftime("%Y%m%d")
+          print(f"trading={'true' if cal.is_trading_day(d) else 'false'}")
+          print(f"today={d}")
+          EOF
+
+      - name: Download data, params and tracking state
+        if: steps.day.outputs.trading == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -eu
+          python backend/history_store.py pull
+          python backend/history_store.py append --days 15     # latest days from Supabase (local only, no push)
+          # extra data: the release must be listable (a gh failure aborts); every listed asset must download
+          names=$(gh release view tuning-data --json assets -q '.assets[].name')
+          [ -n "$names" ] && gh release download tuning-data -D history --clobber
+          for a in $names; do [ -f "history/$a" ] || { echo "::error::missing tuning-data/$a"; exit 1; }; done
+          if ! gh release view tuning-out >/dev/null 2>&1; then echo "::error::no tuned params yet (run Weekly tuning)"; exit 1; fi
+          mkdir -p history/out/daily
+          gh release download tuning-out -p stock_params.json -D history/out --clobber
+          BOOTSTRAP=0
+          if ! gh release view daily-picks >/dev/null 2>&1; then
+            gh release create daily-picks --title daily-picks --latest=false \
+              --notes "Daily picks state and reports. Managed by daily-picks.yml / daily-send.yml."
+            BOOTSTRAP=1
+          fi
+          state_names=$(gh release view daily-picks --json assets -q '.assets[].name')
+          if echo "$state_names" | grep -qx tracked_picks.json; then
+            gh release download daily-picks -p tracked_picks.json -D history/out/daily --clobber
+            test -s history/out/daily/tracked_picks.json
+          elif [ "$BOOTSTRAP" = "1" ] || [ -z "$state_names" ]; then
+            echo "starting tracking from an empty state (new / empty release)"
+          else
+            echo "::error::release daily-picks has assets but no tracked_picks.json — refusing to restart tracking"; exit 1
+          fi
+
+      - name: Freshness check
+        if: steps.day.outputs.trading == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          python - <<'EOF'
+          import glob, sys, pyarrow.parquet as pq, pyarrow.compute as pc
+          def last(pattern):
+              fs = sorted(glob.glob(pattern))
+              return max(pc.max(pq.read_table(f, columns=["date"])["date"]).as_py() for f in fs[-1:]) if fs else None
+          p, v = last("history/prices_*.parquet"), last("history/valuation_*.parquet")
+          print(f"prices {p}  valuation {v}")
+          if p is None:
+              sys.exit("no prices")
+          if v and v < p:
+              print(f"::warning::valuation data ends {v} < prices {p} (tuning-data not refreshed yet)")
+          EOF
+
+      - name: Compute
+        if: steps.day.outputs.trading == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}   # read-only holdings query + alert_levels write (small table)
+        run: python backend/tuning/daily_picks.py --source parquet --adjust-source exchange --write-alerts
+
+      - name: Publish (dated files first, latest.json last)
+        if: steps.day.outputs.trading == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          set -eu
+          cd history/out/daily
+          d=$(python -c "import json;print(json.load(open('latest.json'))['as_of'])")
+          cp tracked_picks.json "tracked_picks_$d.json"
+          gh release upload daily-picks "report_$d.md" "line_$d.txt" "recommendations_$d.json" \
+            "tracked_picks_$d.json" --clobber
+          gh release upload daily-picks tracked_picks.json --clobber
+          gh release upload daily-picks latest.json --clobber
+          cat "report_$d.md" >> "$GITHUB_STEP_SUMMARY"

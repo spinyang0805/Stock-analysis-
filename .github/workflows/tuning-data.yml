@@ -7,7 +7,7 @@ name: Tuning data (valuation / revenue / market / SBL / TDCC)
 
 on:
   schedule:
-    - cron: "0 12 * * *"      # 20:00 Taipei daily (after update-data 15:40)
+    - cron: "30 9 * * *"      # 17:30 Taipei daily: after update-data (15:40), before daily-picks (19:30)
   workflow_dispatch:
     inputs:
       kinds:

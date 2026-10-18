@@ -1,0 +1,87 @@
+name: Daily report (08:50 send)
+
+# Starts ~08:20 Taipei (GitHub schedules can run late), waits until 08:50 and sends the report computed
+# the previous evening by daily-picks.yml. Non-trading days are skipped by send_daily.py (Mon–Sat cron so
+# a make-up Saturday session is covered). Per-channel delivery results are kept as sent_YYYYMMDD.json in
+# release daily-picks, so a rerun only retries the channels that failed.
+
+on:
+  schedule:
+    - cron: "20 0 * * 1-6"     # 08:20 Taipei
+  workflow_dispatch:
+    inputs:
+      no_wait:
+        description: "send now instead of waiting for 08:50 (true/false)"
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-send
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install requests pytz
+
+      - name: Download report and delivery record
+        run: |
+          set -eu
+          mkdir -p history/out/daily
+          today=$(TZ=Asia/Taipei date +%Y%m%d)
+          echo "TODAY=$today" >> "$GITHUB_ENV"
+          if ! gh release view daily-picks >/dev/null 2>&1; then
+            echo "::warning::release daily-picks does not exist yet — the sender will report a missing report"
+            exit 0
+          fi
+          names=$(gh release view daily-picks --json assets -q '.assets[].name')   # a gh failure aborts the job
+          if echo "$names" | grep -qx "sent_$today.json"; then
+            gh release download daily-picks -p "sent_$today.json" -D history/out/daily --clobber
+            test -s "history/out/daily/sent_$today.json"           # never lose the record of what was sent
+          fi
+          if echo "$names" | grep -qx latest.json; then
+            gh release download daily-picks -p latest.json -D history/out/daily --clobber
+            d=$(python -c "import json;print(json.load(open('history/out/daily/latest.json'))['as_of'])")
+            # a listed report must download; an unlisted one is reported as missing by send_daily.py
+            for f in "report_$d.md" "line_$d.txt"; do
+              if echo "$names" | grep -qx "$f"; then gh release download daily-picks -p "$f" -D history/out/daily --clobber; fi
+            done
+          fi
+
+      - name: Send
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
+          NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          NO_WAIT: ${{ github.event.inputs.no_wait }}
+        run: |
+          if [ "$NO_WAIT" = "true" ]; then python backend/tuning/send_daily.py --no-wait
+          else python backend/tuning/send_daily.py; fi
+
+      - name: Save delivery record
+        if: always()
+        run: |
+          f="history/out/daily/sent_$TODAY.json"
+          [ -f "$f" ] || exit 0
+          if ! gh release upload daily-picks "$f" --clobber; then
+            echo "::error::delivery record NOT saved — do not re-run this workflow today (it would resend every channel, incl. LINE)"
+            exit 1
+          fi

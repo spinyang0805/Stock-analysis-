@@ -170,8 +170,10 @@ def cmd_revenue(args, jobs):
                     f"{ny}{nm:02d}11" if (f"{y}{m:02d}", mk) not in done else late)
             rows.extend(got)
             log(f"  {y}{m:02d} {mk} rows={len(got)}")
+    # immutable: a (stock, month) figure already stored is never replaced — a later amendment would otherwise be
+    # back-dated to the original availability date. Re-fetches only ADD late filers (with their first-seen date).
     allv = (pd.concat([old, pd.DataFrame(rows)], ignore_index=True)
-            .drop_duplicates(["stock_id", "ym"], keep="last").sort_values(["stock_id", "ym"]))
+            .drop_duplicates(["stock_id", "ym"], keep="first").sort_values(["stock_id", "ym"]))
     atomic_parquet(allv, path)
     log(f"[revenue] {path} rows={len(allv):,}")
 

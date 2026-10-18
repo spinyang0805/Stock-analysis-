@@ -1,0 +1,75 @@
+name: Weekly tuning
+
+# Re-tunes per-stock signals on the full history (prices/chips from release history-data, extra data
+# from release tuning-data) and publishes the params used by the daily picks to release tuning-out.
+# Read-only on Supabase (holdings come from `transactions`).
+
+on:
+  schedule:
+    - cron: "0 2 * * 0"        # Sunday 10:00 Taipei
+  workflow_dispatch:
+    inputs:
+      universe:
+        description: "top-N by 60-day turnover"
+        default: "500"
+      years:
+        description: "history years"
+        default: "5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-tuning
+  cancel-in-progress: false
+
+jobs:
+  tune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
+      UNIVERSE: ${{ github.event.inputs.universe || '500' }}
+      YEARS: ${{ github.event.inputs.years || '5' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install pandas numpy requests psycopg2-binary pytz pyarrow duckdb
+
+      - name: Validate inputs
+        run: |
+          for v in "$UNIVERSE" "$YEARS"; do
+            case "$v" in ''|*[!0-9]*) echo "inputs must be numeric"; exit 1;; esac
+          done
+
+      - name: Download data
+        run: |
+          set -eu
+          python backend/history_store.py pull
+          gh release view tuning-data --json assets -q '.assets[].name' > /tmp/a.txt
+          [ -s /tmp/a.txt ] && gh release download tuning-data -D history --clobber
+          while read -r a; do [ -f "history/$a" ] || { echo "::error::missing $a"; exit 1; }; done < /tmp/a.txt
+
+      - name: Tune
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}   # read-only holdings query
+        run: >
+          python backend/tuning/run_tuning.py --source parquet --universe "$UNIVERSE" --years "$YEARS"
+          --workers 4 --adjust-source exchange
+
+      - name: Publish params
+        run: |
+          set -eu
+          gh release view tuning-out >/dev/null 2>&1 || gh release create tuning-out --title tuning-out \
+            --notes "Latest per-stock tuning output (stock_params.json, tuning_report.md). Managed by weekly-tuning.yml." --latest=false
+          python -c "import json;d=json.load(open('history/out/stock_params.json',encoding='utf-8'));assert len(d['stocks'])>=50,len(d['stocks'])"
+          gh release upload tuning-out history/out/stock_params.json history/out/tuning_report.md --clobber
+          echo "### Tuning report" >> "$GITHUB_STEP_SUMMARY"
+          head -40 history/out/tuning_report.md >> "$GITHUB_STEP_SUMMARY"

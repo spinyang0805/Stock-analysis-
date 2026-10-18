@@ -59,6 +59,7 @@ class Cfg:
     shrink_k: float = 20.0
     max_signals: int = 3
     min_train_events: int = 10
+    exploratory: bool = True    # until Phase B (calibrated inference + deployed-exit simulation) is done
     stable_frac: float = 2 / 3
     rebalance_days: int = 21
     turnover_lookback: int = 60
@@ -101,6 +102,9 @@ def add_common_args(ap):
 
 # ── shared data preparation (also used by score_today) ──────────────────────
 def get_holdings(args):
+    """Holdings list. args._holdings_ok is set False when the query FAILED (as opposed to an empty portfolio),
+    so callers that infer 'the user sold' can refuse to act on a failed lookup."""
+    args._holdings_ok = True
     if args.no_holdings:
         return []
     if args.holdings:
@@ -108,6 +112,7 @@ def get_holdings(args):
     try:
         return data_mod.load_holdings()
     except Exception as e:
+        args._holdings_ok = False
         log(f"[holdings] unavailable ({type(e).__name__}); continuing without holdings")
         return []
 
@@ -153,27 +158,29 @@ def attach_extras(g, sid, meta, mkt_idx, rev, sbl, tdcc=None):
     if idx is None:
         idx = mkt_idx.get("TAIEX")
     g["mkt"] = idx.reindex(dates.to_numpy()).ffill().to_numpy() if idx is not None else np.nan
-    g["rev"], g["rev_yoy"] = np.nan, np.nan
+    g["rev"], g["rev_yoy"], g["rev_ym"] = np.nan, np.nan, np.nan
     if rev is not None and len(rev):
         r = rev.dropna(subset=["avail_date"]).sort_values(["avail_date", "ym"])
         r = r.drop_duplicates("avail_date", keep="last")
         rr = pd.DataFrame({"d": r["avail_date"].astype("int64").to_numpy(),
-                           "revenue": r["revenue"].astype(float).to_numpy(), "yoy": r["yoy"].astype(float).to_numpy()})
+                           "revenue": r["revenue"].astype(float).to_numpy(), "yoy": r["yoy"].astype(float).to_numpy(),
+                           "ym": r["ym"].astype("int64").astype(float).to_numpy()})
         left = pd.DataFrame({"d": dates.astype("int64").to_numpy(), "_i": np.arange(len(g))})
         m = pd.merge_asof(left.sort_values("d"), rr, on="d", direction="backward").sort_values("_i")
-        g["rev"], g["rev_yoy"] = m["revenue"].to_numpy(), m["yoy"].to_numpy()
+        g["rev"], g["rev_yoy"], g["rev_ym"] = m["revenue"].to_numpy(), m["yoy"].to_numpy(), m["ym"].to_numpy()
     g["sbl"] = (sbl.set_index("date")["sbl_balance"].reindex(dates.to_numpy()).to_numpy()
                 if sbl is not None and len(sbl) else np.nan)
-    for col in ("p400", "p1000", "n_total"):
+    for col in ("p400", "p1000", "n_total", "td_d"):
         g[col] = np.nan
     if tdcc is not None and len(tdcc):
         t = tdcc.sort_values("date")
         tt = pd.DataFrame({"d": t["date"].astype("int64").to_numpy(),
+                           "td_d": t["date"].astype("int64").astype(float).to_numpy(),
                            **{c: t[c].astype(float).to_numpy() for c in ("p400", "p1000", "n_total")}})
         left = pd.DataFrame({"d": dates.astype("int64").to_numpy(), "_i": np.arange(len(g))})
         m = pd.merge_asof(left.sort_values("d"), tt, on="d", direction="backward",
                           allow_exact_matches=False).sort_values("_i")
-        for col in ("p400", "p1000", "n_total"):
+        for col in ("p400", "p1000", "n_total", "td_d"):
             g[col] = m[col].to_numpy()
 
 
@@ -237,7 +244,8 @@ def prepare(args, universe_size, years, codes=None, end_date=None, cfg=None):
         chip_rows[sid] = int(pd.notna(g["net_buy"]).sum())
     quality = quality.reindex(list(adjusted)).assign(chip_valid_rows=pd.Series(chip_rows))
     return {"adjusted": adjusted, "coverage": coverage, "quality": quality, "meta": meta, "rank": rank,
-            "holdings": [h for h in holdings if h in adjusted], "calendar": cal, "inu": inu,
+            "holdings": [h for h in holdings if h in adjusted], "holdings_all": list(holdings),
+            "holdings_ok": getattr(args, "_holdings_ok", True), "calendar": cal, "inu": inu,
             "schedule": schedule, "current": [c for c in current if c in adjusted]}
 
 
@@ -342,6 +350,7 @@ def run(args):
         f"test {cfg.test_days}d, history {avail}d")
     all_sids = list(prep["adjusted"])
     trades, sell_trades, hold_trades = [], [], []
+    busy = {}                     # (strategy) → {stock: exit position of its last OOS trade}, carried across folds
     for fd in folds:
         lo, hi, th = fd["train_lo"], fd["test_lo"], fd["test_hi"]
         levels, choices, s_full, groups, tr = nested_choose(events, lo, hi, groups_at, cfg, all_sids)
@@ -350,14 +359,15 @@ def run(args):
         strategies = level_choices(s_full, groups, all_sids)
         strategies["adaptive"] = choices
         for name, ch in strategies.items():
-            t = ev_mod.strategy_trades(te, ch, "buy")
+            t = ev_mod.strategy_trades(te, ch, "buy", busy.setdefault(name, {}))
             trades.append(t.assign(strategy=name, fold=fd["k"], group=t["stock_id"].map(groups),
                                    level=t["stock_id"].map(levels) if name == "adaptive" else name))
         hs = [h for h in prep["holdings"]]
-        ht = ev_mod.strategy_trades(test[~test["in_u"] & test["stock_id"].isin(hs)], {h: choices[h] for h in hs}, "buy")
+        ht = ev_mod.strategy_trades(test[~test["in_u"] & test["stock_id"].isin(hs)], {h: choices[h] for h in hs},
+                                    "buy", busy.setdefault("_hold", {}))
         hold_trades.append(ht.assign(fold=fd["k"]))
         ssel = ev_mod.select(tr, groups, cfg, "sell")
-        st = ev_mod.strategy_trades(te, ssel["stock"], "sell")
+        st = ev_mod.strategy_trades(te, ssel["stock"], "sell", busy.setdefault("_sell", {}))
         sell_trades.append(st.assign(fold=fd["k"], avoid=-st["gross"], xavoid=-st["excess"]))
         lv_cnt = pd.Series(levels).loc[lambda s: s.index.isin(set(te["stock_id"]))].value_counts().to_dict()
         log(f"[fold {fd['k']}] train {cal[lo]}..{cal[hi - 1]} test {cal[hi]}..{cal[th - 1]}: "
@@ -420,7 +430,10 @@ def decide(prep, cfg, trades, hold_trades, sell_trades, flevels, fchoices, fsel,
                  "xnet_pos": bool(s["xnet"] > 0),
                  "stable": s["folds"] > 0 and s["folds_pos"] / s["folds"] >= cfg.stable_frac,
                  "oos_bh": bool(bh.get(sid, False)), "has_signals": bool(chosen)}
-        reliable = all(gates.values())
+        gates_all = all(gates.values())
+        # exploratory runs (inference not yet calibrated, deployed exits not yet simulated — see TUNING.md)
+        # never claim reliability; the gate outcome is kept as a diagnostic (gates_all)
+        reliable = gates_all and not cfg.exploratory
         level = flevels.get(sid, "none") if chosen else "none"
         conf = 0.0
         if reliable:
@@ -446,7 +459,8 @@ def decide(prep, cfg, trades, hold_trades, sell_trades, flevels, fchoices, fsel,
         out.append({
             "stock_id": sid, "name": m["name"], "market": m["market"], "etf": m["etf"], "group": grp,
             "universe_rank": prep["rank"].get(sid), "in_universe": in_u, "holding": sid in prep["holdings"],
-            "level": level, "reliable": reliable, "gates": gates, "group_fallback": level in ("group", "uniform"),
+            "level": level, "reliable": reliable, "gates_all": gates_all, "gates": gates,
+            "group_fallback": level in ("group", "uniform"),
             "label": {"stock": "個股專屬訊號", "group": "同組訊號", "uniform": "全市場統一訊號",
                       "none": "no reliable signal"}[level] if reliable else "no reliable signal",
             "buy_signals": sigs, "best_h": int(chosen[0][1]) if chosen else None,
@@ -499,7 +513,8 @@ def write_outputs(args, cfg, prep, params, trades, sell_trades, folds, cal, trai
     os.makedirs(args.out_dir, exist_ok=True)
     doc = json_safe({"generated_at": datetime.now().isoformat(timespec="seconds"),
                      "config": asdict(cfg) | {"source": args.source, "universe": args.universe, "years": args.years,
-                                              "fee_discount": args.fee_discount, "adjust_source": args.adjust_source},
+                                              "fee_discount": args.fee_discount, "adjust_source": args.adjust_source,
+                                              "execution": "entry open t+1, exit open t+h+1"},
                      "stocks": params})
     with open(os.path.join(args.out_dir, "stock_params.json"), "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=1, allow_nan=False)

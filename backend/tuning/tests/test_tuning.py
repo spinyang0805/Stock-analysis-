@@ -30,11 +30,14 @@ def synth(n=400, seed=0):
     month = np.arange(n) // 21                       # revenue changes once per "month"
     g["rev"] = (1e6 * (1 + 0.05 * rng.normal(size=month.max() + 1)).cumprod())[month]
     g["rev_yoy"] = rng.normal(10, 20, month.max() + 1)[month]
+    g["rev_ym"] = np.array([202001 + (m // 12) * 100 + m % 12 for m in range(month.max() + 1)], float)[month]
     g["sbl"] = np.abs(1e5 + np.cumsum(rng.normal(0, 3e3, n)))
     week = np.arange(n) // 5
     g["p1000"] = (60 + np.cumsum(rng.normal(0, 0.3, week.max() + 1)))[week]
     g["p400"] = g["p1000"] + 5
     g["n_total"] = (50000 + np.cumsum(rng.normal(0, 300, week.max() + 1)))[week]
+    g["td_d"] = pd.to_datetime(dates).to_series().groupby(week).transform("first").dt.strftime("%Y%m%d") \
+        .astype(int).astype(float).to_numpy()
     return g
 
 
@@ -43,13 +46,16 @@ def test_signals_have_no_lookahead():
     g = synth()
     full_f = indicators.features(g)
     full_b, full_s = indicators.buy_signals(full_f), indicators.sell_signals(full_f)
-    for cut in (150, 260, 333):
+    for cut in (100, 119, 121, 150, 260, 333):        # 100/119/121: around the CHIP_MIN_ROWS=120 coverage gate
         part = g.iloc[:cut].copy()
         pf = indicators.features(part)
         pb, ps = indicators.buy_signals(pf), indicators.sell_signals(pf)
+        allsig = {**full_b, **full_s}
         for name, s in {**pb, **ps}.items():
-            ref = {**full_b, **full_s}[name].iloc[:cut]
+            ref = allsig[name].iloc[:cut]
             assert (s.to_numpy() == ref.to_numpy()).all(), f"{name} changed with future data (cut={cut})"
+        for name in set(allsig) - set(pb) - set(ps):   # signal absent on the prefix ⇒ must not fire there in full
+            assert not allsig[name].iloc[:cut].any(), f"{name} fires before its data coverage (cut={cut})"
         for col in ("rsi", "kd_k", "macd", "atr", "bb_lower", "hh20", "dev20"):
             np.testing.assert_allclose(pf[col].to_numpy(), full_f[col].iloc[:cut].to_numpy(), equal_nan=True)
 
@@ -75,15 +81,27 @@ def test_past_percentile_excludes_today():
     assert q.iloc[10] == pytest.approx(np.median(np.arange(0, 10)))   # uses x[0..9], not x[10]
 
 
-def test_forward_return_entry_next_open_exit_close():
+def test_forward_return_entry_next_open_exit_open_after_h():
     g = synth(30)
     fr = evaluate.forward_returns(g, 3)
     t = 5
-    exp = g["aclose"].iloc[t + 3] / g["aopen"].iloc[t + 1] - 1
+    exp = g["aopen"].iloc[t + 4] / g["aopen"].iloc[t + 1] - 1      # exit at the open of t+h+1
     assert fr["gross"].iloc[t] == pytest.approx(exp)
+    assert fr["exit_date"].iloc[t] == g["date"].iloc[t + 4]
     exp_mae = g["alow"].iloc[t + 1:t + 4].min() / g["aopen"].iloc[t + 1] - 1
     assert fr["mae"].iloc[t] == pytest.approx(exp_mae)
-    assert np.isnan(fr["gross"].iloc[-3])           # exit beyond data → no label
+    assert np.isnan(fr["gross"].iloc[-4])           # exit beyond data → no label
+
+
+def test_forward_return_requires_valid_fill():
+    g = synth(30)
+    g["fill_ok"] = True
+    g.loc[9, "fill_ok"] = False                      # no traded open on day 9
+    fr = evaluate.forward_returns(g, 3)
+    assert np.isnan(fr["gross"].iloc[8])             # entry bar invalid → no trade
+    # planned exit bar (5+3+1 = 9) invalid → deferred to the next valid open (10), like simulate_position
+    assert fr["exit_date"].iloc[5] == g["date"].iloc[10]
+    assert fr["gross"].iloc[5] == pytest.approx(g["aopen"].iloc[10] / g["aopen"].iloc[6] - 1)
 
 
 def test_cost_math():
@@ -119,6 +137,19 @@ def test_adjust_backward_factor_and_gap_flag():
     assert a["aclose"].iloc[2] == 98                      # rows on/after the ex-date unchanged
     assert cov["unexplained_gaps"] == 1                   # -39% with no event is flagged, not patched
     assert cov["markers_unexplained"] == 0
+
+
+def test_position_state_carried_across_folds():
+    def ev_rows(ps, xps):
+        return pd.DataFrame({"stock_id": "1", "side": "buy", "signal": "a", "h": 5, "p": ps, "xp": xps,
+                             "date": [f"d{p:03d}" for p in ps]})
+    busy = {}
+    f0 = evaluate.strategy_trades(ev_rows([10, 60], [21, 66]), {"1": [("a", 5)]}, "buy", busy)
+    assert f0["p"].tolist() == [10, 60] and busy["1"] == 66
+    # fold 1: p=62 starts while the fold-0 trade (exit 66) is open → dropped; p=64 too; p=70 is kept.
+    # Without carried state, 62 would be taken and would then wrongly suppress 64…69.
+    f1 = evaluate.strategy_trades(ev_rows([62, 64, 70], [68, 70, 76]), {"1": [("a", 5)]}, "buy", busy)
+    assert f1["p"].tolist() == [70]
 
 
 def test_bh():

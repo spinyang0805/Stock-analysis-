@@ -101,7 +101,7 @@ def features(g):
     f["pos20"] = ((c - lo20) / (hi20 - lo20).replace(0, np.nan))
     f["red"] = c > o
     for col in ("net_buy", "foreign", "trust", "margin", "short", "pe", "pb", "dy", "mkt", "rev", "rev_yoy", "sbl",
-                "p400", "p1000", "n_total"):
+                "p400", "p1000", "n_total", "rev_ym", "td_d"):
         if col in g:
             f[col] = pd.to_numeric(g[col], errors="coerce").astype(float)
     if "mkt" in f and f["mkt"].notna().sum() >= 60:
@@ -115,6 +115,7 @@ def features(g):
 
 
 PAT_BOTTOM_TOL = 0.03  # W 底 / M 頭：兩個低點（高點）相差 3% 內
+PIV_TOL = 0.002        # 底底高／頭頭低：差距 < 0.2% 視為相等（不算墊高也不算破底）
 V_DROP, V_WIN, V_REC = 0.15, 40, 0.5
 
 
@@ -141,16 +142,16 @@ def patterns(f):
         if trend == 0:
             trend, ext, ext_i = 1, h[t], t
         elif trend == 1:
-            if h[t] > ext:
-                ext, ext_i = h[t], t
-            elif c[t] <= ext * (1 - thr):
+            if h[t] > ext:                       # update the extreme first, then test reversal independently
+                ext, ext_i = h[t], t             # (an outside bar can make a new high and close far below it)
+            if c[t] <= ext * (1 - thr):
                 piv.append(("H", ext, ext_i))
                 new = "H"
                 trend, ext, ext_i = -1, l[t], t
         else:
             if l[t] < ext:
                 ext, ext_i = l[t], t
-            elif c[t] >= ext * (1 + thr):
+            if c[t] >= ext * (1 + thr):
                 piv.append(("L", ext, ext_i))
                 new = "L"
                 trend, ext, ext_i = 1, h[t], t
@@ -158,24 +159,30 @@ def patterns(f):
         hpv = [(p, i) for k, p, i in piv[-4:] if k == "H"][-2:]
         lpv = [(p, i) for k, p, i in piv[-4:] if k == "L"][-2:]
         hs, ls = [p for p, _ in hpv], [p for p, _ in lpv]
-        # 趨勢線：兩個墊高的低點連成上升線，收盤跌破 → 賣；兩個降低的高點連成下降線，收盤突破 → 買
-        if len(lpv) == 2 and ls[1] > ls[0] and (lpv[0][1], lpv[1][1]) not in tl_used:
+        up_h = len(hs) == 2 and hs[1] > hs[0] * (1 + PIV_TOL)
+        dn_h = len(hs) == 2 and hs[1] < hs[0] * (1 - PIV_TOL)
+        up_l = len(ls) == 2 and ls[1] > ls[0] * (1 + PIV_TOL)
+        dn_l = len(ls) == 2 and ls[1] < ls[0] * (1 - PIV_TOL)
+        # 趨勢線：兩個墊高的低點連成上升線，收盤「由上往下」穿越 → 賣；兩個降低的高點連成下降線，由下往上穿越 → 買
+        if up_l and (lpv[0][1], lpv[1][1]) not in tl_used and t > 0:
             (p0, i0), (p1, i1) = lpv
-            line = p1 + (p1 - p0) / (i1 - i0) * (t - i1)
-            if c[t] < line:
+            slope = (p1 - p0) / (i1 - i0)
+            if c[t] < p1 + slope * (t - i1) and c[t - 1] >= p1 + slope * (t - 1 - i1):
                 out["s_tl_up_break"][t] = True
                 tl_used.add((i0, i1))
-        if len(hpv) == 2 and hs[1] < hs[0] and (hpv[0][1], hpv[1][1]) not in tl_used:
+        if dn_h and (hpv[0][1], hpv[1][1]) not in tl_used and t > 0:
             (p0, i0), (p1, i1) = hpv
-            line = p1 + (p1 - p0) / (i1 - i0) * (t - i1)
-            if c[t] > line:
+            slope = (p1 - p0) / (i1 - i0)
+            if c[t] > p1 + slope * (t - i1) and c[t - 1] <= p1 + slope * (t - 1 - i1):
                 out["tl_down_break"][t] = True
                 tl_used.add((i0, i1))
         if len(hs) == 2 and len(ls) == 2:
-            struct[t] = 1 if hs[1] > hs[0] and ls[1] > ls[0] else -1 if hs[1] < hs[0] and ls[1] < ls[0] else 0
-        if new == "L" and len(ls) == 2:
-            out["pat_hl" if ls[1] > ls[0] else "s_pat_ll"][t] = True   # 底底高 / 底底低 確認
-        if new == "H" and len(hs) == 2 and hs[1] < hs[0]:
+            struct[t] = 1 if up_h and up_l else -1 if dn_h and dn_l else 0
+        if new == "L" and up_l:
+            out["pat_hl"][t] = True                                    # 底底高 確認
+        if new == "L" and dn_l:
+            out["s_pat_ll"][t] = True                                  # 底底低 確認（相等不算）
+        if new == "H" and dn_h:
             out["s_pat_lh"][t] = True                                  # 頭頭低 確認
         if t > 0 and struct[t] != struct[t - 1]:
             if struct[t] == 1:
@@ -214,10 +221,28 @@ def patterns(f):
 
 
 def _monthly(f):
-    """Revenue figures arrive once a month: (new_flag, monthly-series helpers mapped back to days)."""
-    rev = f["rev"]
-    new = rev.notna() & (rev != rev.shift(1))
-    return new
+    """Days on which a NEW revenue month becomes known (by the month identifier rev_ym, not by value change),
+    plus 'consecutive' = this month directly follows the previous known month (no gap)."""
+    ym = f["rev_ym"] if "rev_ym" in f else None
+    if ym is None:                                    # fallback for frames without the identifier
+        rev = f["rev"]
+        return rev.notna() & (rev != rev.shift(1)), None
+    new = ym.notna() & (ym != ym.shift(1))
+    mi = (ym // 100) * 12 + (ym % 100)                # month index
+    m = mi[new]
+    consec = (m.diff() == 1)
+    return new, consec
+
+
+def _gaps(f):
+    """Up-gaps (day low > previous high). Level = the gap's lower edge (previous day's high), the usual
+    support in TW practice. A gap is valid for 20 sessions and is invalidated once a close falls below it."""
+    gap_up = f["low"] > f["high"].shift(1)
+    gid = gap_up.cumsum()
+    lvl = f["high"].shift(1).where(gap_up).ffill(limit=20)
+    below = (f["close"] < lvl) & lvl.notna()
+    filled_before = below.groupby(gid).cummax().groupby(gid).shift(1, fill_value=False)
+    return gap_up, lvl, below, filled_before
 
 
 def extra_buy(f):
@@ -231,22 +256,27 @@ def extra_buy(f):
         s["rs_resilient"] = edge((m20 < -0.05) & (c20 > 0))          # 大盤 20 日跌 >5% 時逆勢上漲（抗跌）
         s["mkt_turn_bull"] = edge(f["mkt_regime"] == 1)              # 大盤轉多
     if _has(f, "rev"):
-        new = _monthly(f)
+        new, consec = _monthly(f)
+        cons = consec if consec is not None else pd.Series(True, index=f.index[new])
         rv = f["rev"][new]
-        hi12 = rv > rv.shift(1).rolling(12, min_periods=12).max()
+        # the 12 compared months must be consecutive (no missing month inside the window)
+        cons12 = cons.astype(float).rolling(12, min_periods=12).min() == 1
+        hi12 = (rv > rv.shift(1).rolling(12, min_periods=12).max()) & cons12
         s["rev_high12"] = new & hi12.reindex(f.index).fillna(False)  # 月營收創 12 個月新高
         y = f["rev_yoy"][new]
-        s["rev_yoy_accel"] = new & ((y > 20) & (y > y.shift(1))).reindex(f.index).fillna(False)  # 年增 >20% 且加速
-        st3 = (y > 0).astype(float).rolling(3, min_periods=3).min() == 1
-        s["rev_yoy_3up"] = new & (st3 & ~st3.shift(1, fill_value=False)).reindex(f.index).fillna(False)
-    # 缺口：向上跳空（整日最低 > 前日最高）；之後 20 日內回測缺口上緣守住
-    gap_up = f["low"] > f["high"].shift(1)
+        acc = (y > 20) & (y > y.shift(1)) & cons
+        s["rev_yoy_accel"] = new & acc.reindex(f.index).fillna(False)  # 年增 >20% 且比上月加速
+        pos = (y > 0) & y.notna()
+        run3 = pos & pos.shift(1, fill_value=False) & pos.shift(2, fill_value=False) \
+            & cons & cons.shift(1, fill_value=False)                   # 連 3 個「連續」月份年增
+        s["rev_yoy_3up"] = new & (run3 & ~run3.shift(1, fill_value=False)).reindex(f.index).fillna(False)
+    # 缺口：向上跳空（整日最低 > 前日最高）；之後 20 日內回測缺口下緣守住（缺口一旦被收盤跌破即失效）
+    gap_up, lvl, below, filled_before = _gaps(f)
     s["gap_up"] = gap_up & f["up"]
-    lvl = f["high"].shift(1).where(gap_up).ffill(limit=20)
-    s["gap_support"] = edge(~gap_up & (f["low"] <= lvl * (1 + TOUCH_BAND)) & (f["close"] >= lvl))
+    s["gap_support"] = edge(~gap_up & ~filled_before & (f["low"] <= lvl * (1 + TOUCH_BAND)) & (f["close"] >= lvl))
     if _has(f, "sbl"):
         chg = f["sbl"].pct_change(5, fill_method=None).replace([np.inf, -np.inf], np.nan)
-        s["sbl_cover"] = edge((chg < past_q(chg, 0.1)) & (f["close"] > f["ma20"]))  # 借券大量回補且站上月線
+        s["sbl_cover"] = edge((chg < 0) & (chg < past_q(chg, 0.1)) & (f["close"] > f["ma20"]))  # 借券大量回補
     s.update(_whale(f, "buy"))
     return s
 
@@ -255,13 +285,20 @@ def _whale(f, side):
     """集保大戶：週資料，只在新一週數字出現的那天判斷。集中 = 千張(或 400 張)大戶比例連 2 週上升且總人數下降。"""
     if not _has(f, "p1000"):
         return {}
-    new = f["p1000"].notna() & ((f["p1000"] != f["p1000"].shift(1)) | (f["n_total"] != f["n_total"].shift(1)))
+    if "td_d" in f:                                   # new week = new TDCC data date (identifier, not value change)
+        new = f["td_d"].notna() & (f["td_d"] != f["td_d"].shift(1))
+    else:
+        new = f["p1000"].notna() & ((f["p1000"] != f["p1000"].shift(1)) | (f["n_total"] != f["n_total"].shift(1)))
     w = f.loc[new, ["p400", "p1000", "n_total"]]
     d1000, d400, dn = w["p1000"].diff(), w["p400"].diff(), w["n_total"].diff()
+    if "td_d" in f:                                   # only compare consecutive weeks (≤ 10 calendar days apart)
+        wd = pd.to_datetime(f.loc[new, "td_d"].astype("int64").astype(str), format="%Y%m%d")
+        ok = wd.diff().dt.days.le(10)
+        d1000, d400, dn = d1000.where(ok), d400.where(ok), dn.where(ok)
     out = {}
     if side == "buy":
         conc = (d1000 > 0) & (d1000.shift(1) > 0) & (dn < 0)
-        big = d400 > d400.shift(1).rolling(26, min_periods=8).quantile(0.8)
+        big = d400 > d400.shift(1).rolling(26, min_periods=13).max()       # 創近半年（26 週）最大週增幅
         out["whale_conc"] = conc.reindex(f.index).fillna(False) & new          # 千張大戶連 2 週增、散戶減
         out["whale_400_jump"] = (big & (d400 > 0)).reindex(f.index).fillna(False) & new  # 400 張大戶週增幅創高
     else:
@@ -277,19 +314,54 @@ def extra_sell(f):
         s["s_rs_low"] = edge(rs < rs.shift(1).rolling(60, min_periods=60).min())  # 相對強度創 60 日新低
         s["s_mkt_turn_bear"] = edge(f["mkt_regime"] == -1)                        # 大盤轉空
     if _has(f, "rev"):
-        new = _monthly(f)
+        new, consec = _monthly(f)
+        cons = consec if consec is not None else pd.Series(True, index=f.index[new])
         y = f["rev_yoy"][new]
-        s["s_rev_yoy_neg"] = new & ((y < 0) & (y.shift(1) > 0)).reindex(f.index).fillna(False)  # 年增轉負
+        s["s_rev_yoy_neg"] = new & ((y < 0) & (y.shift(1) > 0) & cons).reindex(f.index).fillna(False)  # 年增轉負
     gap_dn = f["high"] < f["low"].shift(1)
     s["s_gap_down"] = gap_dn                                                       # 向下跳空缺口
-    gap_up = f["low"] > f["high"].shift(1)
-    lvl = f["high"].shift(1).where(gap_up).ffill(limit=20)
-    s["s_gap_fill"] = edge(f["close"] < lvl)                                      # 向上缺口被回補（跌破缺口）
+    _, _, below, filled_before = _gaps(f)
+    s["s_gap_fill"] = below & ~filled_before                                       # 向上缺口首次被收盤跌破
     if _has(f, "sbl"):
         chg = f["sbl"].pct_change(5, fill_method=None).replace([np.inf, -np.inf], np.nan)
-        s["s_sbl_surge"] = edge((chg > past_q(chg, 0.9)) & (f["sbl"] > 0))       # 借券賣出 5 日大增
+        s["s_sbl_surge"] = edge((chg > 0) & (chg > past_q(chg, 0.9)) & (f["sbl"] > 0))  # 借券賣出 5 日大增
     s.update(_whale(f, "sell"))
     return s
+
+
+TOUCH_MAX_PEN = 0.02   # 回測支撐：盤中最多跌破均線 2%，且收盤必須守在均線之上
+
+
+def _touch(f, ma):
+    """Low reaches the MA (within +TOUCH_BAND above it, at most TOUCH_MAX_PEN below it) and the close holds it."""
+    return (f["low"] <= ma * (1 + TOUCH_BAND)) & (f["low"] >= ma * (1 - TOUCH_MAX_PEN)) & (f["close"] >= ma)
+
+
+# signal → data column it needs; a signal may only fire once that column has CHIP_MIN_ROWS valid rows
+# UP TO THAT DAY (cumulative, so appending future data can never switch on earlier events)
+_DEP_PREFIX = (("chip_", "net_buy"), ("foreign_", "foreign"), ("s_foreign", "foreign"), ("trust_", "trust"),
+               ("margin_", "margin"), ("s_margin", "margin"), ("short_", "short"), ("val_pe", "pe"),
+               ("s_val_pe", "pe"), ("val_pb", "pb"), ("s_val_pb", "pb"), ("val_dy", "dy"), ("rev_", "rev"),
+               ("s_rev", "rev"), ("sbl_", "sbl"), ("s_sbl", "sbl"), ("whale_", "p1000"), ("s_whale", "p1000"),
+               ("rs_", "mkt"), ("s_rs", "mkt"), ("mkt_", "mkt"), ("s_mkt", "mkt"))
+
+
+def _coverage_mask(f, sigs):
+    cache = {}
+    for name in list(sigs):
+        if name == "val_cheap_turn":
+            cols = [c for c in ("pe", "pb") if c in f]
+        else:
+            cols = [col for pre, col in _DEP_PREFIX if name.startswith(pre)][:1]
+        if not cols:
+            continue
+        m = None
+        for col in cols:
+            if col not in cache:
+                cache[col] = f[col].notna().cumsum() >= CHIP_MIN_ROWS if col in f else pd.Series(False, index=f.index)
+            m = cache[col] if m is None else (m | cache[col])
+        sigs[name] = sigs[name] & m
+    return sigs
 
 
 def _pct5(x):
@@ -342,9 +414,9 @@ def buy_signals(f):
         ma = f[f"ma{n}"]
         rising = ma > ma.shift(5)
         above = (f["close"].shift(1) > ma.shift(1)).astype(float).rolling(3, min_periods=3).min() == 1
-        touch = (f["low"] <= ma * (1 + TOUCH_BAND)) & (f["close"] >= ma * (1 - TOUCH_BAND))
+        touch = _touch(f, ma)
         s[f"touch_ma{n}"] = edge(rising & above & touch)
-        s[f"touch_ma{n}_up"] = edge(rising & above & touch & f["up"])  # 觸及且收紅（確認止跌）
+        s[f"touch_ma{n}_up"] = edge(rising & above & touch & f["red"])  # 觸及且收紅 K（收盤 > 開盤，止跌確認）
     # 動能：RSI6 低於自身歷史分位、RSI14 站上 50
     for q in (10, 20):
         s[f"rsi6_p{q}"] = edge(f["rsi6"] < past_q(f["rsi6"], q / 100))
@@ -352,14 +424,13 @@ def buy_signals(f):
     # K 棒：長下影線的意義依位置而定 —— 低檔（近 20 日區間下緣）或剛好落在月線支撐
     long_lower = (f["lshadow"] >= 0.5) & (f["body"] <= 0.35)
     s["hammer_low"] = long_lower & (f["pos20"] <= 0.25)
-    s["lshadow_ma20"] = long_lower & (f["low"] <= f["ma20"] * (1 + TOUCH_BAND)) & (f["close"] >= f["ma20"]) \
-        & (f["ma20"] > f["ma20"].shift(5))
+    s["lshadow_ma20"] = long_lower & _touch(f, f["ma20"]) & (f["ma20"] > f["ma20"].shift(5))
     prev_black = f["close"].shift(1) < f["open"].shift(1)
     s["engulf_low"] = f["red"] & prev_black & (f["close"] >= f["open"].shift(1)) \
         & (f["open"] <= f["close"].shift(1)) & (f["pos20"].shift(1) <= 0.3)
     # 均線型態：糾結後帶量突破、多頭排列成形
     mas = f[["ma5", "ma10", "ma20"]]
-    spread = mas.max(axis=1) / mas.min(axis=1) - 1
+    spread = (mas.max(axis=1) / mas.min(axis=1) - 1).where(mas.notna().all(axis=1))   # all three MAs must exist
     tangled = spread.shift(1).rolling(5, min_periods=5).max() < 0.015
     s["ma_squeeze_brk"] = edge(tangled & (f["close"] > mas.max(axis=1)) & f["up"] & (f["vr"] > 1.2))
     s["ma_bull_align"] = edge((f["ma5"] > f["ma10"]) & (f["ma10"] > f["ma20"]) & (f["ma20"] > f["ma60"])
@@ -368,8 +439,7 @@ def buy_signals(f):
     for k in ("pat_w_bottom", "pat_n_up", "pat_v_rev", "pat_hl", "pat_bull_struct", "tl_down_break"):
         s[k] = pat[k]
     # 量價：量縮回測月線（賣壓輕）
-    s["dry_touch_ma20"] = edge((f["vr"] < 0.7) & (f["low"] <= f["ma20"] * (1 + TOUCH_BAND))
-                               & (f["close"] >= f["ma20"]) & (f["ma20"] > f["ma20"].shift(5)))
+    s["dry_touch_ma20"] = edge((f["vr"] < 0.7) & _touch(f, f["ma20"]) & (f["ma20"] > f["ma20"].shift(5)))
     nb = f["net_buy"] if "net_buy" in f else None
     if nb is not None and nb.notna().sum() >= CHIP_MIN_ROWS:
         streak = _streak(nb)
@@ -389,15 +459,17 @@ def buy_signals(f):
             s[f"{col}_p90"] = edge(r > past_q(r, 0.9))
     if _has(f, "trust"):
         t = f["trust"]
-        s["trust_first"] = (t > 0) & ((t.shift(1) > 0).astype(float).rolling(10, min_periods=10).max() == 0)
+        prev10_known = t.shift(1).notna().astype(float).rolling(10, min_periods=10).sum() == 10
+        prev10_none = (t.shift(1) > 0).astype(float).rolling(10, min_periods=10).max() == 0
+        s["trust_first"] = (t > 0) & prev10_known & prev10_none   # 前 10 日都有資料且都未買超
     # 融資融券：融資減少但股價站穩上揚月線（籌碼沉澱）；融券增加中突破 20 日高（軋空）
     if _has(f, "margin"):
         mchg = _pct5(f["margin"])
-        s["margin_drop_up"] = edge((mchg < past_q(mchg, 0.2)) & (f["close"] > f["ma20"])
+        s["margin_drop_up"] = edge((mchg < 0) & (mchg < past_q(mchg, 0.2)) & (f["close"] > f["ma20"])
                                    & (f["ma20"] > f["ma20"].shift(5)))
     if _has(f, "short"):
         schg = _pct5(f["short"])
-        s["short_squeeze"] = edge((schg > past_q(schg, 0.8)) & (f["close"] > f["hh20"]))
+        s["short_squeeze"] = edge((schg > 0) & (schg > past_q(schg, 0.8)) & (f["close"] > f["hh20"]))
     # 估值：相對自身近 3 年的位置 —— 便宜價 ≈ 本益比/淨值比落在自身低 20%，高殖利率 ≈ 自身高 20%
     cheap = None
     if _has(f, "pe"):
@@ -414,7 +486,8 @@ def buy_signals(f):
     if cheap is not None:
         s["val_cheap_turn"] = edge(cheap.fillna(False) & (f["close"] > f["ma20"]) & (f["ma20"] > f["ma20"].shift(5)))
     s.update(extra_buy(f))
-    return {k: v.fillna(False).astype(bool) for k, v in s.items()}
+    s = {k: v.fillna(False).astype(bool) for k, v in s.items()}
+    return _coverage_mask(f, s)
 
 
 def sell_signals(f):
@@ -445,7 +518,7 @@ def sell_signals(f):
         s["s_foreign_sell_5"] = _streak(-f["foreign"]) == 5
     if _has(f, "margin"):
         mchg = _pct5(f["margin"])
-        s["s_margin_surge"] = edge((mchg > past_q(mchg, 0.9)) & (f["pos20"] >= 0.8))
+        s["s_margin_surge"] = edge((mchg > 0) & (mchg > past_q(mchg, 0.9)) & (f["pos20"] >= 0.8))
     # 估值：昂貴價 ≈ 本益比/淨值比進入自身近 3 年高 10%
     if _has(f, "pe"):
         pe = f["pe"].where(f["pe"] > 0)
@@ -454,7 +527,8 @@ def sell_signals(f):
         pb = f["pb"].where(f["pb"] > 0)
         s["s_val_pb_exp"] = edge(pb > val_q(pb, 0.9))
     s.update(extra_sell(f))
-    return {k: v.fillna(False).astype(bool) for k, v in s.items()}
+    s = {k: v.fillna(False).astype(bool) for k, v in s.items()}
+    return _coverage_mask(f, s)
 
 
 BUY_DESC = {
