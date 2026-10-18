@@ -85,4 +85,13 @@ jobs:
 
       - name: Push to release
         if: always() && github.event.inputs.dry_run != 'true'
-        run: python backend/history_store.py push
+        env:
+          IN_KIND: ${{ github.event.inputs.kind }}
+        # tpex-chips 會移除舊版誤標的上櫃籌碼列（例如當日未交易、後來才上櫃的股票），檔案變小屬預期；
+        # 每日重抓筆數有 50% 下限保護。其他模式維持縮小即拒絕。
+        run: |
+          if [ "$IN_KIND" = "tpex-chips" ]; then
+            python backend/history_store.py push --allow-shrink
+          else
+            python backend/history_store.py push
+          fi
