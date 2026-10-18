@@ -7,6 +7,9 @@ a channel with missing settings is skipped, and one channel failing never blocks
   Email     SMTP_USER, SMTP_APP_PASSWORD, NOTIFY_EMAIL_TO   (Gmail app password; TO may be comma-separated)
             SMTP_HOST (default smtp.gmail.com), SMTP_PORT (default 465)
   Teams     TEAMS_WEBHOOK_URL                               (Teams "Workflows" incoming webhook)
+  LINE      LINE_CHANNEL_TOKEN, LINE_USER_ID                (LINE Official Account Messaging API push;
+            LINE Notify ended 2025-03-31). One push = one message of the monthly quota, so a long
+            body is packed into ≤5 bubbles of the same push rather than several pushes.
 
 Usage:
   python backend/notify.py --test                         send a test message
@@ -26,6 +29,7 @@ import requests
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 TELEGRAM_LIMIT = 4000  # API limit is 4096 chars per message
+LINE_LIMIT, LINE_BUBBLES = 4900, 5  # API: 5000 chars per text object, 5 objects per push
 TIMEOUT = 20
 
 
@@ -51,6 +55,7 @@ def configured():
         "telegram": bool(_env("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")),
         "email": bool(_env("SMTP_USER", "SMTP_APP_PASSWORD", "NOTIFY_EMAIL_TO")),
         "teams": bool(_env("TEAMS_WEBHOOK_URL")),
+        "line": bool(_env("LINE_CHANNEL_TOKEN", "LINE_USER_ID")),
     }
 
 
@@ -129,7 +134,26 @@ def send_teams(subject, body):
         raise RuntimeError(f"Teams HTTP {r.status_code}: {r.text[:200]}")
 
 
-SENDERS = {"telegram": send_telegram, "email": send_email, "teams": send_teams}
+def line_messages(subject, body):
+    """Text objects for ONE push (≤5 × ≤4900 chars); overflow is cut with a pointer to email."""
+    text = f"{subject}\n\n{body}" if subject else body
+    chunks = split_text(text, LINE_LIMIT)
+    if len(chunks) > LINE_BUBBLES:
+        chunks = chunks[:LINE_BUBBLES]
+        chunks[-1] = chunks[-1][: LINE_LIMIT - 30] + "\n…（內容過長，完整版請看 Email）"
+    return [{"type": "text", "text": c} for c in chunks]
+
+
+def send_line(subject, body):
+    token, user = _env("LINE_CHANNEL_TOKEN", "LINE_USER_ID")
+    r = requests.post("https://api.line.me/v2/bot/message/push",
+                      headers={"Authorization": f"Bearer {token}"},
+                      json={"to": user, "messages": line_messages(subject, body)}, timeout=TIMEOUT)
+    if r.status_code != 200:
+        raise RuntimeError(f"LINE HTTP {r.status_code}: {r.text[:200]}")
+
+
+SENDERS = {"telegram": send_telegram, "email": send_email, "teams": send_teams, "line": send_line}
 
 
 def notify(subject, body, channels=None):

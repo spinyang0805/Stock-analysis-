@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 import notify  # noqa: E402
 
 ALL_VARS = ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SMTP_USER", "SMTP_APP_PASSWORD",
-            "NOTIFY_EMAIL_TO", "TEAMS_WEBHOOK_URL")
+            "NOTIFY_EMAIL_TO", "TEAMS_WEBHOOK_URL", "LINE_CHANNEL_TOKEN", "LINE_USER_ID")
 
 
 def _clear(monkeypatch):
@@ -28,7 +28,15 @@ def test_split_text_hard_cuts_long_line():
 
 def test_unconfigured_channels_are_skipped(monkeypatch):
     _clear(monkeypatch)
-    assert notify.notify("s", "b") == {"telegram": "skipped", "email": "skipped", "teams": "skipped"}
+    assert notify.notify("s", "b") == {"telegram": "skipped", "email": "skipped", "teams": "skipped",
+                                       "line": "skipped"}
+
+
+def test_line_packs_into_one_push():
+    msgs = notify.line_messages("subj", "x" * 60000)
+    assert len(msgs) == 5 and all(len(m["text"]) <= 5000 for m in msgs)
+    assert msgs[-1]["text"].endswith("完整版請看 Email）")
+    assert len(notify.line_messages("s", "short")) == 1
 
 
 def test_one_channel_failure_does_not_block_others(monkeypatch):
