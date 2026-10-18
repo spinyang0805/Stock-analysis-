@@ -283,7 +283,8 @@ def repair_release(dest, allow_shrink=False):
         if rows < was and not allow_shrink:
             raise HistoryError(f"{n} 實際列數 {rows} < 舊 manifest {was}，疑似資料遺失（需 --allow-shrink）")
     manifest = {"generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "files": files, "nontrading_dates": old.get("nontrading_dates", [])}
+                "files": files, "nontrading_dates": old.get("nontrading_dates", []),
+                "tpex_chips_fixed": old.get("tpex_chips_fixed", [])}
     with open(os.path.join(dest, MANIFEST), "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=1)
     return manifest, osha
@@ -351,8 +352,10 @@ def cmd_push(args):
     files = {**((remote or {}).get("files", {})), **local}  # 遠端有、本地沒有的檔，manifest 照舊保留
     if repair:
         files = dict(local)  # 修復模式：以實際檔案為準（pull --repair 已確認無缺漏）
+    tpex_fixed = sorted(set(read_json(mpath, {}).get("tpex_chips_fixed", []))
+                        | set((remote or {}).get("tpex_chips_fixed", [])))
     manifest = {"generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "files": files, "nontrading_dates": nontrading}
+                "files": files, "nontrading_dates": nontrading, "tpex_chips_fixed": tpex_fixed}
     with open(mpath, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=1)
     if remote is None:
@@ -546,6 +549,11 @@ def fetch_chips_day(jobs, d):
     jobs.write_tpex_margin_chips(d, res)
     for e in res["errors"][:3]:
         log(f"    chips {d}: {str(e)[:120]}")
+    return merge_chip_docs(captured, d)
+
+
+def merge_chip_docs(captured, d):
+    """jobs 各 writer 擷取到的 (sid, date, doc) 依 stock_id 合併成 store 列。"""
     merged = {}
     for sid, dt, doc in captured:
         if dt != d or is_warrant(sid):
@@ -695,6 +703,107 @@ def cmd_backfill(args):
             flush()
     flush()
     log("[backfill] 完成")
+    return 0
+
+
+def cmd_fix_tpex_chips(args):
+    """重抓上櫃籌碼覆蓋 store 中的 TPEx 列（舊版傳 YYYYMMDD 給 TPEx 被忽略、拿到最新日資料；
+    融資取到前日餘額；三大法人合計恆為 NULL）。只動 market=TPEx 的列，TWSE 列不變。
+    已修好的日期記在 manifest tpex_chips_fixed，可分次 dispatch 續跑。
+    前提：Supabase 必須先用 repair_tpex_chips.py --apply 修好，否則之後的 export-db（prefer=new）
+    會把 DB 仍錯誤的近期 TPEx 列蓋回 store。"""
+    load_env()
+    os.environ.pop("DATABASE_URL", None)  # 只寫 Parquet，絕不碰 DB
+    sys.path.insert(0, BACKEND_DIR)
+    import jobs
+
+    mpath = os.path.join(HISTORY_DIR, MANIFEST)
+    fixed = set(read_json(mpath, {}).get("tpex_chips_fixed", []))
+    prices = read_all("prices", columns=["date", "market"])
+    lo, hi = f"{args.from_year or 1900}0101", f"{args.to_year or 2999}1231"
+    dates = sorted({d for d in prices.loc[prices["market"] == "TPEx", "date"].unique()
+                    if lo <= d <= hi and d not in fixed}, reverse=True)
+    if args.limit_dates:
+        dates = dates[: args.limit_dates]
+    log(f"[fix-tpex] 待處理 {len(dates)} 日（已完成 {len(fixed)}）")
+    if args.dry_run:
+        return 0
+
+    chips = read_all("chips", columns=["date", "market"])
+    old_tpex = chips.loc[chips["market"] == "TPEx", "date"].value_counts().to_dict() if len(chips) else {}
+    del chips, prices
+    captured = []
+    jobs.save_chip_daily_bulk = lambda rows: (captured.extend(rows), len(rows))[1]
+    buf = {}
+
+    def flush():
+        if not buf:
+            return
+        by_year = {}
+        for d, rows in buf.items():
+            by_year.setdefault(d[:4], {})[d] = rows
+        for year, days in by_year.items():
+            old = read_year("chips", year)
+            new = normalize(pd.DataFrame([r for rows in days.values() for r in rows]), "chips")
+            if old is not None:
+                drop = old["date"].isin(list(days)) & (old["market"] == "TPEx")
+                # 同日同股若已有 TWSE 列（不應發生），保留 TWSE、捨棄新 TPEx 列
+                keep_old = old[~drop]
+                twse_keys = set(zip(keep_old.loc[keep_old["date"].isin(list(days)), "stock_id"],
+                                    keep_old.loc[keep_old["date"].isin(list(days)), "date"]))
+                new = new[[k not in twse_keys for k in zip(new["stock_id"], new["date"])]]
+                combined = pd.concat([keep_old, new], ignore_index=True)
+            else:
+                combined = new
+            combined = combined.sort_values(["stock_id", "date"]).reset_index(drop=True)
+            write_year("chips", year, combined)
+            log(f"  [store] chips_{year}.parquet rows={len(combined):,}")
+        fixed.update(buf)
+        m = read_json(mpath, {})
+        m["tpex_chips_fixed"] = sorted(fixed)
+        with open(mpath + ".tmp", "w", encoding="utf-8") as f:
+            json.dump(m, f, ensure_ascii=False, indent=1)
+        os.replace(mpath + ".tmp", mpath)
+        buf.clear()
+
+    fails = 0
+    for i, d in enumerate(dates, 1):
+        captured.clear()
+        res = {"errors": []}
+        time.sleep(args.sleep)
+        n1 = jobs.write_tpex_insti_chips(d, res)
+        time.sleep(args.sleep)
+        n2 = jobs.write_tpex_margin_chips(d, res)
+        if any("server returned data for" in e for e in res["errors"]):
+            log(f"  [{i}/{len(dates)}] {d} TPEx 回其他日期資料（休市？），略過不改")
+            continue
+        if not n1 or not n2:
+            fails += 1
+            log(f"  [{i}/{len(dates)}] {d} 失敗 (連續 {fails}): {'; '.join(res['errors'][:2])[:150]}")
+            if fails >= 5:
+                log("[fix-tpex] 連續失敗 5 次，中止")
+                flush()
+                return 2
+            continue
+        fails = 0
+        rows = [r for r in merge_chip_docs(captured, d) if r.get("market") == "TPEx"]
+        floor = max(50, int(old_tpex.get(d, 0) * 0.5))
+        if len(rows) < floor:
+            fails += 1
+            log(f"  [{i}/{len(dates)}] {d} TPEx rows={len(rows)} < {floor}（舊 {old_tpex.get(d, 0)}），不覆蓋 (連續 {fails})")
+            if fails >= 5:
+                log("[fix-tpex] 連續失敗 5 次，中止")
+                flush()
+                return 2
+            continue
+        for r in rows:
+            r["source"] = "TPEx insti/dailyTrade+margin/balance"
+        buf[d] = rows
+        log(f"  [{i}/{len(dates)}] {d} TPEx rows={len(rows)}")
+        if len(buf) >= 20:
+            flush()
+    flush()
+    log("[fix-tpex] 完成")
     return 0
 
 
@@ -926,6 +1035,13 @@ def main():
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--sleep", type=float, default=1.5, help="每次請求前的等待秒數")
     p.set_defaults(fn=cmd_backfill)
+    p = sub.add_parser("fix-tpex-chips")
+    p.add_argument("--from-year", type=int)
+    p.add_argument("--to-year", type=int)
+    p.add_argument("--limit-dates", type=int)
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--sleep", type=float, default=1.5)
+    p.set_defaults(fn=cmd_fix_tpex_chips)
     p = sub.add_parser("verify")
     p.add_argument("--before", required=True)
     p.add_argument("--store-dir", help="預設本機 history/")

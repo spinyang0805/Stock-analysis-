@@ -202,6 +202,13 @@ def _idx(fields, *keywords, default=None):
     return default
 
 
+def _idx_exact(fields, name, default=None):
+    for i, f in enumerate(fields or []):
+        if str(f).strip() == name:
+            return i
+    return default
+
+
 def _row_value(row, idx):
     try:
         if idx is None or idx >= len(row):
@@ -878,14 +885,15 @@ def _parse_tpex_insti_row(row):
         "foreign_buy": safe_int(values[8]) if len(values) > 8 else None,
         "investment_trust_buy": safe_int(values[11]) if len(values) > 11 else None,
         "dealer_buy": safe_int(values[20]) if len(values) > 20 else None,
-        "institution_total_buy": safe_int(values[23]) if len(values) > 23 else None,
+        "institution_total_buy": safe_int(values[21]) if len(values) > 21 else None,
         "source_t86": "TPEx insti/dailyTrade",
         "source": "TPEx insti/dailyTrade",
     }
 
 
 def write_tpex_insti_chips(date_text: str, result: dict):
-    payload, err = fetch_json(TPEX_INSTITUTIONAL, params={"response": "json", "date": date_text, "sect": "AL", "type": "Daily"}, headers=TPEX_HEADERS)
+    # TPEx 只認 ROC 斜線日期；傳 YYYYMMDD 會被忽略並回最新交易日的資料
+    payload, err = fetch_json(TPEX_INSTITUTIONAL, params={"response": "json", "date": roc_date_slash(date_text), "sect": "AL", "type": "Daily"}, headers=TPEX_HEADERS)
     if err:
         result["errors"].append(f"TPEx insti {date_text}: {err}")
     rows, _ = _table_rows(payload)
@@ -910,7 +918,7 @@ def write_tpex_insti_chips(date_text: str, result: dict):
 
 
 def write_tpex_margin_chips(date_text: str, result: dict):
-    payload, err = fetch_json(TPEX_MARGIN, params={"response": "json", "date": date_text}, headers=TPEX_HEADERS)
+    payload, err = fetch_json(TPEX_MARGIN, params={"response": "json", "date": roc_date_slash(date_text)}, headers=TPEX_HEADERS)
     if err:
         result["errors"].append(f"TPEx margin {date_text}: {err}")
     rows, fields = _table_rows(payload)
@@ -922,8 +930,10 @@ def write_tpex_margin_chips(date_text: str, result: dict):
         return 0
     code_i = _idx(fields, "代號", default=0)
     name_i = _idx(fields, "名稱", default=1)
-    margin_i = _idx(fields, "資餘額", default=6)
-    short_i = _idx(fields, "券餘額", default=14)
+    # 欄位：代號,名稱,前資餘額(張),資買,資賣,現償,資餘額,... 前券餘額(張),券賣,券買,券償,券餘額
+    # 用 _idx 子字串比對會先命中「前資餘額」（前日），必須精確比對
+    margin_i = _idx_exact(fields, "資餘額", default=6)
+    short_i = _idx_exact(fields, "券餘額", default=14)
     bulk_rows = []
     for row in rows:
         try:

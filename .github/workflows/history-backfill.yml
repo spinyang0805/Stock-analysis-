@@ -13,7 +13,7 @@ on:
         description: "回補到某一年止（例 2025）"
         default: ""
       kind:
-        description: "prices / chips / both"
+        description: "prices / chips / both / tpex-chips（重抓上櫃籌碼覆蓋舊錯誤資料）"
         default: "both"
       limit_dates:
         description: "最多處理 N 個交易日（空白=不限）"
@@ -68,16 +68,20 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}  # 僅供唯讀查詢「DB 已有哪些日期」，backfill 不寫 DB
         run: |
           set -eu
-          case "${IN_KIND:-both}" in prices|chips|both) ;; *) echo "bad kind"; exit 1;; esac
+          case "${IN_KIND:-both}" in prices|chips|both|tpex-chips) ;; *) echo "bad kind"; exit 1;; esac
           for v in "${IN_YEARS:-5}" "$IN_FROM" "$IN_TO" "$IN_LIMIT"; do
             case "$v" in ''|*[!0-9]*) [ -z "$v" ] || { echo "non-numeric input"; exit 1; };; esac
           done
-          ARGS="--years ${IN_YEARS:-5} --kind ${IN_KIND:-both}"
+          if [ "$IN_KIND" = "tpex-chips" ]; then
+            CMD="fix-tpex-chips"; ARGS=""
+          else
+            CMD="backfill"; ARGS="--years ${IN_YEARS:-5} --kind ${IN_KIND:-both}"
+          fi
           [ -n "$IN_FROM" ] && ARGS="$ARGS --from-year $IN_FROM"
           [ -n "$IN_TO" ] && ARGS="$ARGS --to-year $IN_TO"
           [ -n "$IN_LIMIT" ] && ARGS="$ARGS --limit-dates $IN_LIMIT"
           [ "$IN_DRY" = "true" ] && ARGS="$ARGS --dry-run"
-          python backend/history_store.py backfill $ARGS
+          python backend/history_store.py $CMD $ARGS
 
       - name: Push to release
         if: always() && github.event.inputs.dry_run != 'true'
