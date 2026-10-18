@@ -61,7 +61,9 @@ class Cfg:
     shrink_k: float = 20.0
     max_signals: int = 3
     min_train_events: int = 10
-    exploratory: bool = True    # until Phase B (calibrated inference + deployed-exit simulation) is done
+    # Phase B done and confirmed by the Codex cross-review (round 7, 2026-10-19): reliability labels allowed.
+    # Set True again to suppress "reliable" claims (gates stay as diagnostics).
+    exploratory: bool = False
     holdout_days: int = 126     # last ~6 months: excluded from every fold, evaluated once at the end
     stable_frac: float = 2 / 3
     rebalance_days: int = 21
