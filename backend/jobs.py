@@ -542,29 +542,57 @@ def write_t86_chips(start_date: str, result: dict):
     return 0
 
 
+def twse_margin_summary_rows(payload):
+    """MI_MARGN 的 per-stock 表（「融資融券彙總」，首欄為代號）。
+    tables[0] 是「信用交易統計」(3 列，首欄為項目)，不可用。CSV fallback 已只保留含「代號」的表。
+    欄位：0 代號,1 名稱,2-5 融資買/賣/現償/前日,6 融資今日餘額,7 限額,8-11 融券買/賣/現償/前日,12 融券今日餘額（單位：張）。"""
+    if not isinstance(payload, dict):
+        return []
+    tables = payload.get("tables")
+    if isinstance(tables, list):
+        for t in tables:
+            t = t or {}
+            fields = t.get("fields") or []
+            if any("代號" in str(f) for f in fields) and t.get("data"):
+                _check_margin_fields(fields)
+                return t["data"]
+        return []
+    fields = _fields(payload)
+    if not any("代號" in str(f) for f in fields):
+        return []
+    _check_margin_fields(fields)
+    return payload.get("data") or []
+
+
+def _check_margin_fields(fields):
+    """欄位順序寫死為 6/12，TWSE 若改版就停寫，避免把錯的欄位寫進 DB。
+    欄名本身不含融資/融券（那是表頭分組），只能檢查兩組各自的「前日餘額→今日餘額」位置。"""
+    f = [str(x) for x in fields]
+    ok = (len(f) > 12 and "代號" in f[0]
+          and "前日餘額" in f[5] and "今日餘額" in f[6]
+          and "前日餘額" in f[11] and "今日餘額" in f[12])
+    if not ok:
+        raise ValueError(f"MI_MARGN 欄位與預期不符：{f[:14]}")
+
+
 def write_margin_chips(start_date: str, result: dict):
     for d in back_dates_from(start_date, 10):
         payload, err = fetch_json(TWSE_MARGIN, params={"response": "json", "date": d, "selectType": "ALL"})
         if err:
             result["errors"].append(f"margin {d}: {err}")
-        rows = _rows(payload)
+        try:
+            rows = twse_margin_summary_rows(payload)
+        except ValueError as exc:
+            result["errors"].append(f"margin {d}: {exc}")
+            return 0
         if not rows:
             continue
-        fields = _fields(payload)
-        code_i = _idx(fields, "股票", "代號", default=0)
-        if code_i is None:
-            code_i = _idx(fields, "證券", "代號", default=0)
-        margin_i = _idx(fields, "融資", "今日餘額", default=None)
-        if margin_i is None:
-            margin_i = _idx(fields, "融資", "餘額", default=6)
-        short_i = _idx(fields, "融券", "今日餘額", default=None)
-        if short_i is None:
-            short_i = _idx(fields, "融券", "餘額", default=12)
+        code_i, margin_i, short_i = 0, 6, 12
         bulk_rows = []
         for row in rows:
             try:
                 stock_id = str(_row_value(row, code_i)).strip()
-                if not stock_id:
+                if not stock_id or len(row) <= short_i:
                     continue
                 payload_doc = {
                     "market": "TWSE",
