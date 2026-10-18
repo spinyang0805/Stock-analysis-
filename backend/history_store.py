@@ -987,6 +987,38 @@ def cmd_purge_warrants(args):
     return 0
 
 
+def cmd_purge_dates(args):
+    """從本機 store 移除指定日期（休市日誤標資料）並記入 manifest nontrading_dates，
+    之後 backfill 不會再補。push 需 --allow-shrink。檔案每行一個 YYYYMMDD。"""
+    dates = set()
+    for path in args.file:
+        with open(path, encoding="utf-8") as f:
+            dates |= {ln.strip() for ln in f if re.fullmatch(r"\d{8}", ln.strip())}
+    if not dates:
+        raise HistoryError("日期清單是空的")
+    log(f"[purge-dates] {len(dates)} 個日期")
+    for kind in KINDS:
+        for path in year_files(kind):
+            year = os.path.basename(path).split("_")[1].split(".")[0]
+            if not any(d.startswith(year) for d in dates):
+                continue
+            df = read_year(kind, year)
+            clean = df[~df["date"].isin(dates)]
+            if len(clean) != len(df):
+                if not args.dry_run:
+                    write_year(kind, year, clean.reset_index(drop=True))
+                log(f"[purge-dates] {os.path.basename(path)}: {len(df):,} -> {len(clean):,}")
+    if args.dry_run:
+        return 0
+    mpath = os.path.join(HISTORY_DIR, MANIFEST)
+    m = read_json(mpath, {})
+    m["nontrading_dates"] = sorted(set(m.get("nontrading_dates", [])) | dates)
+    with open(mpath + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(m, f, ensure_ascii=False, indent=1)
+    os.replace(mpath + ".tmp", mpath)
+    return 0
+
+
 # ── stats / query ─────────────────────────────────────────────────────────────
 def cmd_stats(args):
     total = 0
@@ -1057,6 +1089,10 @@ def main():
     p.set_defaults(fn=cmd_prune)
     sub.add_parser("stats").set_defaults(fn=cmd_stats)
     sub.add_parser("purge-warrants").set_defaults(fn=cmd_purge_warrants)
+    p = sub.add_parser("purge-dates")
+    p.add_argument("--file", action="append", required=True, help="每行一個 YYYYMMDD；可重複指定")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(fn=cmd_purge_dates)
     p = sub.add_parser("query")
     p.add_argument("sql")
     p.set_defaults(fn=cmd_query)
