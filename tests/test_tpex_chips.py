@@ -65,3 +65,11 @@ def test_margin_reads_today_balance(monkeypatch):
     doc = captured[0][2]
     assert doc["margin_balance"] == 13977  # 資餘額, not 前資餘額 15,796
     assert doc["short_balance"] == 285     # 券餘額, not 前券餘額 422
+
+
+def test_yf_bar_skips_closed_and_zero_volume(monkeypatch):
+    monkeypatch.setattr(jobs.trading_calendar, "is_trading_day", lambda d: d != "20260710")
+    assert jobs._yf_bar_ok("20260709", {"Volume": 1200.0})
+    assert not jobs._yf_bar_ok("20260710", {"Volume": 1200.0})  # 颱風休市
+    assert not jobs._yf_bar_ok("20260709", {"Volume": 0.0})
+    assert not jobs._yf_bar_ok("20260709", {"Volume": None})

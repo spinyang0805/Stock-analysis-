@@ -267,6 +267,19 @@ def latest_tpex_daily_rows(max_lookback_days: int = 10):
     return today_str(), [], [], errors
 
 
+def _yf_bar_ok(date_str: str, row) -> bool:
+    """Yahoo 會在休市日（如颱風假）產生零成交量的 K 棒；休市日或零量一律不寫。"""
+    if not trading_calendar.is_trading_day(date_str):
+        return False
+    vol = row.get("Volume")
+    if hasattr(vol, "iloc"):
+        vol = vol.iloc[0]
+    try:
+        return float(vol) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def _fetch_yfinance_twse_month(stock_id: str, year: int, month: int, product_type: str = "股票"):
     """Fallback: fetch TWSE monthly K-line via yfinance (.TW suffix)."""
     import calendar as _cal
@@ -277,10 +290,11 @@ def _fetch_yfinance_twse_month(stock_id: str, year: int, month: int, product_typ
         return 0, ["yfinance not installed"]
     try:
         start = _dt.date(year, month, 1).isoformat()
-        last_day = _cal.monthrange(year, month)[1]
-        end = _dt.date(year, month, last_day).isoformat()
+        # yfinance 的 end 不含當天，取下個月 1 日才涵蓋月底
+        end = (_dt.date(year, month, _cal.monthrange(year, month)[1]) + _dt.timedelta(days=1)).isoformat()
         ticker = f"{stock_id}.TW"
-        hist = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=True)
+        # 原始價（不還原），與 TWSE/TPEx 官方資料一致；還原由使用端處理
+        hist = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=False)
         if hist is None or hist.empty:
             return 0, []
         if hasattr(hist.columns, "levels"):
@@ -289,6 +303,8 @@ def _fetch_yfinance_twse_month(stock_id: str, year: int, month: int, product_typ
         for idx, row in hist.iterrows():
             try:
                 date_str = idx.strftime("%Y%m%d")
+                if not _yf_bar_ok(date_str, row):
+                    continue
                 def _v(col, _row=row):
                     val = _row.get(col)
                     if val is None:
@@ -375,10 +391,11 @@ def _fetch_yfinance_tpex_month(stock_id: str, year: int, month: int, product_typ
         return 0, ["yfinance not installed"]
     try:
         start = _dt.date(year, month, 1).isoformat()
-        last_day = _cal.monthrange(year, month)[1]
-        end = _dt.date(year, month, last_day).isoformat()
+        # yfinance 的 end 不含當天，取下個月 1 日才涵蓋月底
+        end = (_dt.date(year, month, _cal.monthrange(year, month)[1]) + _dt.timedelta(days=1)).isoformat()
         ticker = f"{stock_id}.TWO"
-        hist = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=True)
+        # 原始價（不還原），與 TWSE/TPEx 官方資料一致；還原由使用端處理
+        hist = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=False)
         if hist is None or hist.empty:
             return 0, [f"yfinance no data: {ticker} {year}-{month:02d}"]
         # yfinance 2.x returns MultiIndex columns for single ticker — flatten
@@ -388,6 +405,8 @@ def _fetch_yfinance_tpex_month(stock_id: str, year: int, month: int, product_typ
         for idx, row in hist.iterrows():
             try:
                 date_str = idx.strftime("%Y%m%d")
+                if not _yf_bar_ok(date_str, row):
+                    continue
                 def _v(col, _row=row):
                     val = _row.get(col)
                     if val is None:
