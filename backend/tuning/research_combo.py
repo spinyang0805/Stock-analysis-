@@ -109,8 +109,8 @@ def any_of(sigs, keys, n):
     return m
 
 
-def masks(g):
-    """Buy / sell masks for every variant on one stock."""
+def masks(g, detail=False):
+    """Buy / sell masks for every variant on one stock (detail=True also returns the layers, for combo_daily)."""
     f = ind.features(g)
     buys, sells = ind.buy_signals(f), ind.sell_signals(f)
     n = len(g)
@@ -144,6 +144,11 @@ def masks(g):
     # warnings only (not exits): how often they fired while the main rule kept holding
     warn = any_of(sells, ("s_rsi_p80", "s_rsi_p90", "s_kd_x_80", "s_bb_upper_fail", "s_shoot_high",
                           "s_macd_down", "s_ma20_break"), n)
+    if detail:
+        layers = {"env": env, "stage2": stage2, "stage4": stage4, "trig": trig, "money": money, "other": other,
+                  "state": states["main"], "brk": brk, "conf": conf, "n_struct": n_struct, "n_conf": n_conf,
+                  "obv_on": bull & ~prev, "obv_off": ~bull & prev}
+        return buy, sell, f["atr"].to_numpy(float), S, warn, {"buys": buys, "sells": sells, "layers": layers}
     return buy, sell, f["atr"].to_numpy(float), S, warn
 
 

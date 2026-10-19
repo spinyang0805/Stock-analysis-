@@ -8,6 +8,9 @@ name: Daily picks (evening compute)
 on:
   schedule:
     - cron: "30 11 * * 1-6"    # 19:30 Taipei (Mon–Sat: make-up Saturday sessions); after update-data 15:40
+  workflow_run:                 # again right after the 組合拳 file is committed (the report reads it)
+    workflows: ["Monthly ranking (paper)"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:

@@ -66,18 +66,57 @@ def rank_paper_new(as_of, path=RANK_PAPER):
     return {"picks": [(q["id"], names.get(q["id"], "")) for q in per[-1]["picks"]], "prev": prev}
 
 
-def render(out, state, added, closed_today, top):
+COMBO = os.path.join(REPO, "public", "data", "combo_signals.json")
+
+
+def load_combo(as_of, path=COMBO):
+    """Tonight's 組合拳 file (combo_daily.py, committed before this job), else None."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            c = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return c if c.get("updated") == as_of else None
+
+
+def render_combo(c):
+    pos = c.get("positions") or []
+    new = [p for p in pos if p["stock_id"] in set(c.get("new_today") or [])]
+    sells = [p for p in pos if p["status"] == "sell_signal"]
+    L = ["## 今日買進候選：組合拳（明日開盤進場）", "",
+         "條件：站上往上的季線且大盤非空頭 ＋ 真突破 ＋ 資金流入 ＋ 籌碼／相對強度／營收至少一項。"
+         "賣出要 ≥2 種結構破壞＋≥2 類確認，或跌破下彎季線，或跌 10%。⭐ = 也在當月排名前 20。", ""]
+    if not new:
+        L.append("今日無符合組合拳條件的股票。")
+    for i, p in enumerate(new, 1):
+        L.append(f"**{i}. {p['name']}（{p['stock_id']}）**{' ⭐' if p.get('in_rank') else ''}　收盤 {p['signal_close']}")
+        for k, v in (p.get("buy_reasons") or {}).items():
+            L.append(f"- {k}：{'、'.join(v[:3])}")
+        L.append("")
+    L += ["", "## 組合拳賣出確認（明日開盤賣出）", ""]
+    if not sells:
+        L.append("今日沒有賣出確認。")
+    for p in sells:
+        why = "；".join(f"{k}：{'、'.join(v[:2])}" for k, v in (p.get("sell_reasons") or {}).items())
+        L.append(f"- **{p['name']}（{p['stock_id']}）** 買進 {p.get('entry_date', '–')} @ {p.get('entry_price', '–')}，"
+                 f"目前 {pct(p.get('ret'))}｜{why}")
+    hold = sum(p["status"] == "holding" for p in pos)
+    L += ["", f"組合拳紙上追蹤中 {hold} 檔，完整清單請看網站「組合拳」頁。", ""]
+    return L
+
+
+def render(out, state, added, closed_today, top, combo=None):
     d = out["as_of"]
     trial = out["n_reliable_params"] == 0
     top = effective_top(out, top)
     L = [f"# 每日股票報告（{fmt_date(d)} 收盤後計算）", ""]
-    if trial:
+    if trial and combo is None:
         L += ["> **試行**：目前沒有股票通過可靠度驗證，以下推薦依回測排序，僅供觀察，不構成投資建議。", ""]
-    if weak_period(out):
+    if weak_period(out) and combo is None:
         L += [f"> ⚠️ **近期表現差**：這組訊號最近半年平均比大盤差 {pct(out['uniform']['holdout']['xnet'])}，"
               f"今天只列前 {WEAK_TOP} 檔，請用小部位或只觀察。", ""]
     u = out.get("uniform") or {}
-    if out.get("buy_mode") == "uniform":
+    if out.get("buy_mode") == "uniform" and combo is None:
         sig = "、".join(f"{x['desc']}（持有 {x['h']} 日）" for x in u.get("signals", [])) or "–"
         L.append(f"推薦依據：**全市場統一訊號**（{sig}）。出場與停損依各股自己的調參結果。")
         o, hd = u.get("oos") or {}, u.get("holdout") or {}
@@ -86,11 +125,15 @@ def render(out, state, added, closed_today, top):
                      f"勝率 {pct(o.get('win'), 0).lstrip('+')}、比大盤 {pct(o.get('xnet'))}；"
                      f"最後半年驗證 {hd.get('n', '–')} 筆，平均 {pct(hd.get('mean'))}、比大盤 {pct(hd.get('xnet'))}。")
         L.append("")
-    L += ["## 今日買進候選（明日開盤進場）", ""]
-    buys = out["buy"][:top]
-    if not buys:
-        L.append("今日無符合條件的股票。")
+    if combo is not None:
+        L += render_combo(combo)
+        buys = []
     else:
+        L += ["## 今日買進候選（明日開盤進場）", ""]
+        buys = out["buy"][:top]
+        if not buys:
+            L.append("今日無符合條件的股票。")
+    if buys:
         # one short card per pick (readable on a phone)
         for i, b in enumerate(buys, 1):
             tag = "（試行）" if not b.get("reliable") and out.get("buy_mode") != "uniform" else ""
@@ -108,7 +151,8 @@ def render(out, state, added, closed_today, top):
             L.append("")
     L.append("")
     act = [p for p in state if p["status"] in track.ACTIVE]
-    L += ["## 追蹤中（每日評估，直到出場或你賣出）", ""]
+    L += ["## 舊版推薦追蹤中（單一訊號，不再新增，賣完為止）" if combo is not None
+          else "## 追蹤中（每日評估，直到出場或你賣出）", ""]
     if not act:
         L.append("目前沒有追蹤中的推薦。")
     else:
@@ -143,9 +187,29 @@ def render(out, state, added, closed_today, top):
     return "\n".join(L) + "\n"
 
 
-def render_line(out, state, top, closed_today=()):
+def render_line(out, state, top, closed_today=(), combo=None):
     d = out["as_of"]
     trial = out["n_reliable_params"] == 0
+    if combo is not None:
+        pos = combo.get("positions") or []
+        new = [p for p in pos if p["stock_id"] in set(combo.get("new_today") or [])]
+        sells = [p for p in pos if p["status"] == "sell_signal"]
+        L = [f"📈 {fmt_date(d)} 收盤後｜組合拳"]
+        L.append("【買進候選】" + ("無" if not new else f"{len(new)} 檔（明日開盤）"))
+        for p in new[:8]:
+            L.append(f"{p['stock_id']} {p['name']}{'⭐' if p.get('in_rank') else ''} {p['signal_close']}｜"
+                     + "＋".join((p.get("buy_reasons") or {}).keys()))
+        if sells:
+            L.append("【賣出確認】明日開盤賣")
+            for p in sells:
+                L.append(f"{p['stock_id']} {p['name']}（{pct(p.get('ret'))}）")
+        imp = [p for p in state if p["status"] in track.ACTIVE and p.get("action") in ("出場", "注意")]
+        if imp:
+            L.append("【舊推薦提醒】")
+            for p in imp:
+                L.append(f"{p['stock_id']} {p['name']}：{p['action']}－{p.get('reason', '')}")
+        L.append("完整報告請看 Email／網站")
+        return "\n".join(L)
     L = [f"📈 {fmt_date(d)} 收盤後{'（試行）' if trial else ''}"]
     buys = out["buy"][:min(effective_top(out, top), 5)]
     L.append("【買進候選】" + ("無" if not buys else "") + ("（近期表現差，小部位）" if weak_period(out) and buys else ""))
@@ -235,14 +299,19 @@ def main(argv=None):
     costs = Costs(discount=float(out.get("fee_discount") or 0.6))
     closed_today = track.evaluate(state, prep["adjusted"], holdings, as_of, costs)
     closed_today = [p for p in state if p.get("closed_on") == as_of]   # incl. ones closed by an earlier rerun
-    if any(p.get("pick_date") == as_of for p in state):
+    combo = load_combo(as_of)
+    log(f"[daily] 組合拳 file {'loaded' if combo else 'NOT found for ' + as_of} — "
+        f"{'old single-signal picks are no longer opened' if combo else 'falling back to the old picks'}")
+    if combo is not None:
+        added = []
+    elif any(p.get("pick_date") == as_of for p in state):
         log(f"[daily] picks for {as_of} already opened — not adding again")
         added = []
     else:
         added = track.open_new(state, out["buy"], as_of, effective_top(out, known.top))
     save_tracking(known.state, state, known.private)
-    report = render(out, state, added, closed_today, known.top)
-    line = render_line(out, state, known.top, closed_today)
+    report = render(out, state, added, closed_today, known.top, combo)
+    line = render_line(out, state, known.top, closed_today, combo)
     # private holdings advice (shares / costs) → never in the public files
     adv = []
     try:

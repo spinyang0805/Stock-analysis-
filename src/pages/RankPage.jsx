@@ -8,6 +8,7 @@ import { fetchStaticJson, loadStockList } from "../lib/data.js";
 import { signed, trendColor } from "../lib/format.js";
 import { navigate } from "../lib/router.js";
 
+const LIGHT = { green: "🟢 買點確認", yellow: "🟡 等待突破", red: "🔴 賣出確認" };
 const fmtDate = (d) => (d ? `${d.slice(0, 4)}/${d.slice(4, 6)}/${d.slice(6)}` : "–");
 
 function Pct({ v }) {
@@ -24,8 +25,10 @@ function compound(periods, key) {
 export default function RankPage() {
   const [data, setData] = useState(undefined);
   const [names, setNames] = useState({});
+  const [lights, setLights] = useState({});
   useEffect(() => {
     fetchStaticJson("/rank_paper.json").then(setData);
+    fetchStaticJson("/combo_signals.json").then((c) => setLights(c?.rank_lights || {}));
     loadStockList().then((l) => setNames(Object.fromEntries(l.map((s) => [s.code, String(s.name).replace("股份有限公司", "")]))));
   }, []);
 
@@ -56,6 +59,7 @@ export default function RankPage() {
           取前 20 名、每檔一樣多錢，隔天開盤起算，持有到下個月換榜（換掉的股票扣手續費與證交稅）。
           <b>這裡只記錄成績、不是買進建議。</b>回測（2020–2026）一年約 +30%，0050 約 +29.5%，差距還不算數，
           所以先觀察半年，看實際表現是否跟回測一樣。
+          「組合拳」欄是每天更新的買賣時機燈號（說明見「組合拳訊號」頁）。
         </div>
       </Card>
 
@@ -82,6 +86,7 @@ export default function RankPage() {
                     <tr>
                       {[["rank", "名次"], ["id", "股票", true], ["mom", "過去一年漲幅"], ["rev", "月營收年增"], ["ret", "本期報酬"]]
                         .map(([k, label, left]) => <SortTh key={k} k={k} label={label} left={left} sort={sort} onSort={toggle} firstDir={k === "rank" ? "asc" : undefined} />)}
+                      <th className="left" title="組合拳每日燈號">組合拳</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -92,6 +97,7 @@ export default function RankPage() {
                         <td><Pct v={q.mom} /></td>
                         <td><Pct v={q.rev == null ? null : q.rev / 100} /></td>
                         <td><Pct v={q.ret} /></td>
+                        <td className="left">{LIGHT[lights[q.id]] || <span className="dim">–</span>}</td>
                       </tr>
                     ))}
                   </tbody>

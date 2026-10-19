@@ -2,7 +2,7 @@
 // 個股頁、持股、交易、AI、帳號管理各自在 src/pages/
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import {
-  BarChart3, Bot, ChevronsLeft, ChevronsRight, LineChart, ListOrdered, LogIn, LogOut, Trophy, Users, Wallet, UserCircle2,
+  BarChart3, Bot, ChevronsLeft, ChevronsRight, LineChart, ListOrdered, LogIn, LogOut, Sparkles, Trophy, Users, Wallet, UserCircle2,
 } from "lucide-react";
 import { AppStateProvider, useApp } from "./lib/appState.jsx";
 import { navigate, useRoute } from "./lib/router.js";
@@ -14,6 +14,7 @@ import TransactionsPage from "./pages/TransactionsPage.jsx";
 
 const PnlPage = lazy(() => import("./pages/PnlPage.jsx"));
 const RankPage = lazy(() => import("./pages/RankPage.jsx"));
+const ComboPage = lazy(() => import("./pages/ComboPage.jsx"));
 
 const LegacyAI = lazy(() => import("./pages/LegacyPages.jsx").then((m) => ({ default: m.AIChatPage })));
 const LegacyAdmin = lazy(() => import("./pages/LegacyPages.jsx").then((m) => ({ default: m.AdminPage })));
@@ -27,6 +28,7 @@ const NAV = [
   { id: "portfolio", label: "我的持股", short: "持股", icon: Wallet, href: () => "/portfolio" },
   { id: "pnl", label: "損益分析", short: "損益", icon: BarChart3, href: () => "/pnl" },
   { id: "transactions", label: "交易紀錄", short: "交易", icon: ListOrdered, href: () => "/transactions" },
+  { id: "combo", label: "組合拳訊號", short: "訊號", icon: Sparkles, href: () => "/combo" },
   { id: "rank", label: "每月排名", short: "排名", icon: Trophy, href: () => "/rank" },
   { id: "ai", label: "AI 選股", short: "AI", icon: Bot, href: () => "/ai" },
   { id: "admin", label: "帳號管理", icon: Users, href: () => "/admin", role: "admin" },
@@ -90,6 +92,7 @@ function Shell() {
           {page === "transactions" && <TransactionsPage />}
           {page === "pnl" && <PnlPage />}
           {page === "rank" && <RankPage />}
+          {page === "combo" && <ComboPage />}
           {page === "ai" && <LegacyAI />}
           {page === "admin" && app.role === "admin" && <div className="page"><LegacyAdmin /></div>}
         </Suspense>
