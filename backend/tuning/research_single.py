@@ -37,6 +37,7 @@ if __package__ in (None, ""):
     __package__ = "tuning"
 
 from tuning import indicators as ind  # noqa: E402
+from tuning import obvs  # noqa: E402
 from tuning.data import OUT_DIR, log  # noqa: E402
 from tuning.evaluate import Costs  # noqa: E402
 from tuning.research_style import trades  # noqa: E402
@@ -82,7 +83,16 @@ def p(x, d=2):
     return "–" if x is None or not np.isfinite(x) else f"{100 * x:+.{d}f}%"
 
 
+OBVS_GRID = obvs.grid()
+FAMILIES = {"signals": "原本訊號（75 買 × 31 賣／固定天數）", "obvs": "OBVS 指標（5 種模式 × 參數，117 組）",
+            "both": "兩者一起挑"}
+
+
 def label(c):
+    if c[0] == "obvs":
+        return obvs.label(OBVS_GRID[c[1]])
+    if c[0] == "obvs_fixed":
+        return obvs.label(c[1]) + ("（腳本客製參數）" if c[2] else "（腳本預設參數）")
     bn, ex, st = c
     sell = f"抱 {ex} 日" if isinstance(ex, int) else ind.SELL_DESC.get(ex, ex)
     return f"{ind.BUY_DESC.get(bn, bn)} → {sell}{'＋停損' if st else ''}"
@@ -109,7 +119,19 @@ def study(job):
     ex_end = WARM + (hs - WARM) * 2 // 3
     costs = Costs()
 
+    S = obvs.Series(g)
+    ob_cache = {}
+
+    def ob_rows(key, prm, start=0):
+        if (key, start) not in ob_cache:
+            ob_cache[(key, start)] = obvs.trades(S, prm, start)
+        return ob_cache[(key, start)]
+
     def run(c, lo, hi, carry_ok=False):
+        if c[0] in ("obvs", "obvs_fixed"):
+            rows = (ob_rows(c[1], OBVS_GRID[c[1]]) if c[0] == "obvs"
+                    else ob_rows("fixed", c[1], lo))          # the script as-is starts fresh at the window start
+            return fmt_rows([r for r in rows if lo <= r[0] < hi], hi, carry_ok)
         bname, exit_, stop = c
         bm = buys[bname].to_numpy(bool).copy()
         bm[:lo] = False
@@ -118,8 +140,11 @@ def study(job):
             sm, cap = np.zeros(n, bool), exit_
         else:
             sm, cap = sells[exit_].to_numpy(bool), CAP
+        return fmt_rows(trades(bm, sm, ao, ac, ok, atr, cap, STOP if stop else None, np.ones(n, bool)), hi, carry_ok)
+
+    def fmt_rows(rows, hi, carry_ok):
         out = []
-        for t, e, x, gross, held, op in trades(bm, sm, ao, ac, ok, atr, cap, STOP if stop else None, np.ones(n, bool)):
+        for t, e, x, gross, held, op in rows:
             t, e, x = int(t), int(e), int(x)
             if not carry_ok and (x >= hi or op):
                 continue
@@ -140,27 +165,40 @@ def study(job):
         return s
 
     exits = list(sells) + list(HOLDS)
-    cands = [(bn, ex, st) for bn in buys for ex in exits for st in (False, True)]
+    sig_cands = [(bn, ex, st) for bn in buys for ex in exits for st in (False, True)]
+    ob_cands = [("obvs", i) for i in range(len(OBVS_GRID))]
     need = 4 if objective == "period" else 6
-    explored = []
-    for c in cands:
-        s = phase(run(c, WARM, ex_end), WARM, ex_end)
-        if s["n"] >= need and np.isfinite(s["score"]):
-            explored.append((s["score"], c, s))
-    explored.sort(key=lambda z: -z[0])
-    confirmed = [(c, s, phase(run(c, ex_end, hs), ex_end, hs)) for _, c, s in explored[:TOP_EXPLORE]]
     key = "vs_bh" if objective == "period" else "mean"
-    ok_c = [z for z in confirmed if z[2]["n"] >= (2 if objective == "period" else 3) and z[2][key] > 0]
-    chosen = max(ok_c, key=lambda z: z[2][key]) if ok_c else None
-    res = {"sid": sid, "name": name, "objective": objective, "n_cands": len(cands), "n_explored": len(explored),
+
+    def select(cands):
+        explored = []
+        for c in cands:
+            s = phase(run(c, WARM, ex_end), WARM, ex_end)
+            if s["n"] >= need and np.isfinite(s["score"]):
+                explored.append((s["score"], c, s))
+        explored.sort(key=lambda z: -z[0])
+        confirmed = [(c, s, phase(run(c, ex_end, hs), ex_end, hs)) for _, c, s in explored[:TOP_EXPLORE]]
+        ok_c = [z for z in confirmed if z[2]["n"] >= (2 if objective == "period" else 3) and z[2][key] > 0]
+        out = {"n_cands": len(cands), "n_explored": len(explored), "top": []}
+        for c, s, cs in confirmed[:10]:
+            out["top"].append((label(c), s, cs, phase(run(c, hs, n, carry_ok=True), hs, n)))
+        if ok_c:
+            c, s, cs = max(ok_c, key=lambda z: z[2][key])
+            test = run(c, hs, n, carry_ok=True)
+            out.update({"rule": label(c), "explore": s, "confirm": cs, "test": phase(test, hs, n), "trades": test})
+        return out
+
+    res = {"sid": sid, "name": name, "objective": objective,
            "periods": (dates[WARM], dates[ex_end - 1], dates[ex_end], dates[hs - 1], dates[hs], dates[-1]),
-           "test_bh": ac[-1] / ao[hs] - 1, "test_b0050": b[-1] / b[hs] - 1, "top": []}
-    for c, s, cs in confirmed[:10]:
-        res["top"].append((label(c), s, cs, phase(run(c, hs, n, carry_ok=True), hs, n)))
-    if chosen:
-        c, s, cs = chosen
-        test = run(c, hs, n, carry_ok=True)
-        res.update({"rule": label(c), "explore": s, "confirm": cs, "test": phase(test, hs, n), "trades": test})
+           "test_bh": ac[-1] / ao[hs] - 1, "test_b0050": b[-1] / b[hs] - 1}
+    res.update(select(sig_cands))                      # the original study (unchanged)
+    res["fam"] = {"signals": {k: res.get(k) for k in ("rule", "explore", "confirm", "test", "trades") if k in res},
+                  "obvs": select(ob_cands), "both": select(sig_cands + ob_cands)}
+    # the script exactly as shared (its own per-stock set, else its defaults) — nothing chosen here
+    fixed = ("obvs_fixed", obvs.params_for(sid), sid in obvs.CUSTOM)
+    ft = run(fixed, hs, n, carry_ok=True)
+    res["fam"]["obvs_fixed"] = {"rule": label(fixed), "test": phase(ft, hs, n), "trades": ft,
+                                "confirm": phase(run(fixed, WARM, hs), WARM, hs)}
     return res
 
 
@@ -190,6 +228,17 @@ def single_report(r):
                      f"{t['pout']:.2f} | {int(t['held'])} | {p(t['net'], 1)} | {p(t['xs'], 1)} |")
         if not r["trades"]:
             L.append("| 驗證期沒有出現買進訊號 | | | | | | | |")
+        L.append("")
+    if "fam" in r:
+        L += ["## 加入 OBVS 指標比較（驗證期）", "",
+              "| 指標來源 | 選出的規則 | 驗證 筆數 | 照規則累計 | 一直抱 | 規則 − 抱 |", "|---|---|---|---|---|---|"]
+        for fk, fname in FAM_ROWS:
+            f = r["fam"].get(fk, {})
+            if "test" not in f:
+                L.append(f"| {fname} | 沒有規則通過確認 | | | | |")
+                continue
+            t = f["test"]
+            L.append(f"| {fname} | {f['rule']} | {t['n']} | {p(t['comp'], 1)} | {p(t['bh'], 1)} | {p(t['vs_bh'], 1)} |")
         L.append("")
     L += ["## 探索期前 10 名後來的表現（事後對照）", "",
           "| 名次 | 規則 | 探索 筆數/平均超額/規則−抱 | 確認 筆數/規則−抱 | 驗證 筆數/規則−抱 |", "|---|---|---|---|---|"]
@@ -228,6 +277,29 @@ def main(argv=None):
     log(f"[single] report → {rp}")
 
 
+FAM_ROWS = (("signals", FAMILIES["signals"]), ("obvs", FAMILIES["obvs"]), ("both", FAMILIES["both"]),
+            ("obvs_fixed", "OBVS 腳本原始參數（不挑選，13 檔用客製、其餘用預設）"))
+
+
+def fam_table(rs):
+    """Test-window comparison of the rule families over a list of stock results."""
+    L = ["| 指標來源 | 有規則的檔數 | 驗證期交易數 | 每筆平均超額(比0050) | 勝率 | 照規則平均報酬 | 中位數 | 贏 0050 的檔數 | 贏「一直抱」的檔數 |",
+         "|---|---|---|---|---|---|---|---|---|"]
+    for fk, fname in FAM_ROWS:
+        ch = [(r, r["fam"][fk]) for r in rs if "fam" in r and "test" in r["fam"].get(fk, {})]
+        if not ch:
+            L.append(f"| {fname} | 0 | – | – | – | – | – | – | – |")
+            continue
+        tr = [t for _, f in ch for t in f["trades"]]
+        s = stats([t["xs"] for t in tr])
+        comp = np.array([f["test"]["comp"] for _, f in ch])
+        L.append(f"| {fname} | {len(ch)} | {len(tr)} | {p(s['mean'])} | {p(s['win'], 0).lstrip('+')} | "
+                 f"{p(comp.mean(), 1)} | {p(float(np.median(comp)), 1)} | "
+                 f"{sum(f['test']['comp'] > r['test_b0050'] for r, f in ch)} / {len(ch)} | "
+                 f"{sum(f['test']['vs_bh'] > 0 for _, f in ch)} / {len(ch)} |")
+    return L
+
+
 def summary_report(res, groups):
     rows = [r for r in res.values() if r["sid"] != BENCH and "skip" not in r]
     any_r = next(iter(rows))
@@ -257,6 +329,14 @@ def summary_report(res, groups):
         s = agg(rs)
         L.append(f"| {gname} | {s['n']} | {s['chosen']} | {s['trades']} | {p(s['conf'])} | **{p(s['mean'])}** | "
                  f"{p(s['win'], 0).lstrip('+')} | {p(s['beat_bh'], 0).lstrip('+')} |")
+    allr = [r for r in rows]
+    L += ["", "## 加入 OBVS 指標比較（驗證期，全部股票）", "",
+          f"同樣只用驗證期以前的資料挑規則；驗證期一直抱 0050 = {p(any_r['test_b0050'], 1)}。"
+          "「腳本原始參數」直接用 obvs.txt 裡的設定，沒有再挑選（注意：那些客製參數當初可能是看過全部歷史才調的）。", ""]
+    L += fam_table(allr)
+    cust = [r for r in allr if r["sid"] in obvs.CUSTOM]
+    if cust:
+        L += ["", f"### 腳本有客製參數的 {len(cust)} 檔", ""] + fam_table(cust)
     L += ["", "「確認期」是選規則時看得到的成績；「驗證期」才是真正沒看過的。兩者落差越大，代表挑出來的越是運氣。", "",
           "## 每檔明細（依驗證期規則 − 一直抱排序）", "",
           "| 股票 | 選出的規則 | 確認 筆數/平均超額 | 驗證 筆數 | 驗證 照規則 | 驗證 一直抱 | 規則 − 抱 | 驗證 0050 |",
