@@ -123,10 +123,12 @@ def main(argv=None):
             break
         sc = scores_at(t, P, member)
         sc["combo_f"] = sc["combo"]
+        # revenue starts 2021, valuation 2022: compare all strategies only once every factor can rank
+        ready = all(sc[s].notna().sum() >= 2 * max(TOPS) for s in STRATS)
         filt_on = bool(ew_close.iloc[t] < ew_ma200.iloc[t]) if pd.notna(ew_ma200.iloc[t]) else False
         uni = [c for c in cols if member[t][c]]
         bench = period_ret(P, uni, e, x).mean()
-        row = {"d": cal[e], "days": x - e, "bench": bench, "filter": filt_on}
+        row = {"d": cal[e], "days": x - e, "bench": bench, "filter": filt_on, "ready": ready}
         for etf in ETFS:
             if etf in cols:
                 r = period_ret(P, [etf], e, x)
@@ -147,8 +149,10 @@ def main(argv=None):
                 row[f"{s}_{n}_turn"] = (len(pick - prev) / denom) if denom else 0.0
                 held[(s, n)] = pick
         rows.append(row)
-    df = pd.DataFrame(rows)
-    log(f"[rank] {len(df)} months simulated in {time.time() - t0:.0f}s")
+    full = pd.DataFrame(rows)
+    start = full.index[full["ready"]].min()
+    df = full.loc[start:].reset_index(drop=True)
+    log(f"[rank] {len(full)} months simulated, common window from {df['d'].iloc[0]} in {time.time() - t0:.0f}s")
 
     def stats(r, b=None):
         r = r.dropna()
@@ -173,7 +177,8 @@ def main(argv=None):
     L = [f"# 每月全市場排名選股回測（{first}–{last}，約 {len(df) * EVERY / 252:.1f} 年）", "",
          f"每個月（21 個交易日）把當時成交量前 {a.universe} 大的股票全部排名一次，買前 N 名、每檔一樣多錢，持有到下個月再換。"
          "排名只用當天收盤前已知的資料（營收用已公布的月份），隔天開盤買。換股時扣手續費（6 折）與證交稅；"
-         "沒換到的股票不扣。排名條件事先固定，沒有拿結果回頭調整。", ""]
+         "沒換到的股票不扣。排名條件事先固定，沒有拿結果回頭調整。"
+         "所有挑法從營收、淨值比資料都齊全的月份才開始比。", ""]
     bench = df.set_index("d")["bench"]
     b_st = stats(bench)
     L += ["## 比較基準", "", "| 基準 | 年化報酬 | 最大跌幅 |", "|---|---|---|",
@@ -213,6 +218,17 @@ def main(argv=None):
             cells.append(f"{100 * ((1 + g[ref].fillna(0)).prod() - 1):+.0f}%")
         cells += [f"{100 * ((1 + g[f'{s}_20']).prod() - 1):+.0f}%" for s in STRATS]
         L.append(f"| {y} | " + " | ".join(cells) + " |")
+    fb = full.set_index("d")
+    if len(full) > len(df):
+        L += ["", f"### 只用股價的強勢股，拉長到 {full['d'].iloc[0]} 起（營收、淨值比資料較晚才有，其他挑法無法比這麼久）", "",
+              "| 檔數 | 年化報酬 | 股票池 | 每年贏股票池 | t | " + (f"{ref} | " if ref else "") + "最大跌幅 |",
+              "|---|---|---|---|---|" + ("---|" if ref else "") + "---|"]
+        fbs = stats(fb["bench"])
+        fref = stats(fb[ref]) if ref else None
+        for n in TOPS:
+            st = stats(fb[f"mom_{n}"], fb["bench"])
+            L.append(f"| {n} | {100 * st['cagr']:+.1f}% | {100 * fbs['cagr']:+.1f}% | {100 * st['xs']:+.1f}% | "
+                     f"{st['t']:+.1f} | " + (f"{100 * fref['cagr']:+.1f}% | " if fref else "") + f"{100 * st['mdd']:.0f}% |")
     L += ["", f"大盤濾網空手的月份：{int(df['filter'].sum())} / {len(df)}。",
           "t 值看每月超額報酬，|t| ≥ 2 才算明顯（試了 6 種挑法 × 3 種檔數，單一個剛好 2 左右要保守看）。", ""]
     os.makedirs(os.path.dirname(a.report), exist_ok=True)
