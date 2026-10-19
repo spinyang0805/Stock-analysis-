@@ -1,4 +1,6 @@
 // 持股帳本計算：移動平均成本法（含手續費），已實現損益扣手續費與交易稅
+// 另外並列「先進先出」成本（與多數券商一致：賣出先扣最早買進的批次）→ fifoCost / fifoAvg
+// 配股、股票分割：總成本不變、平均到所有股數（兩種方法都一樣）
 // 純函式、無副作用，方便測試（tests/portfolio.test.mjs）
 
 export const SIDE_LABEL = { buy: "買進", sell: "賣出", cash_dividend: "現金股利", stock_dividend: "股票股利" };
@@ -21,8 +23,12 @@ export function listAccounts(transactions) {
 }
 
 function emptyPos(code, name, account = null) {
-  return { code, name, account, shares: 0, cost: 0, realized: 0, dividends: 0, fees: 0, buyCount: 0, firstDate: null };
+  return { code, name, account, shares: 0, cost: 0, realized: 0, dividends: 0, fees: 0, buyCount: 0, firstDate: null,
+    lots: [], fifoCost: 0, fifoRealized: 0 };
 }
+
+const lotsShares = (lots) => lots.reduce((s, l) => s + l[0], 0);
+const lotsCost = (lots) => lots.reduce((s, l) => s + l[0] * l[1], 0);
 
 export function cashDividendAmount(t) {
   const amt = Number(t.amount);
@@ -39,6 +45,7 @@ function apply(pos, t) {
     pos.fees += fee;
     pos.buyCount += 1;
     if (!pos.firstDate) pos.firstDate = t.trade_date;
+    if (s > 0) pos.lots.push([s, (s * p + fee) / s]);
   } else if (t.side === "sell") {
     const qty = Math.min(s, pos.shares);
     const avg = pos.shares > 0 ? pos.cost / pos.shares : 0;
@@ -47,11 +54,30 @@ function apply(pos, t) {
     pos.shares -= qty;
     pos.fees += fee + tax;
     if (pos.shares <= 0) { pos.shares = 0; pos.cost = 0; }
+    // 先進先出：從最早的批次扣
+    let q = s, basis = 0;
+    while (q > 1e-9 && pos.lots.length) {
+      const take = Math.min(q, pos.lots[0][0]);
+      basis += take * pos.lots[0][1];
+      pos.lots[0][0] -= take;
+      q -= take;
+      if (pos.lots[0][0] <= 1e-9) pos.lots.shift();
+    }
+    pos.fifoRealized += s * p - fee - tax - basis;
   } else if (t.side === "cash_dividend") {
     pos.dividends += cashDividendAmount(t);
   } else if (t.side === "stock_dividend") {
     pos.shares += s;
+    // 配股／分割：新股數屬於現有批次 → 每批單位成本等比例下降（總成本不變）
+    const held = lotsShares(pos.lots);
+    if (held > 1e-9 && s > 0) {
+      const k = (held + s) / held;
+      pos.lots = pos.lots.map(([sh, c]) => [sh * k, c / k]);
+    } else if (s > 0) {
+      pos.lots.push([s, 0]);
+    }
   }
+  pos.fifoCost = lotsCost(pos.lots);
 }
 
 // 依交易算出各股部位。成本一律「先分帳戶各自計算」（每個帳戶的賣出只扣該帳戶成本，與券商對帳單一致）
@@ -72,6 +98,7 @@ export function computePositions(transactions, { byAccount = false } = {}) {
       const m = merged.get(p.code) || { ...emptyPos(p.code, p.name), accounts: [] };
       m.shares += p.shares; m.cost += p.cost; m.realized += p.realized; m.dividends += p.dividends;
       m.fees += p.fees; m.buyCount += p.buyCount;
+      m.fifoCost += p.fifoCost; m.fifoRealized += p.fifoRealized;
       if (p.firstDate && (!m.firstDate || p.firstDate < m.firstDate)) m.firstDate = p.firstDate;
       if (!m.name && p.name) m.name = p.name;
       if (p.shares > 0 || p.buyCount) m.accounts.push(p.account);
@@ -79,7 +106,10 @@ export function computePositions(transactions, { byAccount = false } = {}) {
     }
     list = [...merged.values()];
   }
-  for (const p of list) p.avgCost = p.shares > 0 ? p.cost / p.shares : 0;
+  for (const p of list) {
+    p.avgCost = p.shares > 0 ? p.cost / p.shares : 0;
+    p.fifoAvg = p.shares > 0 ? p.fifoCost / p.shares : 0;
+  }
   return list;
 }
 
@@ -90,7 +120,9 @@ export function valuePositions(positions, prices) {
     const mv = Number.isFinite(price) ? p.shares * price : NaN;
     const unrealized = Number.isFinite(mv) ? mv - p.cost : NaN;
     const total = (Number.isFinite(unrealized) ? unrealized : 0) + p.realized + p.dividends;
-    return { ...p, price, marketValue: mv, unrealized, unrealizedPct: p.cost > 0 && Number.isFinite(unrealized) ? (unrealized / p.cost) * 100 : NaN, totalPnl: total };
+    const fifoUnrealized = Number.isFinite(mv) ? mv - p.fifoCost : NaN;
+    return { ...p, price, marketValue: mv, unrealized, unrealizedPct: p.cost > 0 && Number.isFinite(unrealized) ? (unrealized / p.cost) * 100 : NaN, totalPnl: total,
+      fifoUnrealized, fifoPct: p.fifoCost > 0 && Number.isFinite(fifoUnrealized) ? (fifoUnrealized / p.fifoCost) * 100 : NaN };
   });
   const held = rows.filter((r) => r.shares > 0);
   const sum = (arr, k) => arr.reduce((s, r) => s + (Number.isFinite(r[k]) ? r[k] : 0), 0);

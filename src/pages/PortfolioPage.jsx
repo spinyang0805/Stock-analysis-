@@ -189,8 +189,8 @@ export default function PortfolioPage() {
               <table className="data">
                 <thead>
                   <tr>
-                    <th className="left">股票</th><th className="left">{view === SPLIT ? "帳戶" : "風格"}</th><th>股數</th><th>均價</th><th>現價</th><th>今日</th>
-                    <th>市值</th><th>未實現</th><th>報酬率</th><th>權重</th><th className="left">建議</th>
+                    <th className="left">股票</th><th className="left">{view === SPLIT ? "帳戶" : "風格"}</th><th>股數</th><th title="移動平均成本（含手續費）：看從以前到現在的整體成本">整體均價</th><th title="先進先出（與券商相同）：看目前這批持股的成本">先進先出均價</th><th>現價</th><th>今日</th>
+                    <th>市值</th><th>未實現（整體）</th><th>報酬率（整體）</th><th>報酬率（先進先出）</th><th>權重</th><th className="left">建議</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -204,11 +204,13 @@ export default function PortfolioPage() {
                         <td className="left">{view === SPLIT ? <Badge>{r.account}</Badge> : <Badge tone={app.styleOf(r.code) === "波段" ? "warn" : "blue"}>{app.styleOf(r.code)}</Badge>}</td>
                         <td>{fmtInt(r.shares)}</td>
                         <td>{fmt(r.avgCost)}</td>
+                        <td>{fmt(r.fifoAvg)}</td>
                         <td style={{ color: trendColor(qq?.change), fontWeight: 700 }}>{fmt(r.price)}</td>
                         <td style={{ color: trendColor(qq?.change) }}>{signed(qq?.changePct, 2, "%")}</td>
                         <td>{fmtInt(r.marketValue)}</td>
                         <td style={{ color: trendColor(r.unrealized) }}>{signed(r.unrealized, 0)}</td>
                         <td style={{ color: trendColor(r.unrealizedPct) }}>{signed(r.unrealizedPct, 2, "%")}</td>
+                        <td style={{ color: trendColor(r.fifoPct) }}>{signed(r.fifoPct, 2, "%")}</td>
                         <td>{fmt(r.weight, 1)}%</td>
                         <td className="left">{adv ? <span className={adv.tone === "up" ? "up" : adv.tone === "down" ? "down" : ""} style={{ fontWeight: 700 }} title={adv.why}>{adv.label}</span> : <span className="dim">…</span>}</td>
                       </tr>
@@ -229,7 +231,7 @@ export default function PortfolioPage() {
                       <span className="num" style={{ marginLeft: "auto", color: trendColor(qq?.change), fontWeight: 800 }}>{fmt(r.price)}</span>
                     </div>
                     <div className="num" style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 6 }}>
-                      <span className="muted">{fmtInt(r.shares)} 股 @ {fmt(r.avgCost)}</span>
+                      <span className="muted">{fmtInt(r.shares)} 股・整體 {fmt(r.avgCost)}・先進先出 {fmt(r.fifoAvg)}（{signed(r.fifoPct, 1, "%")}）</span>
                       <span style={{ color: trendColor(r.unrealized) }}>{signed(r.unrealized, 0)}（{signed(r.unrealizedPct, 1, "%")}）</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 4 }}>
@@ -240,7 +242,7 @@ export default function PortfolioPage() {
                 );
               })}
             </div>
-            <div className="dim" style={{ marginTop: 8 }}>均價採移動平均成本（含手續費），各帳戶分開計算後再合併。點任一檔看個股部位與進出場建議；「風格」可在個股頁的進出場頁籤切換。</div>
+            <div className="dim" style={{ marginTop: 8 }}>兩種均價：「整體均價」採移動平均成本（含手續費），看從以前到現在的整體成本；「先進先出均價」與券商相同（賣出先扣最早買進的批次），看目前這批持股的賺賠。配股、股票分割不另計成本（總成本平均到所有股數）。各帳戶分開計算後再合併。點任一檔看個股部位與進出場建議；「風格」可在個股頁的進出場頁籤切換。</div>
           </Card>
         </>
       )}

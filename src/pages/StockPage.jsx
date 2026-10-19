@@ -366,7 +366,8 @@ function PositionTab({ code, name, price, longBars, quote, onEdit, onAdd }) {
       )}
       <div className="kpis">
         <Kpi label="持股" value={`${fmtInt(r.shares)} 股`} sub={`${fmt(r.shares / 1000, 3)} 張`} />
-        <Kpi label="均價（含手續費）" value={fmt(r.avgCost)} sub={`成本 ${fmtInt(r.cost)}`} />
+        <Kpi label="整體均價（移動平均）" value={fmt(r.avgCost)} sub={`成本 ${fmtInt(r.cost)}`} />
+        <Kpi label="先進先出均價（同券商）" value={fmt(r.fifoAvg)} sub={`報酬率 ${signed(r.fifoPct, 2, "%")}`} tone={r.fifoPct >= 0 ? "up" : "down"} />
         <Kpi label="市值" value={fmtInt(r.marketValue)} sub={`現價 ${fmt(price)}`} />
         <Kpi label="未實現損益" value={signed(r.unrealized, 0)} sub={signed(r.unrealizedPct, 2, "%")} tone={r.unrealized >= 0 ? "up" : "down"} />
         <Kpi label="已實現＋股利" value={signed(r.realized + r.dividends, 0)} sub={`股利 ${fmtInt(r.dividends)}`} tone={r.realized + r.dividends >= 0 ? "up" : "down"} />
@@ -376,12 +377,12 @@ function PositionTab({ code, name, price, longBars, quote, onEdit, onAdd }) {
         <Card title="各帳戶部位" icon={Wallet}>
           <div className="table-wrap">
             <table className="data">
-              <thead><tr><th className="left">帳戶</th><th>股數</th><th>均價</th><th>成本</th><th>市值</th><th>未實現</th><th>報酬率</th><th>已實現＋股利</th></tr></thead>
+              <thead><tr><th className="left">帳戶</th><th>股數</th><th>整體均價</th><th>先進先出均價</th><th>成本</th><th>市值</th><th>未實現</th><th>報酬率</th><th>已實現＋股利</th></tr></thead>
               <tbody>
                 {byAcc.map((a) => (
                   <tr key={a.account} className="clickable" onClick={() => setView(a.account)} style={view === a.account ? { outline: "1px solid var(--accent)" } : undefined}>
                     <td className="left"><b>{a.account}</b></td>
-                    <td>{fmtInt(a.shares)}</td><td>{a.shares ? fmt(a.avgCost) : "--"}</td><td>{fmtInt(a.cost)}</td>
+                    <td>{fmtInt(a.shares)}</td><td>{a.shares ? fmt(a.avgCost) : "--"}</td><td>{a.shares ? fmt(a.fifoAvg) : "--"}</td><td>{fmtInt(a.cost)}</td>
                     <td>{fmtInt(a.marketValue)}</td>
                     <td style={{ color: trendColor(a.unrealized) }}>{signed(a.unrealized, 0)}</td>
                     <td style={{ color: trendColor(a.unrealizedPct) }}>{signed(a.unrealizedPct, 2, "%")}</td>
@@ -392,6 +393,7 @@ function PositionTab({ code, name, price, longBars, quote, onEdit, onAdd }) {
                   <td className="left"><b>合併</b></td>
                   <td><b>{fmtInt(byAcc.reduce((s, a) => s + a.shares, 0))}</b></td>
                   <td><b>{fmt(byAcc.reduce((s, a) => s + a.cost, 0) / Math.max(1, byAcc.reduce((s, a) => s + a.shares, 0)))}</b></td>
+                  <td><b>{fmt(byAcc.reduce((s, a) => s + (a.fifoCost || 0), 0) / Math.max(1, byAcc.reduce((s, a) => s + a.shares, 0)))}</b></td>
                   <td><b>{fmtInt(byAcc.reduce((s, a) => s + a.cost, 0))}</b></td>
                   <td><b>{fmtInt(byAcc.reduce((s, a) => s + (a.marketValue || 0), 0))}</b></td>
                   <td colSpan={3} />

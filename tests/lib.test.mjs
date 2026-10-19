@@ -23,6 +23,29 @@ test("移動平均成本：兩次買進後賣出一半", () => {
   assert.ok(Math.abs(p.avgCost - 110.02) < 1e-9);
 });
 
+test("雙均價：合晶實際交易（整體均價 88.48、先進先出 112.56）", () => {
+  const [p] = computePositions([
+    tx("2026-05-08", "buy", 1000, 56.3, 80),
+    tx("2026-07-07", "sell", 500, 144.5, 102, 216),
+    tx("2026-07-09", "buy", 200, 168.5, 48),
+    tx("2026-07-14", "sell", 300, 177, 75, 159),
+  ]);
+  assert.equal(p.shares, 400);
+  assert.ok(Math.abs(p.avgCost - 88.48) < 0.01, `moving avg ${p.avgCost}`);
+  assert.ok(Math.abs(p.fifoAvg - 112.56) < 0.01, `fifo avg ${p.fifoAvg}`);
+});
+
+test("配股／分割：總成本不變、平均到所有股數（先進先出也一樣）", () => {
+  const [p] = computePositions([
+    tx("2025-01-02", "buy", 1000, 70, 0),
+    tx("2025-06-18", "stock_dividend", 3000, 0, 0, 0, { note: "股票分割" }),
+    tx("2025-08-01", "sell", 2000, 20, 0, 0),
+  ]);
+  assert.equal(p.shares, 2000);
+  assert.ok(Math.abs(p.fifoAvg - 17.5) < 1e-9);      // 70000 / 4000 per share, not 0
+  assert.ok(Math.abs(p.avgCost - 17.5) < 1e-9);
+});
+
 test("全部賣出後成本歸零；現金股利以 amount 優先", () => {
   const [p] = computePositions([
     tx("2026-01-02", "buy", 2000, 50),
