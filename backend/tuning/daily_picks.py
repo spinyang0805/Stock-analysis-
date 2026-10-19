@@ -47,6 +47,25 @@ def effective_top(out, top):
     return min(top, WEAK_TOP) if weak_period(out) else top
 
 
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+RANK_PAPER = os.path.join(REPO, "public", "data", "rank_paper.json")
+
+
+def rank_paper_new(as_of, path=RANK_PAPER):
+    """The monthly ranking list made at this close (rank_paper.py, committed before this job), else None."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            per = json.load(f).get("periods") or []
+        with open(os.path.join(REPO, "public", "data", "stocklist.json"), encoding="utf-8") as f:
+            names = {s["code"]: s["name"].replace("股份有限公司", "") for s in json.load(f)}
+    except (OSError, ValueError):
+        return None
+    if not per or per[-1].get("as_of") != as_of:
+        return None
+    prev = next((p for p in reversed(per[:-1]) if p.get("net") is not None), None)
+    return {"picks": [(q["id"], names.get(q["id"], "")) for q in per[-1]["picks"]], "prev": prev}
+
+
 def render(out, state, added, closed_today, top):
     d = out["as_of"]
     trial = out["n_reliable_params"] == 0
@@ -108,6 +127,14 @@ def render(out, state, added, closed_today, top):
             L.append(f"- {p['stock_id']} {p['name']}：{p.get('action')}，{p.get('reason')}"
                      + (f"，報酬 {pct(p.get('ret_net'))}" if p.get("ret_net") is not None else ""))
         L.append("")
+    rk = rank_paper_new(d)
+    if rk:
+        L += ["## 本月排名前 20（紙上模擬，不是買進建議）", "",
+              "強勢股＋營收成長合併排名，明日開盤起算、持有到下月換榜。只記錄成績，看半年後是否真的贏 0050。", "",
+              "、".join(f"{c} {n}" for c, n in rk["picks"]), ""]
+        if rk["prev"]:
+            pv = rk["prev"]
+            L += [f"上一期（{fmt_date(pv['as_of'])} 起）：清單 {pct(pv['net'])}、0050 {pct(pv.get('b0050'))}。", ""]
     sm = track.summary(state)
     if sm:
         L += ["## 推薦實績（已結案）", "",
@@ -136,6 +163,8 @@ def render_line(out, state, top, closed_today=()):
         L.append("【追蹤提醒】")
         for p in imp:
             L.append(f"{p['stock_id']} {p['name']}：{p['action']}－{p.get('reason', '')}")
+    if rank_paper_new(d):
+        L.append("【每月排名】本月前 20 名已更新（紙上模擬），看 Email 或網站")
     L.append("完整報告請看 Email")
     return "\n".join(L)
 
