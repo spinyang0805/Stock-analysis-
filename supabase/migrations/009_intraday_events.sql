@@ -3,7 +3,8 @@
 --   回測月線止跌、開盤跳空 ≥3%、接近漲跌停。條件須「連續 2 根已完成的 1 分 K」成立。
 --   去重：同股同事件 30 分鐘冷卻且價格需再變動 ≥ max(1%, 0.5ATR)；同股 10 分鐘內只發一次；
 --   每股每日最多 3 則、全日最多 20 則（緊急持股風險另可升級 2 次）；同股多事件合併為一則；
---   每 5 分鐘批次送 Teams，持股跌破停損等緊急事件立即送並推 LINE（每日 ≤5、每月 ≤150）。
+--   每 5 分鐘批次送 Teams，持股跌破停損等緊急事件立即送並推 LINE；組合拳待突破股帶量突破也推 LINE（每日 ≤3）。
+--   LINE 合計每日 ≤8 則事件、每月 ≤150 次推播。
 --   每則附建議價：買進區間／停損／目標（追高、接近漲停、13:20 後不給買價）；賣出建議價。
 -- 每晚 daily-picks（alert_levels.write_context）寫入隔天的 intraday_context；沒有 context 的日子
 -- （非交易日）函式直接返回。
@@ -226,8 +227,14 @@ begin
     txt := public._event_text(r.code, r.name, r.role, r.etf, r.c1, r.prev_close, r.stop, r.hh20, r.ma20, r.ma60,
                               r.vwap, r.bf, r.atr, least(r.l1, r.l2), r.target, ev, r.stop_label);
     if txt is null then continue; end if;
+    -- LINE：持股緊急事件；另加「組合拳待突破」帶量突破（每日最多 3 則，使用者 2026-10-20 要求）
     insert into intraday_outbox (for_date, code, urgent, line_ok, body)
-    values (d, r.code, urgent, urgent and r.role = 'holding', txt);
+    values (d, r.code, urgent,
+            (urgent and r.role = 'holding')
+            or (r.role = 'pick' and r.name like '%組合拳%' and 'breakout' = any(ev)
+                and (select count(*) from intraday_outbox o2
+                      where o2.for_date = d and o2.line_ok and not o2.urgent) < 3),
+            txt);
     insert into intraday_event_state (for_date, code, event, last_sent_at, last_price, sent_count)
     select d, r.code, e, now(), r.c1, 1 from unnest(ev) e
     on conflict (for_date, code, event) do update
@@ -344,17 +351,17 @@ begin
       update intraday_outbox set teams_sent = true where id = any(ids);
     end if;
   end if;
-  -- LINE：只發持股緊急事件；每日 ≤5 則、每月 ≤150 則
+  -- LINE：持股緊急事件＋組合拳突破（≤3）；每日 ≤8 則事件、每月 ≤150 次推播（另留約 22 次給 08:50 晨報）
   select array_agg(id order by id), string_agg(body, E'\n' order by id) into line_ids, line_body
     from intraday_outbox where for_date = d and line_ok and not line_sent;
   if line_ids is not null then
     select count(*) into today_line from intraday_outbox where for_date = d and line_sent;
     insert into alert_quota (ym, line_sent) values (v_ym, 0) on conflict do nothing;
     select line_sent into used from alert_quota where alert_quota.ym = v_ym for update;
-    if today_line < 5 and used < 150 and _vault('line_channel_token') is not null then
+    if today_line < 8 and used < 150 and _vault('line_channel_token') is not null then
       st := _post_json('https://api.line.me/v2/bot/message/push',
         jsonb_build_object('to', _vault('line_user_id'), 'messages', jsonb_build_array(jsonb_build_object(
-          'type', 'text', 'text', '⚡ 持股盤中 ' || hh || E'\n' || line_body))),
+          'type', 'text', 'text', '⚡ 盤中 ' || hh || E'\n' || line_body))),
         'Bearer ' || _vault('line_channel_token'));
       if st = 200 then
         update intraday_outbox set line_sent = true where id = any(line_ids);
