@@ -38,6 +38,7 @@ STATE = os.path.join(REPO, "public", "data", "combo_signals.json")
 RANK = os.path.join(REPO, "public", "data", "rank_paper.json")
 UNIVERSE = 500
 KEEP_CLOSED = 120
+LIVE_SINCE = "20261019"     # go-live date: earlier signals are the first run's replay, never sent to the user
 SELL_RULE = "strict3"
 CAT = {"trig": ("突破", rc.TRIGGER), "money": ("資金", rc.MONEY), "chips": ("籌碼", rc.CHIPS),
        "rs": ("相對強度", rc.RS), "rev": ("營收", rc.REV)}
@@ -177,9 +178,11 @@ def main(argv=None):
     a = parse_args(argv)
     state = {"positions": [], "closed": []}
     seed = not os.path.exists(a.state)
+    prev_live = None
     if not seed:
         with open(a.state, encoding="utf-8") as fh:
             state = json.load(fh)
+        prev_live = state.get("live_since")
     active = [p for p in state.get("positions", []) if p["status"] in ("waiting", "holding", "sell_signal")]
     rank_ids = []
     if os.path.exists(RANK):
@@ -240,7 +243,10 @@ def main(argv=None):
     done = [c for c in closed if c["status"] == "closed"]
     summary = {"n": len(done), "win": round(float(np.mean([c["ret"] > 0 for c in done])), 3) if done else None,
                "mean": round(float(np.mean([c["ret"] for c in done])), 4) if done else None}
-    state = {"updated": as_of, "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "rule": "combo_strictB",
+    live_since = prev_live or (as_of if seed else LIVE_SINCE)
+    for p in positions + closed:
+        p["replayed"] = p["signal_date"] < live_since
+    state = {"updated": as_of, "live_since": live_since, "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "rule": "combo_strictB",
              "new_today": [p["stock_id"] for p in new], "positions": positions, "closed": closed[:KEEP_CLOSED],
              "rank_lights": lights, "summary": summary}
     os.makedirs(os.path.dirname(a.state), exist_ok=True)

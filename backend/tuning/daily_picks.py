@@ -79,8 +79,14 @@ def load_combo(as_of, path=COMBO):
     return c if c.get("updated") == as_of else None
 
 
+def combo_live(c):
+    """Positions that were really sent as candidates (not the first run's replay)."""
+    since = c.get("live_since") or "20261019"
+    return [p for p in (c.get("positions") or []) if p["signal_date"] >= since]
+
+
 def render_combo(c):
-    pos = c.get("positions") or []
+    pos = combo_live(c)
     new = [p for p in pos if p["stock_id"] in set(c.get("new_today") or [])]
     sells = [p for p in pos if p["status"] == "sell_signal"]
     L = ["## 今日買進候選：組合拳（明日開盤進場）", "",
@@ -101,7 +107,8 @@ def render_combo(c):
         L.append(f"- **{p['name']}（{p['stock_id']}）** 買進 {p.get('entry_date', '–')} @ {p.get('entry_price', '–')}，"
                  f"目前 {pct(p.get('ret'))}｜{why}")
     hold = sum(p["status"] == "holding" for p in pos)
-    L += ["", f"組合拳紙上追蹤中 {hold} 檔，完整清單請看網站「組合拳」頁。", ""]
+    L += ["", f"以上只列晨報推薦過的組合拳候選（紙上追蹤，不代表你的持股）。追蹤中 {hold} 檔；"
+          "上線前回放的歷史部位只在網站「組合拳」頁參考。", ""]
     return L
 
 
@@ -191,7 +198,7 @@ def render_line(out, state, top, closed_today=(), combo=None):
     d = out["as_of"]
     trial = out["n_reliable_params"] == 0
     if combo is not None:
-        pos = combo.get("positions") or []
+        pos = combo_live(combo)
         new = [p for p in pos if p["stock_id"] in set(combo.get("new_today") or [])]
         sells = [p for p in pos if p["status"] == "sell_signal"]
         L = [f"📈 {fmt_date(d)} 收盤後｜組合拳"]
@@ -200,7 +207,7 @@ def render_line(out, state, top, closed_today=(), combo=None):
             L.append(f"{p['stock_id']} {p['name']}{'⭐' if p.get('in_rank') else ''} {p['signal_close']}｜"
                      + "＋".join((p.get("buy_reasons") or {}).keys()))
         if sells:
-            L.append("【賣出確認】明日開盤賣")
+            L.append("【之前推薦的候選：賣出確認】明日開盤賣")
             for p in sells:
                 L.append(f"{p['stock_id']} {p['name']}（{pct(p.get('ret'))}）")
         imp = [p for p in state if p["status"] in track.ACTIVE and p.get("action") in ("出場", "注意")]

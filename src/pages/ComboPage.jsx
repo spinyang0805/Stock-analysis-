@@ -27,7 +27,10 @@ function Reasons({ r }) {
 }
 
 function StockCell({ p }) {
-  return <><b className="num">{p.stock_id}</b> {p.name}{p.in_rank ? " ⭐" : ""}</>;
+  return (
+    <><b className="num">{p.stock_id}</b> {p.name}{p.in_rank ? " ⭐" : ""}
+      {p.replay && <span className="dim" style={{ fontSize: 11, marginLeft: 4 }} title="上線前回放的模擬部位，晨報沒有推薦過">（回放）</span>}</>
+  );
 }
 
 function HoldingTable({ rows }) {
@@ -67,12 +70,14 @@ export default function ComboPage() {
   const [data, setData] = useState(undefined);
   useEffect(() => { fetchStaticJson("/combo_signals.json").then(setData); }, []);
 
-  const pos = data?.positions || [];
+  const since = data?.live_since || "20261019";
+  const mark = (p) => ({ ...p, replay: p.signal_date < since });
+  const pos = (data?.positions || []).map(mark);
   const newIds = new Set(data?.new_today || []);
   const fresh = pos.filter((p) => newIds.has(p.stock_id) && p.status === "waiting");
   const sells = pos.filter((p) => p.status === "sell_signal");
   const holding = pos.filter((p) => p.status === "holding");
-  const closed = (data?.closed || []).filter((c) => c.status === "closed").slice(0, 40);
+  const closed = (data?.closed || []).filter((c) => c.status === "closed").slice(0, 40).map(mark);
   const sm = data?.summary || {};
 
   return (
@@ -90,7 +95,7 @@ export default function ComboPage() {
           <b>買進</b>要四關都過：站上往上走的季線且大盤不是空頭 → 近 3 天真突破（新高、W 底頸線、趨勢線…）→ 近 5 天資金流入（OBV、量增）→
           籌碼、相對強度、營收至少一項。<b>賣出</b>要「真的轉壞」：近 10 天 ≥2 種結構破壞（頭頭低、跌破趨勢線…）加上 ≥2 類確認（資金流出、籌碼賣出、環境轉壞），
           或跌破往下彎的季線，或比買價跌 10%。過熱（RSI、KD 高檔）不賣。⭐ = 也在當月排名前 20。
-          這裡是紙上追蹤，不是下單建議；回測 2020–2026 每筆平均贏股票池約 1.8%，但最近半年只打平、輸 0050。
+          這裡是紙上追蹤，不是你的持股，也不是下單建議；標「回放」的是上線（{fmtDate(since)}）前用歷史資料模擬的部位，晨報不會提醒。回測 2020–2026 每筆平均贏股票池約 1.8%，但最近半年只打平、輸 0050。
         </div>
       </Card>
 
@@ -125,7 +130,7 @@ export default function ComboPage() {
               )}
             </Card>
 
-            <Card title="賣出確認（明日開盤賣出，賣出後自動移除）" icon={LogOut} style={{ marginTop: 12 }}>
+            <Card title="賣出確認（紙上追蹤：明日開盤賣出，賣出後自動移除）" icon={LogOut} style={{ marginTop: 12 }}>
               {!sells.length ? <div className="dim">目前沒有賣出確認。</div> : (
                 <div className="table-wrap">
                   <table className="data">
