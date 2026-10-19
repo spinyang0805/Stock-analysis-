@@ -53,6 +53,9 @@ def parse_args(argv=None):
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--params", default=os.path.join(OUT_DIR, "stock_params.json"))
     ap.add_argument("--report", default=os.path.join(OUT_DIR, "research_s2s.md"))
+    ap.add_argument("--uni-mode", choices=["pit", "fixed"], default="pit",
+                    help="pit: market-wide buys re-chosen per window from data before it (no look-ahead); "
+                         "fixed: the current params list (look-ahead in the walk-forward)")
     add_common_args(ap)
     ap.set_defaults(no_holdings=True)
     return ap.parse_args(argv)
@@ -107,22 +110,88 @@ def trades_for(buy_idx, sell_mask, ao, ac, ok, atr, use_stop, entry_ok):
     return rows
 
 
+REF_SELL = "s_ma20_break"   # fixed reference exit used to rank the market-wide buy signals (stage 1)
+UNI_K = 3                    # market-wide buy signals per fold
+
+
+def screen_job(a):
+    """Stage 1 (point-in-time market-wide buy set): every buy signal traded with the reference exit + stop;
+    returns calendar entry / exit positions and excess per signal for pooling across stocks."""
+    sid, g, inu_mask, bench_idx, etf, cp = a
+    f = ind.features(g)
+    buys, sells = ind.buy_signals(f), ind.sell_signals(f)
+    if REF_SELL not in sells:
+        return {}
+    ao, ac = g["aopen"].to_numpy(float), g["aclose"].to_numpy(float)
+    ok = (g["fill_ok"] if "fill_ok" in g else pd.Series(True, index=g.index)).to_numpy(bool)
+    atr = f["atr"].to_numpy(float)
+    sm = sells[REF_SELL].to_numpy(bool)
+    costs, nn, out = Costs(), len(cp), {}
+    for name, s in buys.items():
+        bidx = np.flatnonzero(s.to_numpy(bool))
+        if not len(bidx):
+            continue
+        rows = trades_for(bidx, sm, ao, ac, ok, atr, True, inu_mask)
+        rows = [r for r in rows if not r[6]]
+        if not rows:
+            continue
+        r = np.array(rows, dtype=float)
+        e, x = r[:, 1].astype(int), r[:, 2].astype(int)
+        xs = costs.net(r[:, 3], etf) - (bench_idx[x] / bench_idx[e] - 1)
+        out[name] = (cp[e], cp[np.minimum(x, nn - 1)], xs)
+    return out
+
+
+def choose_uniform(screens, lo, hi):
+    """Top UNI_K buy signals on the pooled train window [lo, hi) (exit < hi): mean excess > 0 and cluster t ≥ 2."""
+    pool = {}
+    for res in screens:
+        for name, (E, X, xs) in res.items():
+            m = (E >= lo) & (E < hi) & (X < hi)
+            if m.any():
+                pool.setdefault(name, ([], []))
+                pool[name][0].append(xs[m])
+                pool[name][1].append(E[m])
+    scored = []
+    for name, (xs, ps) in pool.items():
+        x, p = np.concatenate(xs), np.concatenate(ps)
+        if len(x) < 30 or x.mean() <= 0:
+            continue
+        t, _ = ev_mod.t_cluster(x, p // ev_mod.CLUSTER_DAYS)
+        if t >= 2:
+            scored.append((t, name))
+    return [n for _, n in sorted(scored, reverse=True)[:UNI_K]]
+
+
 def stock_job(a):
-    """Builds every candidate's trades, then does the walk-forward choice per variant (in the worker)."""
-    sid, g, inu_mask, uni_names, bench_idx, etf, cp, folds, hold = a
-    cand, _ = build_candidates(g, inu_mask, uni_names, bench_idx, etf)
+    """Builds every candidate's trades, then does the walk-forward choice per variant (in the worker).
+    uni_sets: {(lo, hi): [buy names]} — market-wide buys chosen point-in-time per window (None → fixed list)."""
+    sid, g, inu_mask, uni_names, bench_idx, etf, cp, folds, hold, uni_sets = a
+    cand, _ = build_candidates(g, inu_mask, uni_names if uni_sets is None else [], bench_idx, etf)
     nn = len(cp)
     for c in cand.values():                          # row positions → calendar positions
         c["e"], c["x"] = cp[c["e"]], cp[np.minimum(c["x"], nn - 1)]
     out = {v: ([], []) for v in VARIANTS}
     chosen = {v: {} for v in VARIANTS}
+    uni_cache = {}
     for v in VARIANTS:
         kind, use_stop = ("per" if v.startswith("per") else "uni"), v.endswith("_stop")
         for which, (lo, hi, te) in [(0, f_) for f_ in folds] + [(1, hold)]:
-            best = pick(cand, kind, use_stop, lo, hi)
+            pool = cand
+            if kind == "uni" and uni_sets is not None:
+                names = tuple(uni_sets.get((lo, hi)) or ())
+                if not names:
+                    continue
+                if names not in uni_cache:
+                    uc, _ = build_candidates(g, inu_mask, list(names), bench_idx, etf, uni_only=True)
+                    for c in uc.values():
+                        c["e"], c["x"] = cp[c["e"]], cp[np.minimum(c["x"], nn - 1)]
+                    uni_cache[names] = uc
+                pool = uni_cache[names]
+            best = pick(pool, kind, use_stop, lo, hi)
             if best is None:
                 continue
-            c = cand[best]
+            c = pool[best]
             m = (c["e"] >= hi) & (c["e"] < te)
             if not m.any():
                 continue
@@ -134,7 +203,7 @@ def stock_job(a):
     return out, chosen
 
 
-def build_candidates(g, inu_mask, uni_names, bench_idx, etf):
+def build_candidates(g, inu_mask, uni_names, bench_idx, etf, uni_only=False):
     f = ind.features(g)
     buys, sells = ind.buy_signals(f), ind.sell_signals(f)
     ao, ac = g["aopen"].to_numpy(float), g["aclose"].to_numpy(float)
@@ -148,8 +217,9 @@ def build_candidates(g, inu_mask, uni_names, bench_idx, etf):
         if nm in buys:
             uni |= buys[nm].to_numpy(bool)
     sell_masks = {k: v.to_numpy(bool) for k, v in sells.items()}
-    buy_sets = {("per", k): np.flatnonzero(v.to_numpy(bool)) for k, v in buys.items()}
-    buy_sets[("uni", "uniform")] = np.flatnonzero(uni)
+    buy_sets = {} if uni_only else {("per", k): np.flatnonzero(v.to_numpy(bool)) for k, v in buys.items()}
+    if uni_names:
+        buy_sets[("uni", "uniform")] = np.flatnonzero(uni)
     # every candidate's full trade sequence (excess computed once)
     cand = {}
     for (kind, bname), bidx in buy_sets.items():
@@ -226,6 +296,16 @@ def main(argv=None):
             continue
         cp = np.array([pos[x] for x in d])
         jobs.append((sid, g, m, uni_names, bidx_cal[cp], prep["meta"][sid]["etf"], cp, folds, hold))
+    uni_sets = None
+    if a.uni_mode == "pit":
+        with ProcessPoolExecutor(a.workers) as ex:
+            screens = list(ex.map(screen_job, [j[:3] + j[4:7] for j in jobs], chunksize=4))
+        uni_sets = {(lo, hi): choose_uniform(screens, lo, hi) for lo, hi, _ in folds + [hold]}
+        screens = None
+        log(f"[s2s] point-in-time market-wide buys: { {cal[hi]: v for (lo, hi), v in uni_sets.items()} }")
+        jobs = [j + (uni_sets,) for j in jobs]
+    else:
+        jobs = [j + (None,) for j in jobs]
     res = {v: [] for v in VARIANTS}
     hres = {v: [] for v in VARIANTS}
     chosen = {v: {} for v in VARIANTS}
@@ -259,6 +339,15 @@ def main(argv=None):
         L.append(f"| {names[v]} | 走動驗證 | {row(res[v])} |")
         L.append(f"| {names[v]} | 最後半年 | {row(hres[v])} |")
     L += ["", "t 值以 20 日區塊分群，|t| ≥ 2 才算明顯。「每 100 持有日超額」把持有時間長短考慮進去。", ""]
+    if uni_sets is not None:
+        L += ["### 全市場買進訊號（每段只用當時以前的資料挑選，不偷看未來）", "",
+              f"挑法：每個買進訊號配固定出場（跌破月線＋停損），訓練期全市場合計；平均贏大盤且 t ≥ 2 的前 {UNI_K} 個。", "",
+              "| 交易期間起 | 選出的訊號 |", "|---|---|"]
+        for (lo, hi), v in uni_sets.items():
+            L.append(f"| {cal[hi]} | {'、'.join(ind.BUY_DESC.get(x, x) for x in v) or '（無訊號通過，不交易）'} |")
+        L.append("")
+    else:
+        L += [f"> 全市場買進訊號固定為目前調參結果（{', '.join(uni_names)}），走動驗證期間有偷看未來的偏差。", ""]
     for v in ("per_stop", "per_nostop"):
         top = sorted(chosen[v].items(), key=lambda kv: -kv[1])[:12]
         L += [f"### {names[v]}：最常被選中的組合", "", "| 買進訊號 | 賣出訊號 | 交易筆數 |", "|---|---|---|"]
