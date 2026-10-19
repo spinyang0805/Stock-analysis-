@@ -306,3 +306,12 @@ table.data tr.err td { background: rgba(239,68,68,.07); }
   .chart-main { height: 340px; }
   .chart-sub { height: 96px; }
 }
+
+/* 燈號（組合拳頁）：圓燈＋文字 */
+.light { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 6px; border-radius: 999px; font-size: 12px; line-height: 1.25; white-space: nowrap; }
+.light b { font-weight: 700; }
+.light-dot { display: inline-block; border-radius: 50%; flex: none; }
+.light-sub { display: block; font-size: 11px; opacity: .85; font-weight: 400; }
+.light-dot.pulse { animation: light-pulse 1.2s ease-in-out infinite; }
+@keyframes light-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .light-dot.pulse { animation: none; } }

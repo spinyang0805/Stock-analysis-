@@ -9,6 +9,28 @@ import { fetchQuotes } from "../lib/market.js";
 import { signed, trendColor } from "../lib/format.js";
 import { navigate } from "../lib/router.js";
 
+// 燈號：圓燈＋文字（綠 = 買點／突破、黃 = 接近／等待、紅 = 賣出、灰 = 尚遠）
+const LIGHTS = {
+  green: { c: "#22c55e", bg: "rgba(34,197,94,.14)" },
+  yellow: { c: "#eab308", bg: "rgba(234,179,8,.16)" },
+  red: { c: "#ef4444", bg: "rgba(239,68,68,.14)" },
+  gray: { c: "#94a3b8", bg: "rgba(148,163,184,.14)" },
+};
+
+function Light({ color = "gray", label, sub, pulse = false, size = 14 }) {
+  const l = LIGHTS[color];
+  return (
+    <span className="light" style={{ background: l.bg, color: l.c }}>
+      <i className={pulse ? "light-dot pulse" : "light-dot"}
+        style={{ width: size, height: size, background: l.c, boxShadow: `0 0 8px ${l.c}` }} aria-hidden="true" />
+      <span>
+        <b>{label}</b>
+        {sub && <span className="light-sub">{sub}</span>}
+      </span>
+    </span>
+  );
+}
+
 // 台股盤中（台北時間週一～五 09:00–13:35）
 function marketOpen(now = new Date()) {
   const tw = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
@@ -96,6 +118,7 @@ function HoldingTable({ rows, quotes }) {
       <table className="data">
         <thead>
           <tr>
+            <th className="left">燈號</th>
             {[["id", "股票", true], ["entry", "買進日", true], ["days", "持有日"], ["ret", "報酬"]]
               .map(([k, label, left]) => <SortTh key={k} k={k} label={label} left={left} sort={sort} onSort={toggle} />)}
             <th>買價</th><th>現價（即時）</th><th>即時報酬</th><th className="left">買進理由</th>
@@ -104,6 +127,7 @@ function HoldingTable({ rows, quotes }) {
         <tbody>
           {sorted.map((p) => (
             <tr key={p.stock_id + p.signal_date} className="clickable" onClick={() => navigate(`/stock/${p.stock_id}`)}>
+              <td className="left">{p.status === "waiting" ? <Light color="yellow" label="待進場" /> : <Light color="green" label="續抱" />}</td>
               <td className="left"><StockCell p={p} /></td>
               <td className="left num">{fmtDate(p.entry_date)}</td>
               <td className="num">{p.days ?? "–"}</td>
@@ -166,9 +190,10 @@ export default function ComboPage() {
         ) : (
           <>
             <div className="kpis" style={{ marginTop: 12 }}>
-              <Kpi label="今日買進候選" value={fresh.length} sub="明日開盤進場" />
-              <Kpi label="賣出確認" value={sells.length} sub="明日開盤賣出" tone={sells.length ? "down" : undefined} />
-              <Kpi label="追蹤持有中" value={holding.length} sub="直到賣出確認" />
+              <Kpi label={<Light color={fresh.length ? "green" : "gray"} label="今日買進候選" size={10} />} value={fresh.length} sub="明日開盤進場" />
+              <Kpi label={<Light color={sells.length ? "red" : "gray"} label="賣出確認" size={10} />} value={sells.length} sub="明日開盤賣出" tone={sells.length ? "down" : undefined} />
+              <Kpi label={<Light color={watch.some((w) => (rt.quotes[w.stock_id]?.price ?? 0) >= w.level) ? "green" : watch.length ? "yellow" : "gray"} label="盤中觀察" size={10} />} value={watch.length} sub="只差突破" />
+              <Kpi label={<Light color={holding.length ? "green" : "gray"} label="追蹤持有中" size={10} />} value={holding.length} sub="直到賣出確認" />
               <Kpi label="已結案" value={closed.length} sub={closed.length ? `勝率 ${Math.round(closed.filter((c) => c.ret > 0).length / closed.length * 100)}%` : "上線後累積"} />
             </div>
 
@@ -176,10 +201,11 @@ export default function ComboPage() {
               {!fresh.length ? <div className="dim">今天沒有股票通過四關。</div> : (
                 <div className="table-wrap">
                   <table className="data">
-                    <thead><tr><th className="left">股票</th><th>收盤</th><th className="left">為什麼買（各關通過的訊號）</th></tr></thead>
+                    <thead><tr><th className="left">燈號</th><th className="left">股票</th><th>收盤</th><th className="left">為什麼買（各關通過的訊號）</th></tr></thead>
                     <tbody>
                       {fresh.map((p) => (
                         <tr key={p.stock_id} className="clickable" onClick={() => navigate(`/stock/${p.stock_id}`)}>
+                          <td className="left"><Light color="green" label="買點確認" sub="明日開盤進場" /></td>
                           <td className="left"><StockCell p={p} /></td>
                           <td className="num">{p.signal_close}</td>
                           <td className="left" style={{ fontSize: 12 }}><Reasons r={p.buy_reasons} /></td>
@@ -205,15 +231,17 @@ export default function ComboPage() {
                           const hit = gap != null && gap <= 0;
                           return (
                             <tr key={w.stock_id} className="clickable" onClick={() => navigate(`/stock/${w.stock_id}`)}
-                              style={hit ? { background: "rgba(239,68,68,.10)", fontWeight: 600 } : undefined}>
+                              style={hit ? { background: "rgba(34,197,94,.10)", fontWeight: 600 } : undefined}>
                               <td className="left" style={{ whiteSpace: "nowrap" }}>
-                                {hit ? <>🔔 <b>盤中已突破</b><div className="dim" style={{ fontSize: 11 }}>收盤站穩才確認</div></>
-                                  : gap == null ? <span className="dim">– 無報價</span> : <>⏳ 未突破</>}
+                                {hit ? <Light color="green" label="盤中已突破" sub="收盤站穩才確認" pulse={rt.open} />
+                                  : gap == null ? <Light color="gray" label="無報價" />
+                                    : gap <= 0.02 ? <Light color="yellow" label="接近突破" sub={`還差 ${(gap * 100).toFixed(1)}%`} />
+                                      : <Light color="gray" label="未突破" sub={`還差 ${(gap * 100).toFixed(1)}%`} />}
                               </td>
                               <td className="left"><StockCell p={w} /></td>
                               <td><LivePrice q={q[w.stock_id]} /></td>
                               <td className="num"><b>{w.level}</b></td>
-                              <td>{gap == null ? <span className="dim">–</span> : hit ? <b style={{ color: "#ef4444" }}>已站上</b> : <span className="num">+{(gap * 100).toFixed(1)}%</span>}</td>
+                              <td>{gap == null ? <span className="dim">–</span> : hit ? <b style={{ color: "#22c55e" }}>已站上</b> : <span className="num">+{(gap * 100).toFixed(1)}%</span>}</td>
                               <td className="num">{w.close}</td>
                               <td className="left" style={{ fontSize: 12 }}><Reasons r={w.buy_reasons} /></td>
                             </tr>
@@ -223,7 +251,7 @@ export default function ComboPage() {
                     </table>
                   </div>
                   <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
-                    🔔 = 現價已高於突破價（網頁即時判斷）。正式的盤中提醒另外要求「連 2 分鐘站上＋帶量＋在均價之上」，所以網頁先亮燈、提醒稍後才到是正常的；收盤仍站在突破價之上，才是組合拳買點。
+                    燈號：🟢 盤中已突破（閃爍）、🟡 離突破 2% 以內、⚪ 還遠。🟢 只代表現價已高於突破價（網頁即時判斷）。正式的盤中提醒另外要求「連 2 分鐘站上＋帶量＋在均價之上」，所以網頁先亮燈、提醒稍後才到是正常的；收盤仍站在突破價之上，才是組合拳買點。
                   </div>
                 </>
               )}
@@ -233,10 +261,11 @@ export default function ComboPage() {
               {!sells.length ? <div className="dim">目前沒有賣出確認。</div> : (
                 <div className="table-wrap">
                   <table className="data">
-                    <thead><tr><th className="left">股票</th><th className="left">買進日</th><th>買價</th><th>現價（即時）</th><th>報酬</th><th className="left">為什麼賣</th></tr></thead>
+                    <thead><tr><th className="left">燈號</th><th className="left">股票</th><th className="left">買進日</th><th>買價</th><th>現價（即時）</th><th>報酬</th><th className="left">為什麼賣</th></tr></thead>
                     <tbody>
                       {sells.map((p) => (
                         <tr key={p.stock_id} className="err clickable" onClick={() => navigate(`/stock/${p.stock_id}`)}>
+                          <td className="left"><Light color="red" label="賣出確認" sub="明日開盤賣" /></td>
                           <td className="left"><StockCell p={p} /></td>
                           <td className="left num">{fmtDate(p.entry_date)}</td>
                           <td className="num">{p.entry_price}</td>
