@@ -44,3 +44,16 @@ def test_context_roles_priority_and_missing_ctx():
     assert rows["1101"]["role"] == "tracked" and rows["1101"]["target"] is None
     assert rows["2317"]["role"] == "pick" and rows["2317"]["stop"] == 92.0 and rows["2317"]["etf"] is False
     assert all(set(alert_levels.CTX_COLS) <= set(r) for r in rows.values())
+
+
+def test_long_term_holdings_get_no_trailing_stop():
+    ctx = {"prev_close": 30.0}
+    out = {"sell_alerts": [{"stock_id": "00929", "name": "ETF", "trailing_stop": 29.31},
+                           {"stock_id": "2330", "name": "A", "trailing_stop": 95.0},
+                           {"stock_id": "2317", "name": "B", "trailing_stop": 90.0}],
+           "intraday_levels": {k: {"ctx": ctx, "trailing_stop": 1.0} for k in ("00929", "2330", "2317")}}
+    style = {"2317": "存股"}
+    rows = {r["code"]: r for r in alert_levels.build_context(out, [], style=style)}
+    assert rows["00929"]["stop"] is None and rows["2317"]["stop"] is None and rows["2330"]["stop"] == 95.0
+    kinds = {(r[0], r[1]) for r in alert_levels.build(out, [], style)}
+    assert ("00929", "trailing_stop") not in kinds and ("2330", "trailing_stop") in kinds

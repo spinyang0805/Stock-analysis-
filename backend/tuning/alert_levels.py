@@ -29,7 +29,7 @@ def next_trading_day(as_of):
     return None
 
 
-def build(out, state):
+def build(out, state, style=None):
     rows = {}
 
     def add(code, kind, direction, price, label, priority):
@@ -47,12 +47,20 @@ def build(out, state):
         add(p["stock_id"], "take_profit", "above", p.get("tp_price"), f"{p['name']} 達目標價（參考）", 2)
     for s in out.get("sell_alerts", []):
         lv = out.get("intraday_levels", {}).get(s["stock_id"], {})
-        add(s["stock_id"], "trailing_stop", "below", lv.get("trailing_stop"), f"{s['name']} 持股移動停損", 1)
+        if not long_term(s["stock_id"], style):
+            add(s["stock_id"], "trailing_stop", "below", lv.get("trailing_stop"), f"{s['name']} 持股移動停損", 1)
         add(s["stock_id"], "ma20_break", "below", lv.get("ma20_break"), f"{s['name']} 跌破月線", 2)
     return list(rows.values())
 
 
-def build_context(out, state, top=10):
+def long_term(code, style):
+    """存股 holdings (style set, or ETF without a style — same default as positions.advise) get no trailing-stop
+    alert: the holdings advice already says they are not sold on short-term signals."""
+    s = (style or {}).get(code)
+    return s == "存股" or (s is None and str(code).startswith("00"))
+
+
+def build_context(out, state, top=10, style=None):
     """Rows for public.intraday_context (migration 009): every stock the event-based intraday alerts watch.
     Role priority: holding > tracked > pick (one row per code)."""
     lv = out.get("intraday_levels") or {}
@@ -69,7 +77,8 @@ def build_context(out, state, top=10):
                       "stop": stop if stop and stop > 0 else None, "target": target if target and target > 0 else None}
 
     for s in out.get("sell_alerts", []):
-        add(s["stock_id"], s.get("name"), "holding", s.get("trailing_stop"), None)
+        add(s["stock_id"], s.get("name"), "holding",
+            None if long_term(s["stock_id"], style) else s.get("trailing_stop"), None)
     for p in state:
         if p["status"] in ("open", "exit_signalled", "waiting"):
             add(p["stock_id"], p.get("name"), "tracked", p.get("stop_price"), p.get("tp_price"))
@@ -94,9 +103,9 @@ def write_context(cur, for_date, rows):
     return len(rows)
 
 
-def write(out, state, conn=None, top=10):
+def write(out, state, conn=None, top=10, style=None):
     for_date = next_trading_day(out["as_of"])
-    rows = build(out, state)
+    rows = build(out, state, style)
     if not for_date:
         print("[alerts] no next trading day found; skipped")
         return 0
@@ -112,7 +121,7 @@ def write(out, state, conn=None, top=10):
             for r in rows:
                 cur.execute("INSERT INTO public.alert_levels (for_date, code, kind, direction, price, label, priority) "
                             "VALUES (%s, %s, %s, %s, %s, %s, %s)", (for_date,) + r)
-            n_ctx = write_context(cur, for_date, build_context(out, state, top))
+            n_ctx = write_context(cur, for_date, build_context(out, state, top, style))
         conn.commit()
     finally:
         if own:

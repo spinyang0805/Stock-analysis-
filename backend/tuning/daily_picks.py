@@ -226,7 +226,7 @@ def main(argv=None):
     if known.write_alerts:
         from tuning import alert_levels
         try:
-            alert_levels.write(out, state, top=known.top)
+            alert_levels.write(out, state, top=known.top, style=style)
         except Exception as exc:          # alerts are best-effort; the morning report must still be produced
             log(f"[daily] alert levels NOT written: {type(exc).__name__}: {str(exc)[:200]}")
     log(f"[daily] {as_of}: {len(added)} new picks, {len(closed_today)} closed, "
