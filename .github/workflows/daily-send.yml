@@ -8,6 +8,10 @@ name: Daily report (08:50 send)
 on:
   schedule:
     - cron: "20 0 * * 1-6"     # 08:20 Taipei
+    # backups: GitHub schedules can be delayed or skipped; the per-channel delivery record (sent_<date>.json)
+    # makes a second start send nothing that already went out
+    - cron: "35 0 * * 1-6"     # 08:35 Taipei
+    - cron: "45 0 * * 1-6"     # 08:45 Taipei
   workflow_dispatch:
     inputs:
       no_wait:
