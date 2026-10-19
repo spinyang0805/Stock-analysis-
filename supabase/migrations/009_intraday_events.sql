@@ -21,8 +21,10 @@ create table if not exists public.intraday_context (
   hh20       numeric, ll20 numeric,        -- 前 20 日最高 / 最低（含今日收盤當天）
   stop       numeric,                      -- 持股移動停損 / 追蹤股停損 / 推薦股初始停損
   target     numeric,                      -- 參考目標價
+  long_term  boolean not null default false,  -- 存股 / ETF 持股：大跌時提示分批加碼，不提示減碼
   primary key (for_date, code)
 );
+alter table public.intraday_context add column if not exists long_term boolean not null default false;
 alter table public.intraday_context enable row level security;
 
 create table if not exists public.intraday_event_state (
@@ -91,10 +93,11 @@ declare
   n_new  int := 0;
   day_total int;
   sent_stock int;
+  thr    numeric;
 begin
   if tw::time < time '09:02' or tw::time > time '13:31' then return 0; end if;
   if not exists (select 1 from intraday_context where for_date = d) then return 0; end if;
-  select count(*) into day_total from intraday_outbox where for_date = d and not urgent;
+  select count(*) into day_total from intraday_outbox o where o.for_date = d and not o.urgent;
 
   for r in
     with b as (                                 -- completed minutes only (the current bar is still forming)
@@ -167,6 +170,18 @@ begin
     if r.c1 <= r.prev_close * 0.91 and r.c2 <= r.prev_close * 0.91 then
       ev := ev || 'near_limit_down'; urgent := urgent or r.role = 'holding';
     end if;
+    -- 存股 / ETF 持股：不提示減碼；當日跌幅 ≥ max(2%, 1.2 ATR) 提示分批加碼，跌幅加倍再提示（推 LINE）
+    if r.role = 'holding' and r.long_term then
+      ev := array(select e from unnest(ev) e
+                   where e not in ('stop', 'heavy_sell', 'support_break', 'gap_down', 'near_limit_down'));
+      urgent := false;
+      thr := greatest(0.02, 1.2 * coalesce(r.atr, 0) / r.prev_close);
+      if r.c1 / r.prev_close - 1 <= -2 * thr and r.c2 / r.prev_close - 1 <= -2 * thr then
+        ev := ev || 'dip_add2'; urgent := true;
+      elsif r.c1 / r.prev_close - 1 <= -thr and r.c2 / r.prev_close - 1 <= -thr then
+        ev := ev || 'dip_add';
+      end if;
+    end if;
     if cardinality(ev) = 0 then continue; end if;
 
     -- 去重：同事件 30 分鐘冷卻 + 價格再變動門檻；同股 10 分鐘一次；每股每日 3 則（緊急可再 +2）；全日 20 則
@@ -230,13 +245,19 @@ begin
       when 'gap_down' then '開盤跳空下跌'
       when 'near_limit_up' then '接近漲停'
       when 'near_limit_down' then '接近跌停'
+      when 'dip_add' then '大跌'
+      when 'dip_add2' then '重挫'
       else e end || '、';
     if e in ('breakout', 'ma20_rebound', 'heavy_rally', 'gap_up') then is_buy := true; end if;
     if e in ('stop', 'heavy_sell', 'support_break', 'gap_down', 'near_limit_down') then is_sell := true; end if;
   end loop;
   labels := rtrim(labels, '、');
 
-  if is_sell and p_role = 'holding' then
+  if 'dip_add' = any(ev) or 'dip_add2' = any(ev) then
+    plan := '建議：長期持有可分批加碼（每批約原持股 1/4），第 1 批 ' || tw_round(p_c1, p_etf, 'down')
+            || '，第 2 批 ' || tw_round(least(p_c1 - 1.5 * coalesce(p_atr, 0), coalesce(p_ma60, p_c1)), p_etf, 'down')
+            || '；不必一次買滿，詳見每日持股建議';
+  elsif is_sell and p_role = 'holding' then
     sell_px := tw_round(p_c1 - greatest(tw_tick(p_c1, p_etf), 0.001 * p_c1), p_etf, 'down');
     plan := '建議：' || (case when 'stop' = any(ev) or 'near_limit_down' = any(ev) then '依停損出場或減碼' else '可先減碼' end)
             || '，參考賣價 ' || sell_px;

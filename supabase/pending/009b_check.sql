@@ -97,7 +97,7 @@ declare
 begin
   if tw::time < time '09:02' or tw::time > time '13:31' then return 0; end if;
   if not exists (select 1 from intraday_context where for_date = d) then return 0; end if;
-  select count(*) into day_total from intraday_outbox where for_date = d and not urgent;
+  select count(*) into day_total from intraday_outbox o where o.for_date = d and not o.urgent;
 
   for r in
     with b as (                                 -- completed minutes only (the current bar is still forming)
