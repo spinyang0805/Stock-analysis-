@@ -240,6 +240,55 @@ def render_line(out, state, top, closed_today=(), combo=None):
     return "\n".join(L)
 
 
+def combo_holdings(adv, prep):
+    """組合拳 strict-B sell rule applied to each 波段 holding at today's close (存股 / ETFs are skipped)."""
+    from tuning import combo_daily, research_combo as rc
+    out = []
+    for a in adv:
+        g = prep["adjusted"].get(a["stock_id"])
+        h = {"stock_id": a["stock_id"], "name": a["name"], "pnl": a["pnl"], "style": a["style"]}
+        if a["style"] == "存股" or g is None or len(g) < 120:
+            out.append({**h, "level": "skip"})
+            continue
+        g = g.reset_index(drop=True)
+        _, sell, _, _, _, det = rc.masks(g, detail=True)
+        i = len(g) - 1
+        lay = det["layers"]
+        why = combo_daily.sell_reasons(det, i)
+        if sell[combo_daily.SELL_RULE][i]:
+            level = "red"
+        elif lay["n_struct"][i] >= 1 and lay["n_conf"][i] >= 1:
+            level = "yellow"                              # one layer short of the strict sell
+        else:
+            level = "green"
+        out.append({**h, "level": level, "why": why, "below_cost10": a["pnl"] <= -0.10})
+    return out
+
+
+def render_combo_holdings(hc):
+    if not hc:
+        return ""
+    L = ["", "### 組合拳賣法檢查（你的持股）", "",
+         "規則：近 10 天 ≥2 種結構破壞（頭頭低、跌破趨勢線…）＋ ≥2 類確認（資金流出、籌碼賣出、環境轉壞），"
+         "或收盤跌破往下彎的季線 → 🔴 賣出確認；只差一步 → 🟡 注意；其餘 ✅ 續抱。存股不適用。", ""]
+    for lv, title in (("red", "🔴 賣出確認（明日開盤考慮賣出）"), ("yellow", "🟡 注意（差一步就達賣出條件）")):
+        items = [h for h in hc if h["level"] == lv]
+        if items:
+            L += [f"**{title}**", ""]
+            for h in items:
+                why = "；".join(f"{k}：{'、'.join(v[:2])}" for k, v in (h.get("why") or {}).items()) or "–"
+                L.append(f"- {h['name']}（{h['stock_id']}）{h['pnl']:+.1%}｜{why}"
+                         + ("｜已比成本跌超過 10%" if h.get("below_cost10") else ""))
+            L.append("")
+    ok = [h for h in hc if h["level"] == "green"]
+    skip = [h for h in hc if h["level"] == "skip"]
+    if ok:
+        L.append("✅ 續抱：" + "、".join(f"{h['name']}（{h['stock_id']}）" for h in ok))
+    if skip:
+        L.append("（存股／資料不足，不適用：" + "、".join(h["name"] or h["stock_id"] for h in skip) + "）")
+    return "\n".join(L) + "\n"
+
+
 def render_private(out, state, advices):
     """PRIVATE part (holdings: shares, costs, which picks the user holds) — stored in Supabase private_store and
     appended to the email / Teams report at send time; never published."""
@@ -325,6 +374,15 @@ def main(argv=None):
         from tuning import holdings_report, positions
         adv = holdings_report.advise_all(out, prep, sargs.params, pos, style) if pos else []
         priv, priv_line = render_private(out, state, adv), positions.render_line(adv)
+        try:                                          # 組合拳 sell rule on the REAL holdings (user request)
+            hc = combo_holdings(adv, prep)
+            priv += render_combo_holdings(hc)
+            red = [h for h in hc if h["level"] == "red"]
+            if red:
+                priv_line = "\n".join([x for x in (priv_line,) if x] + ["【組合拳賣法：持股賣出確認】"]
+                                       + [f"{h['stock_id']} {h['name']} {h['pnl']:+.0%}" for h in red])
+        except Exception as exc:
+            log(f"[daily] 組合拳 holdings check NOT produced: {type(exc).__name__}: {str(exc)[:200]}")
         if known.private:
             from tuning import private_store
             private_store.put(f"holdings:{as_of}", priv)
