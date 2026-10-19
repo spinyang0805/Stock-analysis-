@@ -97,6 +97,61 @@ def positions(tx):
     return out
 
 
+def fundamentals(f):
+    """Point score from data the engine already has (all known at the last close):
+    revenue (last 3 months YoY, 12-month high), valuation vs own 3 years (PE percentile), institutions
+    (foreign + trust net buy over 20 days), dividend yield. Returns (score, label, reasons)."""
+    sc, why = 0, []
+    if "rev_yoy" in f and f["rev_yoy"].notna().any():
+        ym = f["rev_ym"] if "rev_ym" in f else None
+        months = f.loc[ym.ne(ym.shift(1)) & ym.notna(), "rev_yoy"] if ym is not None else f["rev_yoy"].dropna()
+        y3 = months.tail(3)
+        if len(y3):
+            m = float(y3.mean())
+            if m > 0:
+                sc += 1
+                why.append(f"營收近3月年增 {m:+.0f}%")
+            elif m < -10:
+                sc -= 1
+                why.append(f"營收近3月年減 {m:.0f}%")
+        rev = f["rev"].dropna()
+        if len(rev) and ym is not None:
+            mv = f.loc[ym.ne(ym.shift(1)) & ym.notna(), "rev"].tail(13)
+            if len(mv) >= 13 and mv.iloc[-1] >= mv.iloc[:-1].max():
+                sc += 1
+                why.append("營收創 12 個月新高")
+    if "pe" in f:
+        pe = f["pe"].where(f["pe"] > 0)
+        if pe.notna().sum() > 120 and np.isfinite(pe.iloc[-1]):
+            hist = pe.dropna().iloc[-750:]
+            q = float((hist < pe.iloc[-1]).mean())
+            if q < 0.3:
+                sc += 1
+                why.append(f"本益比偏低（自身 3 年 {q:.0%} 位置）")
+            elif q > 0.8:
+                sc -= 1
+                why.append(f"本益比偏高（自身 3 年 {q:.0%} 位置）")
+    nb = None
+    for col in ("foreign", "trust"):
+        if col in f and f[col].notna().sum() > 60:
+            v = f[col].iloc[-20:].sum()
+            nb = v if nb is None else nb + v
+    if nb is not None:
+        vol20 = f["volume"].iloc[-20:].sum()
+        r = nb / vol20 if vol20 else 0
+        if r > 0.02:
+            sc += 1
+            why.append("法人近20日買超")
+        elif r < -0.02:
+            sc -= 1
+            why.append("法人近20日賣超")
+    if "dy" in f and np.isfinite(f["dy"].iloc[-1]) and f["dy"].iloc[-1] >= 4:
+        sc += 1
+        why.append(f"殖利率 {f['dy'].iloc[-1]:.1f}%")
+    label = "佳" if sc >= 2 else ("轉弱" if sc <= -1 else "普通")
+    return sc, label, why
+
+
 def _tick_round(x, etf, mode="down"):
     from tuning.score_today import rnd
     return rnd(x, mode, etf)
@@ -153,40 +208,73 @@ def advise(pos, g, params, style, sell_alert, levels, costs=Costs()):
     a["dy"] = dy
     resist = [x for x in (ma20, ma60) if np.isfinite(x) and x > price]
     low60 = float(g["alow"].iloc[-60:].min())
+    # technical state: 中期轉空 (below a falling MA60 / bearish swing structure), 短線轉弱 (exit signal or close
+    # below MA20), else 正常; fundamentals: revenue, valuation, institutions, yield
+    weak = exit_sig or (np.isfinite(ma20) and price < ma20)
+    tech = "中期轉空" if trend_bad else ("短線轉弱" if weak else "正常")
+    fsc, flab, fwhy = fundamentals(f)
+    a.update(tech=tech, fund=flab, fund_score=fsc, fund_why=fwhy)
+    fund_txt = f"基本面{flab}（{'、'.join(fwhy) or '無明顯訊號'}）"
+    reduce_at = _tick_round(min(resist), etf, "up") if resist else None
     if pnl >= 0:
         cands = [x for x in (trail, breakeven) if x]
         if pnl < dy:
-            # profit below the dividend yield: selling is not worth it → keep and collect the dividend
-            a.update(action="續抱領息", detail=f"獲利 {pnl:.1%} 未超過殖利率 {dy:.1%}，賣出不划算，續抱領股利" +
-                     ("；但趨勢已轉空，若跌回保本價可考慮出場" if trend_bad else ""),
-                     stop=_tick_round(breakeven, etf, "down") if trend_bad and pos["avg"] > 0 else None)
+            # profit below the dividend yield → normally keep and collect the dividend, unless the trend has
+            # turned AND the fundamentals do not support the stock (then exit while still not at a loss)
+            if tech != "正常" and flab == "轉弱":
+                a.update(action="趁未虧損出場",
+                         detail=f"獲利 {pnl:.1%} 低於殖利率 {dy:.1%}，但{tech}且{fund_txt}：繼續放可能轉為虧損，"
+                                f"建議在保本價以上出場",
+                         stop=_tick_round(breakeven, etf, "down") if pos["avg"] > 0 else None)
+            elif tech != "正常":
+                a.update(action="續抱領息",
+                         detail=f"獲利 {pnl:.1%} 低於殖利率 {dy:.1%}；{tech}，但{fund_txt}，可續抱領股利、"
+                                f"轉弱期間不加碼；收盤跌破保本價再考慮出場",
+                         stop=_tick_round(breakeven, etf, "down") if pos["avg"] > 0 else None)
+            else:
+                a.update(action="續抱領息", detail=f"獲利 {pnl:.1%} 未超過殖利率 {dy:.1%}，賣出不划算，續抱領股利；"
+                                                  f"{fund_txt}")
             return a
         a["stop"] = _tick_round(max(cands), etf, "down") if cands else None
         if exit_sig or trend_bad:
             a.update(action="分批獲利了結",
                      detail=f"獲利 {pnl:.1%} 已超過殖利率 {dy:.1%}，且{'趨勢轉空' if trend_bad else '出現出場訊號'}："
-                            "建議先賣一半，其餘以停利價保護")
+                            f"建議先賣一半，其餘以停利價保護；{fund_txt}")
             a["sell_shares"] = int(round(pos["shares"] / 2 / 1000)) * 1000 or int(round(pos["shares"] / 2))
         else:
-            a.update(action="續抱", detail=f"獲利 {pnl:.1%}（殖利率 {dy:.1%}），趨勢未轉弱；收盤跌破停利價再出場")
+            a.update(action="續抱", detail=f"獲利 {pnl:.1%}（殖利率 {dy:.1%}），趨勢未轉弱；收盤跌破停利價再出場；"
+                                         f"{fund_txt}")
         return a
-    # ── loss: the user prefers holding long and averaging down; only a downtrend turns it into an exit advice.
-    # Both options are always listed.
+    # ── loss: the user prefers holding long and averaging down. The fundamentals decide whether a downtrend is a
+    # reason to exit (weak) or to wait (good). Both options are always listed.
     if trend_bad:
-        a.update(action="建議出場（已轉空頭）",
-                 detail="跌破下彎的季線或波段結構轉空：建議出場，或先在反彈時減碼",
-                 reduce_at=_tick_round(min(resist), etf, "up") if resist else None,
-                 stop=_tick_round(trail, etf, "down") if trail else None)
-        _stage_plan(a, pos, price, [low60, low60 * 0.9], etf)
-        a["alt"] = "另一選擇：長線攤平（上面的分批價位，等止跌再買）"
+        if flab == "轉弱":
+            a.update(action="建議出場", detail=f"中期轉空且{fund_txt}：技術面與基本面都轉弱，繼續持有可能擴大虧損，"
+                                            "建議出場或反彈時減碼", reduce_at=reduce_at,
+                     stop=_tick_round(trail, etf, "down") if trail else None)
+            a["alt"] = "另一選擇：至少不要加碼，反彈先減一半"
+        elif flab == "佳":
+            a.update(action="長抱等待（基本面佳）",
+                     detail=f"中期轉空，但{fund_txt}：可長期持有等待；轉空期間先不加碼，"
+                            "等收盤站回季線後再依下列價位分批攤平")
+            _stage_plan(a, pos, price, [low60, low60 * 0.9], etf)
+            a["alt"] = f"另一選擇：反彈到 {reduce_at} 先減碼" if reduce_at else "另一選擇：不加碼，續抱"
+        else:
+            a.update(action="反彈減碼", detail=f"中期轉空，{fund_txt}：建議反彈時先減碼一半，其餘等止跌",
+                     reduce_at=reduce_at, stop=_tick_round(trail, etf, "down") if trail else None)
+            _stage_plan(a, pos, price, [low60, low60 * 0.9], etf)
+            a["alt"] = "另一選擇：長線攤平（上面的分批價位，等止跌再買）"
         return a
-    a["alt"] = (f"另一選擇：反彈到 {_tick_round(min(resist), etf, 'up')} 先減碼" if resist
-                else "另一選擇：不加碼，續抱等待解套")
+    a["alt"] = (f"另一選擇：反彈到 {reduce_at} 先減碼" if reduce_at else "另一選擇：不加碼，續抱等待解套")
     if pnl > SMALL_LOSS:
-        a.update(action="續抱", detail=f"小幅虧損（{pnl:.1%}），先不動作")
+        a.update(action="續抱", detail=f"小幅虧損（{pnl:.1%}），先不動作；{fund_txt}")
+        return a
+    if flab == "轉弱":
+        a.update(action="不攤平，續抱觀察", detail=f"趨勢未轉空，但{fund_txt}：先不加碼，基本面回穩再考慮攤平",
+                 stop=_tick_round(trail, etf, "down") if trail else None)
         return a
     sup = [x for x in (ma20, ma60) if np.isfinite(x) and x <= price]
-    a.update(action="分批攤平（長線）", detail="趨勢未轉空：可在支撐價分批加碼、長期持有" +
+    a.update(action="分批攤平（長線）", detail=f"趨勢未轉空、{fund_txt}：可在支撐價分批加碼、長期持有" +
              ("；短線出現轉弱訊號，第一批可等收盤站回月線再買" if exit_sig else ""))
     _stage_plan(a, pos, price, sup or [low60, low60 * 0.9], etf)
     if pnl < DEEP_LOSS:
@@ -242,10 +330,10 @@ def render(advices, as_of):
              f"（{(tot_pnl / tot_cost if tot_cost else 0):+.1%}）；這些股票從第一次買進到現在的累計總損益（含已賣出的部分）"
              f"約 {tot_all:+,.0f} 元。皆已扣賣出手續費與證交稅。")
     L.append("")
-    order = {"建議出場（已轉空頭）": 0, "分批攤平（長線）": 1, "分批獲利了結": 2, "分批加碼": 3,
-             "考慮減碼": 4, "續抱領息": 5, "續抱": 6}
-    L.append("| 代號 | 名稱 | 股數 | 現價 | 均價（先進先出） | 損益（先進先出） | 整體均價 | 損益（整體均價） | 累計總損益（含已實現） | 殖利率 | 保本價 | 趨勢 | 建議 | 價位 | 說明 |")
-    L.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|")
+    order = {"建議出場": 0, "趁未虧損出場": 1, "反彈減碼": 2, "分批獲利了結": 3, "長抱等待（基本面佳）": 4,
+             "分批攤平（長線）": 5, "不攤平，續抱觀察": 6, "分批加碼": 7, "考慮減碼": 8, "續抱領息": 9, "續抱": 10}
+    L.append("| 代號 | 名稱 | 股數 | 現價 | 均價（先進先出） | 損益（先進先出） | 整體均價 | 損益（整體均價） | 累計總損益（含已實現） | 殖利率 | 保本價 | 技術面 | 基本面 | 建議 | 價位 | 說明 |")
+    L.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|---|")
     for a in sorted(advices, key=lambda a: (order.get(a["action"], 9), a["pnl"])):
         lv = []
         if a.get("add_at"):
@@ -265,9 +353,12 @@ def render(advices, as_of):
         mp = f"{a['m_pnl']:+.1%}" if a.get("m_pnl") is not None else "–"
         L.append(f"| {a['stock_id']} | {a['name']} | {a['shares']:,} | {a['price']} | {a['avg']}{zero} | {a['pnl']:+.1%} | "
                  f"{a['mavg']} | {mp} | {a['total_pl']:+,.0f} 元 | "
-                 f"{(format(a['dy'], '.1%') if a.get('dy') else '–')} | {a['breakeven'] or '–'} | {a['trend']} | **{a['action']}** | {'；'.join(lv) or '–'} | "
+                 f"{(format(a['dy'], '.1%') if a.get('dy') else '–')} | {a['breakeven'] or '–'} | {a.get('tech', a['trend'])} | {a.get('fund', '–')} | **{a['action']}** | {'；'.join(lv) or '–'} | "
                  f"{a['detail']}{('；' + extra) if extra else ''} |")
-    L += ["", "說明：兩種均價——「先進先出」與券商相同，看目前這批持股賺賠；「整體均價」是移動平均成本，"
+    L += ["", "技術面：「中期轉空」= 跌破下彎的季線或波段結構轉空；「短線轉弱」= 跌破月線或出現出場訊號。"
+          "基本面依營收（近 3 月年增、是否創 12 個月新高）、本益比在自身 3 年的位置、法人近 20 日買賣超、殖利率評分："
+          "佳／普通／轉弱。技術轉空但基本面佳 → 可長抱等待（不加碼）；技術與基本面都轉弱 → 建議出場。",
+          "說明：兩種均價——「先進先出」與券商相同，看目前這批持股賺賠；「整體均價」是移動平均成本，"
           "搭配累計總損益看從以前到現在一共賺了多少。配股、分割增加的股數不另計成本（總成本不變、平均到所有股數）；"
           "若買進的股票都已賣出、只剩配股，成本為 0。建議以先進先出均價判斷。"
           "獲利：只有獲利超過該股殖利率才建議賣出，否則續抱領股利。"
