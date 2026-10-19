@@ -17,28 +17,39 @@ from tuning import positions, score_today  # noqa: E402
 from tuning.data import connect_readonly, log  # noqa: E402
 
 
-def build(sargs):
+def load_positions():
     conn = connect_readonly()
     try:
         tx, style = positions.load_transactions(conn)
     finally:
         conn.rollback()
         conn.close()
-    pos = positions.positions(tx)
-    out, prep = score_today.run(sargs, extra_codes=list(pos), return_prep=True)
-    alerts = {s["stock_id"]: s for s in out["sell_alerts"]}
-    with open(sargs.params, encoding="utf-8") as f:
-        import json
+    return positions.positions(tx), style
+
+
+def advise_all(out, prep, params_path, pos=None, style=None):
+    """Holdings advice from an already computed score_today result (out, prep) — used by daily_picks."""
+    import json
+    if pos is None:
+        pos, style = load_positions()
+    with open(params_path, encoding="utf-8") as f:
         params = {p["stock_id"]: p for p in json.load(f)["stocks"]}
+    alerts = {s["stock_id"]: s for s in out["sell_alerts"]}
     adv = []
     for sid, p in pos.items():
         g = prep["adjusted"].get(sid)
         if g is None or len(g) < 60:
             log(f"[holdings] {sid}: no price history, skipped")
             continue
-        adv.append(positions.advise(p, g.reset_index(drop=True), params.get(sid), style.get(sid),
+        adv.append(positions.advise(p, g.reset_index(drop=True), params.get(sid), (style or {}).get(sid),
                                     alerts.get(sid), out["intraday_levels"].get(sid)))
-    return out["as_of"], adv
+    return adv
+
+
+def build(sargs):
+    pos, style = load_positions()
+    out, prep = score_today.run(sargs, extra_codes=list(pos), return_prep=True)
+    return out["as_of"], advise_all(out, prep, sargs.params, pos, style)
 
 
 def main(argv=None):

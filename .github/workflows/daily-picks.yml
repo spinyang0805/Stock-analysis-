@@ -2,7 +2,8 @@ name: Daily picks (evening compute)
 
 # After the close: score signals with the latest tuned params, re-simulate every tracked pick and write the
 # morning report. Nothing is sent here — daily-send.yml delivers it at 08:50 the next trading day.
-# State (tracked_picks.json) and reports live in release `daily-picks`. Read-only on Supabase.
+# Public reports live in release `daily-picks`; the tracking state and the user's holdings advice live in
+# Supabase private_store (never published).
 
 on:
   schedule:
@@ -61,20 +62,13 @@ jobs:
           if ! gh release view tuning-out >/dev/null 2>&1; then echo "::error::no tuned params yet (run Weekly tuning)"; exit 1; fi
           mkdir -p history/out/daily
           gh release download tuning-out -p stock_params.json -D history/out --clobber
-          BOOTSTRAP=0
           if ! gh release view daily-picks >/dev/null 2>&1; then
             gh release create daily-picks --title daily-picks --latest=false \
-              --notes "Daily picks state and reports. Managed by daily-picks.yml / daily-send.yml."
-            BOOTSTRAP=1
+              --notes "Daily picks public reports. Managed by daily-picks.yml / daily-send.yml."
           fi
-          state_names=$(gh release view daily-picks --json assets -q '.assets[].name')
-          if echo "$state_names" | grep -qx tracked_picks.json; then
+          # tracking state now lives in Supabase private_store; a legacy public copy is used once to migrate
+          if gh release view daily-picks --json assets -q '.assets[].name' | grep -qx tracked_picks.json; then
             gh release download daily-picks -p tracked_picks.json -D history/out/daily --clobber
-            test -s history/out/daily/tracked_picks.json
-          elif [ "$BOOTSTRAP" = "1" ] || [ -z "$state_names" ]; then
-            echo "starting tracking from an empty state (new / empty release)"
-          else
-            echo "::error::release daily-picks has assets but no tracked_picks.json — refusing to restart tracking"; exit 1
           fi
 
       - name: Freshness check
@@ -97,17 +91,18 @@ jobs:
         if: steps.day.outputs.trading == 'true' || github.event_name == 'workflow_dispatch'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}   # read-only holdings query + alert_levels write (small table)
-        run: python backend/tuning/daily_picks.py --source parquet --adjust-source exchange --write-alerts
+        run: python backend/tuning/daily_picks.py --source parquet --adjust-source exchange --write-alerts --private
 
-      - name: Publish (dated files first, latest.json last)
+      - name: Publish (dated files first, latest.json last; no private data)
         if: steps.day.outputs.trading == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           set -eu
           cd history/out/daily
           d=$(python -c "import json;print(json.load(open('latest.json'))['as_of'])")
-          cp tracked_picks.json "tracked_picks_$d.json"
-          gh release upload daily-picks "report_$d.md" "line_$d.txt" "recommendations_$d.json" \
-            "tracked_picks_$d.json" --clobber
-          gh release upload daily-picks tracked_picks.json --clobber
+          gh release upload daily-picks "report_$d.md" "line_$d.txt" "recommendations_$d.json" --clobber
           gh release upload daily-picks latest.json --clobber
+          # remove any legacy public copy of the tracking state (it showed which picks the user holds)
+          for a in $(gh release view daily-picks --json assets -q '.assets[].name' | grep '^tracked_picks' || true); do
+            gh release delete-asset daily-picks "$a" -y
+          done
           cat "report_$d.md" >> "$GITHUB_STEP_SUMMARY"

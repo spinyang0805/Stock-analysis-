@@ -105,6 +105,9 @@ def main(argv=None):
         return 1
     d = meta["as_of"]
     report += ai_section(a.dir, d)
+    priv, priv_line = private_section(d)
+    report += priv
+    line = line + ("\n" + priv_line if priv_line else "")
     subject = f"{'（延遲）' if late else ''}每日股票報告 {d[:4]}/{d[4:6]}/{d[6:]}"
     todo_full = [c for c in FULL_CHANNELS if sent.get(c) != "ok"]
     res = notify.notify(subject, report + note, channels=todo_full) if todo_full else {}
@@ -117,6 +120,19 @@ def main(argv=None):
     _save(sent_path, sent)
     failed = [k for k, v in res.items() if v.startswith("error")]
     return 1 if failed else 0
+
+
+def private_section(d):
+    """The user's holdings advice for report date d, from Supabase private_store (never in a public file).
+    Missing / DB unavailable → empty (the report still goes out)."""
+    try:
+        from tuning import private_store
+        body = private_store.get(f"holdings:{d}")
+        line = private_store.get(f"holdings_line:{d}")
+        return ("\n\n---\n\n" + body) if body else "", line or ""
+    except Exception as exc:
+        print(f"[send] holdings advice unavailable: {type(exc).__name__}")
+        return "", ""
 
 
 def ai_section(dir_, d):

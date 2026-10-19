@@ -71,8 +71,7 @@ def render(out, state, added, closed_today, top):
         L.append("|---|---|---|---:|---:|---:|---:|---:|---:|---|---|")
         order = {"出場": 0, "注意": 1, "續抱": 2, "待進場": 3}
         for p in sorted(act, key=lambda p: order.get(p.get("action"), 9)):
-            hold = "✔持有" if p.get("user_holds") else ""
-            L.append(f"| {p['stock_id']} | {p['name']}{hold} | {fmt_date(p['pick_date'])} | "
+            L.append(f"| {p['stock_id']} | {p['name']} | {fmt_date(p['pick_date'])} | "
                      f"{p.get('entry_price') or '–'} | {p.get('last_close') or '–'} | {pct(p.get('ret_net'))} | "
                      f"{p.get('days_held') or 0}/{p['plan_hold']} | {p.get('stop_price') or '–'} | "
                      f"{p.get('tp_price') or '–'} | **{p.get('action', '')}** | {p.get('reason', '')} |")
@@ -83,11 +82,6 @@ def render(out, state, added, closed_today, top):
             L.append(f"- {p['stock_id']} {p['name']}：{p.get('action')}，{p.get('reason')}"
                      + (f"，報酬 {pct(p.get('ret_net'))}" if p.get("ret_net") is not None else ""))
         L.append("")
-    al = [s for s in out["sell_alerts"] if s["alert"]]
-    L += ["## 持股出場警示", ""]
-    L.append("、".join(f"{s['stock_id']} {s['name']}：{'；'.join(s['reasons'])}" for s in al) if al
-             else f"持股 {len(out['sell_alerts'])} 檔，今日無警示。")
-    L.append("")
     sm = track.summary(state)
     if sm:
         L += ["## 推薦實績（已結案）", "",
@@ -115,27 +109,67 @@ def render_line(out, state, top, closed_today=()):
         L.append("【追蹤提醒】")
         for p in imp:
             L.append(f"{p['stock_id']} {p['name']}：{p['action']}－{p.get('reason', '')}")
-    al = [s for s in out["sell_alerts"] if s["alert"]]
-    if al:
-        L.append("【持股警示】")
-        for s in al:
-            L.append(f"{s['stock_id']} {s['name']}：{'；'.join(s['reasons'])}")
     L.append("完整報告請看 Email")
     return "\n".join(L)
+
+
+def render_private(out, state, advices):
+    """PRIVATE part (holdings: shares, costs, which picks the user holds) — stored in Supabase private_store and
+    appended to the email / Teams report at send time; never published."""
+    from tuning import positions
+    L = [positions.render(advices, out["as_of"])]
+    held_picks = [p for p in state if p["status"] in track.ACTIVE and p.get("user_holds")]
+    if held_picks:
+        L += ["", "### 你有買進的推薦股", ""]
+        for p in held_picks:
+            L.append(f"- {p['stock_id']} {p['name']}：{p.get('action', '')}－{p.get('reason', '')}"
+                     f"（報酬 {pct(p.get('ret_net'))}）")
+    al = [s for s in out["sell_alerts"] if s["alert"]]
+    if al:
+        L += ["", "### 今日持股出場訊號（明細）", ""]
+        L += [f"- {s['stock_id']} {s['name']}：{'；'.join(s['reasons'])}" for s in al]
+    return "\n".join(L) + "\n"
+
+
+def load_tracking(path, private):
+    """Tracking state: in the cloud it lives in Supabase private_store (it reveals which picks the user holds);
+    locally a JSON file. A legacy file is migrated once into the private store."""
+    if private:
+        from tuning import private_store
+        body = private_store.get("tracked_picks")
+        if body is not None:
+            return json.loads(body)
+        log("[daily] no tracking state in private_store yet — starting from the local file if any")
+    return track.load_state(path)
+
+
+def save_tracking(path, state, private):
+    track.save_state(path, state)
+    if private:
+        from tuning import private_store
+        private_store.put("tracked_picks", json.dumps(state, ensure_ascii=False))
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--top", type=int, default=10)
     ap.add_argument("--state", default=os.path.join(DAILY_DIR, "tracked_picks.json"))
+    ap.add_argument("--private", action="store_true",
+                    help="keep tracking state and the holdings advice in Supabase private_store (cloud mode)")
     ap.add_argument("--write-alerts", action="store_true",
                     help="write tomorrow's intraday alert levels to Supabase (public.alert_levels)")
     known, rest = ap.parse_known_args(argv)
     sargs = score_today.parse_args(rest + ["--include-unreliable", "--out-dir", DAILY_DIR])
     os.makedirs(DAILY_DIR, exist_ok=True)
-    state = track.load_state(known.state)
+    state = load_tracking(known.state, known.private)
     tracked = [p["stock_id"] for p in state if p["status"] in track.ACTIVE]
-    out, prep = score_today.run(sargs, extra_codes=tracked, return_prep=True)
+    try:
+        from tuning import holdings_report
+        pos, style = holdings_report.load_positions()
+    except Exception as exc:
+        log(f"[daily] holdings unavailable: {type(exc).__name__}: {str(exc)[:120]}")
+        pos, style = {}, {}
+    out, prep = score_today.run(sargs, extra_codes=tracked + list(pos), return_prep=True)
     as_of = out["as_of"]
     holdings = set(prep["holdings_all"]) if prep.get("holdings_ok", True) else None
     if holdings is None:
@@ -150,9 +184,36 @@ def main(argv=None):
         added = []
     else:
         added = track.open_new(state, out["buy"], as_of, known.top)
-    track.save_state(known.state, state)
+    save_tracking(known.state, state, known.private)
     report = render(out, state, added, closed_today, known.top)
     line = render_line(out, state, known.top, closed_today)
+    # private holdings advice (shares / costs) → never in the public files
+    try:
+        from tuning import holdings_report, positions
+        adv = holdings_report.advise_all(out, prep, sargs.params, pos, style) if pos else []
+        priv, priv_line = render_private(out, state, adv), positions.render_line(adv)
+        if known.private:
+            from tuning import private_store
+            private_store.put(f"holdings:{as_of}", priv)
+            private_store.put(f"holdings_line:{as_of}", priv_line)
+        else:
+            with open(os.path.join(DAILY_DIR, f"holdings_{as_of}.md"), "w", encoding="utf-8") as f:
+                f.write(priv)
+        log(f"[daily] holdings advice: {len(adv)} stocks ({'private_store' if known.private else 'local file'})")
+    except Exception as exc:
+        log(f"[daily] holdings advice NOT produced: {type(exc).__name__}: {str(exc)[:200]}")
+    # the public recommendations file must not carry the holdings (alerts, intraday levels)
+    rec = os.path.join(DAILY_DIR, f"recommendations_{as_of}.json")
+    if os.path.exists(rec):
+        with open(rec, encoding="utf-8") as f:
+            pub = json.load(f)
+        buy_ids = {b["stock_id"] for b in pub.get("buy", [])}
+        pub["sell_alerts"] = []
+        pub["intraday_levels"] = {k: v for k, v in (pub.get("intraday_levels") or {}).items() if k in buy_ids}
+        for b in pub.get("buy", []):
+            b.pop("holding", None)
+        with open(rec, "w", encoding="utf-8") as f:
+            json.dump(pub, f, ensure_ascii=False, indent=1)
     rp, lp = os.path.join(DAILY_DIR, f"report_{as_of}.md"), os.path.join(DAILY_DIR, f"line_{as_of}.txt")
     for path, text in ((rp, report), (lp, line)):
         with open(path, "w", encoding="utf-8") as f:

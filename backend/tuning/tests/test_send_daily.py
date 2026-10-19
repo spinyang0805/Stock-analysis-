@@ -22,6 +22,7 @@ def setup(tmp_path, monkeypatch, as_of, fail=()):
     monkeypatch.setattr(send_daily.cal, "is_trading_day", lambda d: True)
     monkeypatch.setattr(send_daily, "prev_trading_day", lambda now: "20261016")
     monkeypatch.setattr(send_daily, "ai_section", lambda dir_, d: "")
+    monkeypatch.setattr(send_daily, "private_section", lambda d: ("", ""))
     return calls
 
 
