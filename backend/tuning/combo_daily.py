@@ -38,6 +38,9 @@ STATE = os.path.join(REPO, "public", "data", "combo_signals.json")
 RANK = os.path.join(REPO, "public", "data", "rank_paper.json")
 UNIVERSE = 500
 KEEP_CLOSED = 120
+WATCH_MAX = 15            # intraday buy watchlist size (closest to the breakout first)
+WATCH_DIST = 0.06         # breakout price at most 6% above today's close
+WATCH_LINE = 8            # the nearest ones also go to LINE (monthly quota)
 LIVE_SINCE = "20261019"     # go-live date: earlier signals are the first run's replay, never sent to the user
 SELL_RULE = "strict3"
 CAT = {"trig": ("突破", rc.TRIGGER), "money": ("資金", rc.MONEY), "chips": ("籌碼", rc.CHIPS),
@@ -168,6 +171,41 @@ def replay(det_by, sell_by, current, names, days, as_of):
     return out
 
 
+def watch_level(g, det, buy, i):
+    """Tomorrow's intraday breakout price if every other layer will still hold tomorrow, else None.
+    Layers must be valid on the NEXT session: stage 2 now, money within the last 4 sessions (5-day window),
+    chips / RS within 9, revenue within 39; no breakout yet (the trigger is the only missing piece)."""
+    lay, b = det["layers"], det["buys"]
+    n = len(g)
+    if not lay["env"][i] or lay["trig"][i] or buy["main"][i]:
+        return None
+    money = rc.any_of(b, rc.MONEY, n) | lay["obv_on"]
+    if not money[max(0, i - 3):i + 1].any():
+        return None
+    other = (rc.any_of(b, rc.CHIPS, n)[max(0, i - 8):i + 1].any() or rc.any_of(b, rc.RS, n)[max(0, i - 8):i + 1].any()
+             or rc.any_of(b, rc.REV, n)[max(0, i - 38):i + 1].any())
+    if not other:
+        return None
+    hh20 = float(np.nanmax(g["ahigh"].to_numpy(float)[max(0, i - 19):i + 1]))   # tomorrow's 20-day high
+    close = float(g["aclose"].iloc[i])
+    if not np.isfinite(hh20) or hh20 <= close or hh20 / close - 1 > WATCH_DIST:
+        return None
+    return hh20
+
+
+def event_ctx(g, det):
+    """Base values for public.intraday_context (same fields as score_today.intraday_levels; last row is raw)."""
+    c = g["aclose"]
+    ma20, ma60 = c.rolling(20).mean(), c.rolling(60).mean()
+    fin = lambda x: None if x is None or not np.isfinite(x) else round(float(x), 4)          # noqa: E731
+    atr = det.get("atr")
+    return {"prev_close": fin(c.iloc[-1]), "ma20": fin(ma20.iloc[-1]), "ma60": fin(ma60.iloc[-1]),
+            "ma20_up": bool(len(ma20) > 5 and ma20.iloc[-1] > ma20.iloc[-6]),
+            "atr": fin(atr[-1]) if atr is not None else None,
+            "avg_vol20": fin(g["volume"].iloc[-20:].mean() / 1000),
+            "hh20": fin(g["ahigh"].iloc[-20:].max()), "ll20": fin(g["alow"].iloc[-20:].min())}
+
+
 def light(det, sell_mask, i):
     if sell_mask[i]:
         return "red"
@@ -234,6 +272,23 @@ def main(argv=None):
             closed.insert(0, {**p, "closed_on": as_of})
         else:
             positions.append(p)
+    watch = []
+    for sid in sorted(current):
+        if sid not in det_by or sid in have or sid in {p["stock_id"] for p in new}:
+            continue
+        g, det, buy = det_by[sid]
+        if str(g["date"].iloc[-1]) != as_of:
+            continue
+        lv = watch_level(g, det, buy, len(g) - 1)
+        if lv:
+            watch.append({"stock_id": sid, "name": names.get(sid, ""), "level": round(lv, 2),
+                          "close": round(float(g["close"].iloc[-1]), 2), "dist": round(lv / float(g["aclose"].iloc[-1]) - 1, 4),
+                          "in_rank": sid in rank_ids, "buy_reasons": buy_reasons(det, len(g) - 1),
+                          "ctx": event_ctx(g, det)})
+    watch.sort(key=lambda w: (not w["in_rank"], w["dist"]))
+    watch = watch[:WATCH_MAX]
+    for k, w in enumerate(watch):
+        w["line"] = k < WATCH_LINE
     lights = {}
     for sid in rank_ids:
         if sid in det_by:
@@ -248,7 +303,7 @@ def main(argv=None):
         p["replayed"] = p["signal_date"] < live_since
     state = {"updated": as_of, "live_since": live_since, "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "rule": "combo_strictB",
              "new_today": [p["stock_id"] for p in new], "positions": positions, "closed": closed[:KEEP_CLOSED],
-             "rank_lights": lights, "summary": summary}
+             "rank_lights": lights, "summary": summary, "intraday_watch": watch}
     os.makedirs(os.path.dirname(a.state), exist_ok=True)
     with open(a.state, "w", encoding="utf-8") as fh:
         json.dump(state, fh, ensure_ascii=False, indent=1)

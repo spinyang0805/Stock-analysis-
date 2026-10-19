@@ -265,6 +265,16 @@ def combo_holdings(adv, prep):
     return out
 
 
+def combo_watch_picks(combo):
+    """組合拳 intraday watchlist → 'pick' rows for the event-based alerts (breakout above hh20 with volume)."""
+    out = []
+    for w in (combo or {}).get("intraday_watch") or []:
+        if w.get("ctx"):
+            out.append({"code": w["stock_id"], "name": f"{w['name']}（組合拳待突破）", "ctx": w["ctx"],
+                        "stop": round(w["level"] * 0.90, 2), "target": None})
+    return out
+
+
 def render_combo_holdings(hc):
     if not hc:
         return ""
@@ -419,7 +429,8 @@ def main(argv=None):
         try:
             # 組合拳 mode: intraday alerts only for the user's holdings (old picks retired)
             a_out, a_state = (dict(out, buy=[]), []) if combo is not None else (out, state)
-            alert_levels.write(a_out, a_state, top=effective_top(out, known.top), style=style,
+            extra = combo_watch_picks(combo) if combo is not None else None
+            alert_levels.write(a_out, a_state, top=effective_top(out, known.top), style=style, extra_picks=extra,
                                advice={a['stock_id']: a for a in adv} if adv else None)
         except Exception as exc:          # alerts are best-effort; the morning report must still be produced
             log(f"[daily] alert levels NOT written: {type(exc).__name__}: {str(exc)[:200]}")

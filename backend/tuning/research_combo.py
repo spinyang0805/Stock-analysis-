@@ -148,7 +148,8 @@ def masks(g, detail=False):
         layers = {"env": env, "stage2": stage2, "stage4": stage4, "trig": trig, "money": money, "other": other,
                   "state": states["main"], "brk": brk, "conf": conf, "n_struct": n_struct, "n_conf": n_conf,
                   "obv_on": bull & ~prev, "obv_off": ~bull & prev}
-        return buy, sell, f["atr"].to_numpy(float), S, warn, {"buys": buys, "sells": sells, "layers": layers}
+        return buy, sell, f["atr"].to_numpy(float), S, warn, {"buys": buys, "sells": sells, "layers": layers,
+                                                             "atr": f["atr"].to_numpy(float)}
     return buy, sell, f["atr"].to_numpy(float), S, warn
 
 

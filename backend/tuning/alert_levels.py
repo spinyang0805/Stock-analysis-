@@ -64,13 +64,15 @@ def long_term(code, style):
 HOLD_LONG_ACTIONS = {"分批攤平（長線）", "長抱等待（基本面佳）", "分批加碼", "續抱（暫緩加碼）", "不攤平，續抱觀察"}
 
 
-def build_context(out, state, top=10, style=None, advice=None):
+def build_context(out, state, top=10, style=None, advice=None, extra_picks=None):
     """Rows for public.intraday_context (migration 009): every stock the event-based intraday alerts watch.
     Role priority: holding > tracked > pick (one row per code).
     advice = {code: evening holdings advice} (positions.advise): the holding's stop is the advice's own stop
     (None when the advice is to keep holding), long-term / averaging-down holdings get dip alerts instead of
     sell alerts, and adding is only suggested when the advice allows it. Without advice → trailing stop."""
-    lv = out.get("intraday_levels") or {}
+    lv = dict(out.get("intraday_levels") or {})
+    for x in extra_picks or []:                     # 組合拳 watchlist: carries its own context values
+        lv.setdefault(x["code"], {"ctx": x["ctx"]})
     rows = {}
 
     def add(code, name, role, stop, target, lt=False, allow=False, stop_label=None):
@@ -101,6 +103,8 @@ def build_context(out, state, top=10, style=None, advice=None):
             add(p["stock_id"], p.get("name"), "tracked", p.get("stop_price"), p.get("tp_price"))
     for b in out.get("buy", [])[:top]:
         add(b["stock_id"], b.get("name"), "pick", b.get("stop_loss_if_fill_at_ref"), b.get("take_profit_if_fill_at_ref"))
+    for x in extra_picks or []:
+        add(x["code"], x.get("name"), "pick", x.get("stop"), x.get("target"))
     return list(rows.values())
 
 
@@ -120,7 +124,7 @@ def write_context(cur, for_date, rows):
     return len(rows)
 
 
-def write(out, state, conn=None, top=10, style=None, advice=None):
+def write(out, state, conn=None, top=10, style=None, advice=None, extra_picks=None):
     for_date = next_trading_day(out["as_of"])
     rows = build(out, state, style)
     if not for_date:
@@ -138,7 +142,7 @@ def write(out, state, conn=None, top=10, style=None, advice=None):
             for r in rows:
                 cur.execute("INSERT INTO public.alert_levels (for_date, code, kind, direction, price, label, priority) "
                             "VALUES (%s, %s, %s, %s, %s, %s, %s)", (for_date,) + r)
-            n_ctx = write_context(cur, for_date, build_context(out, state, top, style, advice))
+            n_ctx = write_context(cur, for_date, build_context(out, state, top, style, advice, extra_picks))
         conn.commit()
     finally:
         if own:
