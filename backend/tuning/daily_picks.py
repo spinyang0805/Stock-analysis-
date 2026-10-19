@@ -157,10 +157,15 @@ def render(out, state, added, closed_today, top, combo=None):
                 L.append(f"- 回測：勝率 {pct(b['oos_win'], 0).lstrip('+')}、{b['oos_n'] if b.get('oos_n') is not None else '–'} 次")
             L.append("")
     L.append("")
-    act = [p for p in state if p["status"] in track.ACTIVE]
-    L += ["## 舊版推薦追蹤中（單一訊號，不再新增，賣完為止）" if combo is not None
-          else "## 追蹤中（每日評估，直到出場或你賣出）", ""]
-    if not act:
+    # the old single-signal picks are retired once the 組合拳 file exists (user decision 2026-10-19)
+    act = [] if combo is not None else [p for p in state if p["status"] in track.ACTIVE]
+    if combo is not None:
+        closed_today = ()
+    else:
+        L += ["## 追蹤中（每日評估，直到出場或你賣出）", ""]
+    if combo is not None:
+        pass
+    elif not act:
         L.append("目前沒有追蹤中的推薦。")
     else:
         L.append("| 代號 | 名稱 | 推薦日 | 進場價 | 收盤 | 報酬(扣成本) | 持有/計畫 | 停損 | 目標（參考） | 建議 | 原因 |")
@@ -186,7 +191,7 @@ def render(out, state, added, closed_today, top, combo=None):
         if rk["prev"]:
             pv = rk["prev"]
             L += [f"上一期（{fmt_date(pv['as_of'])} 起）：清單 {pct(pv['net'])}、0050 {pct(pv.get('b0050'))}。", ""]
-    sm = track.summary(state)
+    sm = track.summary(state) if combo is None else None
     if sm:
         L += ["## 推薦實績（已結案）", "",
               f"共 {sm['n']} 筆，勝率 {sm['win']:.0%}，平均每筆 {pct(sm['mean'])}（扣手續費與證交稅）", ""]
@@ -210,11 +215,6 @@ def render_line(out, state, top, closed_today=(), combo=None):
             L.append("【之前推薦的候選：賣出確認】明日開盤賣")
             for p in sells:
                 L.append(f"{p['stock_id']} {p['name']}（{pct(p.get('ret'))}）")
-        imp = [p for p in state if p["status"] in track.ACTIVE and p.get("action") in ("出場", "注意")]
-        if imp:
-            L.append("【舊推薦提醒】")
-            for p in imp:
-                L.append(f"{p['stock_id']} {p['name']}：{p['action']}－{p.get('reason', '')}")
         L.append("完整報告請看 Email／網站")
         return "\n".join(L)
     L = [f"📈 {fmt_date(d)} 收盤後{'（試行）' if trial else ''}"]
@@ -359,7 +359,9 @@ def main(argv=None):
     if known.write_alerts:
         from tuning import alert_levels
         try:
-            alert_levels.write(out, state, top=effective_top(out, known.top), style=style,
+            # 組合拳 mode: intraday alerts only for the user's holdings (old picks retired)
+            a_out, a_state = (dict(out, buy=[]), []) if combo is not None else (out, state)
+            alert_levels.write(a_out, a_state, top=effective_top(out, known.top), style=style,
                                advice={a['stock_id']: a for a in adv} if adv else None)
         except Exception as exc:          # alerts are best-effort; the morning report must still be produced
             log(f"[daily] alert levels NOT written: {type(exc).__name__}: {str(exc)[:200]}")
