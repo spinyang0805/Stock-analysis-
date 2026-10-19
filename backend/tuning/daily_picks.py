@@ -33,12 +33,30 @@ def fmt_date(d):
     return f"{d[:4]}/{d[4:6]}/{d[6:]}" if d else "–"
 
 
+WEAK_TOP = 5   # picks shown while the market-wide signals lose in the last-half-year holdout
+
+
+def weak_period(out):
+    """True when the uniform signal set lost to the market in the untouched last-half-year holdout."""
+    hd = (out.get("uniform") or {}).get("holdout") or {}
+    x = hd.get("xnet")
+    return out.get("buy_mode") == "uniform" and x is not None and x < 0
+
+
+def effective_top(out, top):
+    return min(top, WEAK_TOP) if weak_period(out) else top
+
+
 def render(out, state, added, closed_today, top):
     d = out["as_of"]
     trial = out["n_reliable_params"] == 0
+    top = effective_top(out, top)
     L = [f"# 每日股票報告（{fmt_date(d)} 收盤後計算）", ""]
     if trial:
         L += ["> **試行**：目前沒有股票通過可靠度驗證，以下推薦依回測排序，僅供觀察，不構成投資建議。", ""]
+    if weak_period(out):
+        L += [f"> ⚠️ **近期表現差**：這組訊號最近半年平均比大盤差 {pct(out['uniform']['holdout']['xnet'])}，"
+              f"今天只列前 {WEAK_TOP} 檔，請用小部位或只觀察。", ""]
     u = out.get("uniform") or {}
     if out.get("buy_mode") == "uniform":
         sig = "、".join(f"{x['desc']}（持有 {x['h']} 日）" for x in u.get("signals", [])) or "–"
@@ -54,13 +72,21 @@ def render(out, state, added, closed_today, top):
     if not buys:
         L.append("今日無符合條件的股票。")
     else:
-        L.append("| # | 代號 | 名稱 | 訊號 | 參考收盤 | 停損 | 目標（參考） | 持有日 | 回測勝率 | 回測次數 |")
-        L.append("|---:|---|---|---|---:|---:|---:|---:|---:|---:|")
+        # one short card per pick (readable on a phone)
         for i, b in enumerate(buys, 1):
-            tag = "" if b.get("reliable") else "（試行）"
-            L.append(f"| {i} | {b['stock_id']} | {b['name']}{tag} | {'、'.join(s['desc'] for s in b['signals'])} | "
-                     f"{b['ref_close']} | {pct(b['stop_pct'])} | {pct(b['take_profit_pct'])} | {b['hold_days']} | "
-                     f"{pct(b['oos_win'], 0).lstrip('+')} | {b['oos_n'] if b.get('oos_n') is not None else '–'} |")
+            tag = "（試行）" if not b.get("reliable") and out.get("buy_mode") != "uniform" else ""
+            L.append(f"**{i}. {b['name']}（{b['stock_id']}）**{tag}")
+            stop = b.get("stop_loss_if_fill_at_ref")
+            L.append(f"- 參考收盤 {b['ref_close']}；停損 {pct(b['stop_pct'])}" + (f"（約 {stop}）" if stop else "")
+                     + (f"；目標 {pct(b['take_profit_pct'])}" if b.get("take_profit_pct") else "")
+                     + f"；持有約 {b['hold_days']} 日")
+            L.append(f"- 訊號：{'、'.join(s['desc'] for s in b['signals'])}")
+            if b.get("pullback_price"):
+                L.append(f"- 已離月線 {b['ext_atr']:.1f} 倍日波動：可改掛拉回價 **{b['pullback_price']}**"
+                         "（回測約一半會成交，5 個交易日內沒成交就放棄）")
+            if b.get("reliable") or out.get("buy_mode") != "uniform":
+                L.append(f"- 回測：勝率 {pct(b['oos_win'], 0).lstrip('+')}、{b['oos_n'] if b.get('oos_n') is not None else '–'} 次")
+            L.append("")
     L.append("")
     act = [p for p in state if p["status"] in track.ACTIVE]
     L += ["## 追蹤中（每日評估，直到出場或你賣出）", ""]
@@ -94,11 +120,12 @@ def render_line(out, state, top, closed_today=()):
     d = out["as_of"]
     trial = out["n_reliable_params"] == 0
     L = [f"📈 {fmt_date(d)} 收盤後{'（試行）' if trial else ''}"]
-    buys = out["buy"][:min(top, 5)]
-    L.append("【買進候選】" + ("無" if not buys else ""))
+    buys = out["buy"][:min(effective_top(out, top), 5)]
+    L.append("【買進候選】" + ("無" if not buys else "") + ("（近期表現差，小部位）" if weak_period(out) and buys else ""))
     for b in buys:
         tag = "" if b.get("reliable") else "（試行）"
-        L.append(f"{b['stock_id']} {b['name']}{tag} {b['ref_close']}｜{b['signals'][0]['desc']}｜停損 {pct(b['stop_pct'])}")
+        L.append(f"{b['stock_id']} {b['name']}{tag} {b['ref_close']}｜{b['signals'][0]['desc']}｜停損 {pct(b['stop_pct'])}"
+                 + (f"｜拉回 {b['pullback_price']}" if b.get("pullback_price") else ""))
     if closed_today:
         L.append("【今日結案】")
         for p in closed_today:
@@ -183,7 +210,7 @@ def main(argv=None):
         log(f"[daily] picks for {as_of} already opened — not adding again")
         added = []
     else:
-        added = track.open_new(state, out["buy"], as_of, known.top)
+        added = track.open_new(state, out["buy"], as_of, effective_top(out, known.top))
     save_tracking(known.state, state, known.private)
     report = render(out, state, added, closed_today, known.top)
     line = render_line(out, state, known.top, closed_today)
@@ -227,7 +254,7 @@ def main(argv=None):
     if known.write_alerts:
         from tuning import alert_levels
         try:
-            alert_levels.write(out, state, top=known.top, style=style,
+            alert_levels.write(out, state, top=effective_top(out, known.top), style=style,
                                advice={a['stock_id']: a for a in adv} if adv else None)
         except Exception as exc:          # alerts are best-effort; the morning report must still be produced
             log(f"[daily] alert levels NOT written: {type(exc).__name__}: {str(exc)[:200]}")

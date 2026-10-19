@@ -67,6 +67,9 @@ def parse_args(argv=None):
     return ap.parse_args(argv)
 
 
+PULLBACK_EXT = 3.0   # (close − MA20) / ATR above which a pull-back limit price is offered
+
+
 def intraday_levels(f, sell_mult, etf=False):
     c = f["close"].to_numpy()
     last = f.iloc[-1]
@@ -161,7 +164,14 @@ def run(args, extra_codes=(), return_prep=False):
             # rank: more market-wide signals firing together first, then the best pooled per-day excess
             score = len(fired) + max((fin(s.get("pooled_mean_xpd")) or 0.0) for s in fired) * 100
             uo = uni.get("oos") or {}
+            # distance above MA20 in ATRs; far above → also offer a pull-back limit price (research_entry 2026-10-19:
+            # waiting for close − 1 ATR filled ~55% within 5 sessions, ≈ same result in the backtest, better in the
+            # last half year) — an option, not a filter (far-extended picks were not worse in the backtest)
+            ma20v = fin(float(last["ma20"]))
+            ext = (close - ma20v) / atr if atr and ma20v else None
+            pull = rnd(close - atr, "down", etf) if ext is not None and ext > PULLBACK_EXT else None
             buys_out.append({
+                "ext_atr": ext, "pullback_price": pull,
                 "stock_id": sid, "name": p["name"], "reliable": False, "level": "uniform",
                 "signals": [{"signal": s["signal"], "desc": s["desc"], "h": s["h"]} for s in fired],
                 "ref_close": rnd(close, "near", etf),
