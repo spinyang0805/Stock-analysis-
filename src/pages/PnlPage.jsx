@@ -4,6 +4,7 @@ import { BarChart3, ChevronDown, ChevronRight, Coins, FileUp, Layers } from "luc
 import { Bar, BarChart, CartesianGrid, Legend, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import AccountPicker, { ALL, useAccountView } from "../components/AccountPicker.jsx";
 import { Card, Empty, Kpi, Seg } from "../components/ui.jsx";
+import { SortTh, useSort } from "../components/SortableTh.jsx";
 import { useApp } from "../lib/appState.jsx";
 import { accountOf, isDividendTx, listAccounts } from "../lib/portfolio.js";
 import { autoDividendTx, periodBreakdown, stockDividendValue } from "../lib/pnl.js";
@@ -64,6 +65,21 @@ export default function PnlPage() {
 
   const dividendRows = useMemo(() => allTx.filter(isDividendTx)
     .sort((a, b) => b.trade_date.localeCompare(a.trade_date)), [allTx]);
+
+  const isCash = (d) => d.side === "cash_dividend";
+  const divColumns = useMemo(() => ({
+    date: (d) => d.trade_date,
+    stock: (d) => d.stock_id,
+    account: (d) => accountOf(d),
+    side: (d) => (isCash(d) ? "現金股利" : "股票股利"),
+    shares: (d) => (isCash(d) ? Number(d.shares) : null),
+    perShare: (d) => (isCash(d) ? Number(d.price) : Number(d.perShare)),
+    amount: (d) => (isCash(d) ? Number(d.amount) || d.shares * d.price : Number(d.shares)),
+    value: (d) => (isCash(d) ? null : stockDividendValue(d, history).value),
+    payDate: (d) => d.payDate,
+    source: (d) => (d.source === "auto" ? "自動計算" : "對帳單"),
+  }), [history]);
+  const { sorted: sortedDivRows, sort: divSort, toggle: toggleDivSort } = useSort(dividendRows, divColumns, { key: "date", dir: "desc" });
 
   if (!app.user) {
     return <div className="page"><Card><Empty icon={BarChart3} title="登入後查看你的歷年損益"><button type="button" className="btn primary" onClick={app.signIn}>Google 登入</button></Empty></Card></div>;
@@ -180,9 +196,14 @@ export default function PnlPage() {
             {!dividendRows.length ? <div className="dim">期間內沒有配股配息{loading ? "（股利資料載入中）" : ""}</div> : (
               <div className="table-wrap" style={{ maxHeight: 420 }}>
                 <table className="data">
-                  <thead><tr><th className="left">除權息日</th><th className="left">股票</th><th className="left">帳戶</th><th className="left">類別</th><th>持股</th><th>每股</th><th>金額／配股</th><th>配股價值</th><th className="left">發放日</th><th className="left">來源</th></tr></thead>
+                  <thead>
+                    <tr>
+                      {[["date", "除權息日", true], ["stock", "股票", true], ["account", "帳戶", true], ["side", "類別", true], ["shares", "持股"], ["perShare", "每股"], ["amount", "金額／配股"], ["value", "配股價值"], ["payDate", "發放日", true], ["source", "來源", true]]
+                        .map(([k, label, left]) => <SortTh key={k} k={k} label={label} left={left} sort={divSort} onSort={toggleDivSort} firstDir={k === "date" || k === "payDate" ? "desc" : undefined} />)}
+                    </tr>
+                  </thead>
                   <tbody>
-                    {dividendRows.map((d) => (
+                    {sortedDivRows.map((d) => (
                       <tr key={d.id}>
                         <td className="left num">{d.trade_date}</td>
                         <td className="left"><b className="num">{d.stock_id}</b> {d.stock_name}</td>

@@ -223,6 +223,11 @@ table.data tr.err td { background: rgba(239,68,68,.07); }
 .check:last-child { border-bottom: 0; }
 .dropzone { border: 2px dashed var(--border-strong); border-radius: 12px; padding: 28px 16px; text-align: center; color: var(--fg-3); cursor: pointer; transition: border-color .15s, background .15s; }
 .dropzone.over, .dropzone:hover { border-color: var(--accent); background: rgba(59,130,246,.06); }
+/* 可排序表頭 */
+.sort-btn { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 2px 0; white-space: nowrap; }
+.sort-btn svg { opacity: .45; }
+.sort-btn:hover svg, .sort-btn.on svg { opacity: 1; }
+.sort-btn.on { color: var(--accent-2); font-weight: 700; }
 .dropzone svg { color: var(--accent-2); }
 .dropzone .dz-main { font-weight: 700; color: var(--fg); margin: 8px 0 4px; font-size: 15px; }
 
