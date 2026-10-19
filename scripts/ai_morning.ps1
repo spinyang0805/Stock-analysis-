@@ -10,7 +10,8 @@ New-Item -ItemType Directory -Force $dir | Out-Null
 $log = Join-Path $dir "ai_morning.log"
 
 function Log($m) { "[$(Get-Date -Format s)] $m" | Out-File -Append -Encoding utf8 $log }
-function Gh {
+function Invoke-GhChecked {
+    # (named differently from gh: PowerShell names are case-insensitive, 'Gh' would call itself)
     # native commands do not throw in Windows PowerShell 5.1 → check the exit code after every gh call
     & gh @args
     if ($LASTEXITCODE -ne 0) { throw "gh $($args -join ' ') failed ($LASTEXITCODE)" }
@@ -19,13 +20,13 @@ function Gh {
 Log "start"
 try {
     Remove-Item (Join-Path $dir "latest.json") -ErrorAction SilentlyContinue   # never reuse a cached pointer
-    Gh release download daily-picks -p latest.json -D $dir --clobber
+    Invoke-GhChecked release download daily-picks -p latest.json -D $dir --clobber
     $d = (Get-Content (Join-Path $dir "latest.json") -Raw | ConvertFrom-Json).as_of
     Remove-Item (Join-Path $dir "report_$d.md") -ErrorAction SilentlyContinue
-    Gh release download daily-picks -p "report_$d.md" -D $dir --clobber
+    Invoke-GhChecked release download daily-picks -p "report_$d.md" -D $dir --clobber
     python backend/tuning/ai_commentary.py --mode cli --as-of $d --dir $dir *>> $log
     if ($LASTEXITCODE -ne 0) { throw "ai_commentary failed ($LASTEXITCODE)" }
-    Gh release upload daily-picks (Join-Path $dir "ai_$d.md") --clobber
+    Invoke-GhChecked release upload daily-picks (Join-Path $dir "ai_$d.md") --clobber
     Log "uploaded ai_$d.md"
 } catch {
     Log "ERROR $_"
