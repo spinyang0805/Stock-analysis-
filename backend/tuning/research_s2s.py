@@ -38,6 +38,7 @@ from tuning.evaluate import Costs  # noqa: E402
 from tuning.run_tuning import add_common_args, prepare  # noqa: E402
 
 CAP = 250            # 1 year of sessions
+HOLD_CAPS = (20, 60, 120)   # same entries re-exited with a shorter max hold (CAP itself = the main result)
 GAP_SKIP = 0.095
 ATR_MULT = 2.5
 TRAIN, TEST, HOLDOUT = 504, 63, 126
@@ -69,7 +70,7 @@ def next_true(mask):
 
 
 def trades_for(buy_idx, sell_mask, ao, ac, ok, atr, use_stop, entry_ok):
-    """Sequential one-position trades. Returns arrays (sig_i, entry_i, exit_i, gross, held, capped, open)."""
+    """Sequential one-position trades. Returns arrays (sig_i, entry_i, exit_i, gross, held, capped, open, dec)."""
     n = len(ao)
     s_idx, s_ptr = next_true(sell_mask)
     rows = []
@@ -103,9 +104,9 @@ def trades_for(buy_idx, sell_mask, ao, ac, ok, atr, use_stop, entry_ok):
         while x < n and not ok[x]:
             x += 1
         if x >= n:                                   # still open → mark at the last close
-            rows.append((t, e, n - 1, ac[n - 1] / entry - 1, n - e, False, True))
+            rows.append((t, e, n - 1, ac[n - 1] / entry - 1, n - e, False, True, n))
             break
-        rows.append((t, e, x, ao[x] / entry - 1, dec - e + 1, capped, False))
+        rows.append((t, e, x, ao[x] / entry - 1, dec - e + 1, capped, False, dec))
         k = np.searchsorted(buy_idx, x)              # next signal after the exit was executed
     return rows
 
@@ -199,7 +200,9 @@ def stock_job(a):
             for i in np.flatnonzero(m):
                 out[v][which].append({"stock_id": sid, "p": int(c["e"][i]), "net": float(c["net"][i]),
                                       "xs": float(c["xs"][i]), "held": float(c["held"][i]),
-                                      "cap": bool(c["cap"][i]), "open": bool(c["open"][i])})
+                                      "cap": bool(c["cap"][i]), "open": bool(c["open"][i]),
+                                      **{f"{k}{C}": float(c[f"{k}{C}"][i]) for C in HOLD_CAPS
+                                         for k in ("xs", "net", "held")}})
     return out, chosen
 
 
@@ -217,6 +220,7 @@ def build_candidates(g, inu_mask, uni_names, bench_idx, etf, uni_only=False):
         if nm in buys:
             uni |= buys[nm].to_numpy(bool)
     sell_masks = {k: v.to_numpy(bool) for k, v in sells.items()}
+    nxt_ok = np.r_[np.flatnonzero(ok), n][np.searchsorted(np.flatnonzero(ok), np.arange(n + 1))]   # first ok >= i
     buy_sets = {} if uni_only else {("per", k): np.flatnonzero(v.to_numpy(bool)) for k, v in buys.items()}
     if uni_names:
         buy_sets[("uni", "uniform")] = np.flatnonzero(uni)
@@ -235,9 +239,21 @@ def build_candidates(g, inu_mask, uni_names, bench_idx, etf, uni_only=False):
                 # open trades are marked at the close; bench up to the last open is close enough for research
                 bret = bi[x] / bi[e] - 1
                 net = costs.net(r[:, 3], etf)
-                cand[(kind, bname, sname, use_stop)] = {"t": r[:, 0].astype(int), "e": e, "x": x, "gross": r[:, 3],
-                                                       "net": net, "xs": net - bret, "held": r[:, 4],
-                                                       "cap": r[:, 5].astype(bool), "open": r[:, 6].astype(bool)}
+                c = {"t": r[:, 0].astype(int), "e": e, "x": x, "gross": r[:, 3], "net": net, "xs": net - bret,
+                     "held": r[:, 4], "cap": r[:, 5].astype(bool), "open": r[:, 6].astype(bool)}
+                # same entries, shorter max hold: exit at the earlier of the decided close and day C
+                dec = r[:, 7].astype(int)
+                for C in HOLD_CAPS:
+                    d = np.minimum(dec, e + C - 1)
+                    xc = nxt_ok[np.minimum(d + 1, n)]
+                    op = xc >= n
+                    xi = np.minimum(xc, n - 1)
+                    g_ = np.where(op, ac[n - 1], ao[xi]) / ao[e] - 1
+                    nc = costs.net(g_, etf)
+                    c[f"xs{C}"] = nc - (bi[xi] / bi[e] - 1)
+                    c[f"net{C}"] = nc
+                    c[f"held{C}"] = np.where(op, n - e, d - e + 1).astype(float)
+                cand[(kind, bname, sname, use_stop)] = c
     return cand, n
 
 
@@ -318,15 +334,16 @@ def main(argv=None):
                     chosen[v][k] = chosen[v].get(k, 0) + c
     log(f"[s2s] simulated in {time.time() - t0:.0f}s")
 
-    def row(tr):
+    def row(tr, C=""):
         if len(tr) < 5:
             return f"{len(tr)} | – | – | – | – | – | – | –"
         df = pd.DataFrame(tr)
-        t, _ = ev_mod.t_cluster(df["xs"].to_numpy(), (df["p"] // ev_mod.CLUSTER_DAYS).to_numpy())
-        per100 = df["xs"].sum() / df["held"].sum() * 100
-        return (f"{len(df)} | {100 * df['xs'].mean():+.2f}% | {100 * (df['xs'] > 0).mean():.0f}% | {t:+.1f} | "
-                f"{100 * df['net'].mean():+.2f}% | {df['held'].mean():.0f} | {100 * per100:+.2f}% | "
-                f"{100 * df['net'].min():.0f}%")
+        xs, net, held = df[f"xs{C}"], df[f"net{C}"], df[f"held{C}"]
+        t, _ = ev_mod.t_cluster(xs.to_numpy(), (df["p"] // ev_mod.CLUSTER_DAYS).to_numpy())
+        per100 = xs.sum() / held.sum() * 100
+        return (f"{len(df)} | {100 * xs.mean():+.2f}% | {100 * (xs > 0).mean():.0f}% | {t:+.1f} | "
+                f"{100 * net.mean():+.2f}% | {held.mean():.0f} | {100 * per100:+.2f}% | "
+                f"{100 * net.min():.0f}%")
 
     names = {"per_stop": "每檔各自買賣訊號＋停損", "per_nostop": "每檔各自買賣訊號（只看賣出訊號）",
              "uni_stop": "全市場買進訊號＋每檔賣出訊號＋停損", "uni_nostop": "全市場買進訊號＋每檔賣出訊號（只看賣出訊號）"}
@@ -339,6 +356,15 @@ def main(argv=None):
         L.append(f"| {names[v]} | 走動驗證 | {row(res[v])} |")
         L.append(f"| {names[v]} | 最後半年 | {row(hres[v])} |")
     L += ["", "t 值以 20 日區塊分群，|t| ≥ 2 才算明顯。「每 100 持有日超額」把持有時間長短考慮進去。", ""]
+    L += ["### 抱多久比較好？（同一批進場，只改最長持有天數）", "",
+          "進場完全相同；賣出訊號或停損先到就照舊賣，否則抱滿上限天數就賣。期間 = 走動驗證＋最後半年。", "",
+          "| 方式 | 最長持有 | 筆數 | 平均超額 | 勝率(贏大盤) | t | 平均報酬 | 平均持有日 | 每 100 持有日超額 | 最差一筆 |",
+          "|---|---|---|---|---|---|---|---|---|---|"]
+    for v in VARIANTS:
+        allt = res[v] + hres[v]
+        for C in HOLD_CAPS + (CAP,):
+            L.append(f"| {names[v]} | {C} 日 | {row(allt, C if C != CAP else '')} |")
+    L.append("")
     if uni_sets is not None:
         L += ["### 全市場買進訊號（每段只用當時以前的資料挑選，不偷看未來）", "",
               f"挑法：每個買進訊號配固定出場（跌破月線＋停損），訓練期全市場合計；平均贏大盤且 t ≥ 2 的前 {UNI_K} 個。", "",
