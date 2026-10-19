@@ -5,8 +5,61 @@ import { History, LogOut, Sparkles, Wallet } from "lucide-react";
 import { Card, Empty, Kpi } from "../components/ui.jsx";
 import { SortTh, useSort } from "../components/SortableTh.jsx";
 import { fetchStaticJson } from "../lib/data.js";
+import { fetchQuotes } from "../lib/market.js";
 import { signed, trendColor } from "../lib/format.js";
 import { navigate } from "../lib/router.js";
+
+// 台股盤中（台北時間週一～五 09:00–13:35）
+function marketOpen(now = new Date()) {
+  const tw = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+  const m = tw.getHours() * 60 + tw.getMinutes();
+  return tw.getDay() >= 1 && tw.getDay() <= 5 && m >= 540 && m <= 815;
+}
+
+// 盤中每 60 秒抓一次即時報價；非盤中只抓一次（顯示最近報價）。網頁關掉就停。
+function useLiveQuotes(codes) {
+  const key = [...new Set(codes)].sort().join(",");
+  const [state, setState] = useState({ quotes: {}, at: null, open: marketOpen(), error: null });
+  useEffect(() => {
+    if (!key) return undefined;
+    let alive = true;
+    const load = async () => {
+      const open = marketOpen();
+      try {
+        const r = await fetchQuotes(key.split(","));
+        if (alive) setState({ quotes: r.quotes, at: new Date(), open, error: null });
+      } catch (e) {
+        if (alive) setState((st) => ({ ...st, open, error: e.message || "報價取得失敗" }));
+      }
+    };
+    load();
+    const id = setInterval(() => { if (marketOpen()) load(); }, 60000);
+    return () => { alive = false; clearInterval(id); };
+  }, [key]);
+  return state;
+}
+
+function LiveBanner({ live }) {
+  const t = live.at ? live.at.toLocaleTimeString("zh-TW", { hour12: false, timeZone: "Asia/Taipei" }) : "–";
+  const style = { padding: "6px 10px", borderRadius: 8, fontSize: 13, marginBottom: 8,
+    background: live.open ? "rgba(34,197,94,.12)" : "rgba(148,163,184,.15)" };
+  return (
+    <div style={style}>
+      {live.open ? <b>🟢 盤中即時：每 60 秒自動更新</b> : <b>⚪ 非交易時間：顯示最近一筆報價</b>}
+      <span className="dim">　最後更新 {t}</span>
+      {live.error && <span style={{ color: "#ef4444" }}>　（{live.error}）</span>}
+    </div>
+  );
+}
+
+function LivePrice({ q }) {
+  if (!q || !Number.isFinite(q.price)) return <span className="dim">–</span>;
+  return (
+    <span className="num">{q.price}{" "}
+      <span style={{ color: trendColor(q.changePct), fontSize: 12 }}>{signed(q.changePct, 2, "%")}</span>
+    </span>
+  );
+}
 
 const fmtDate = (d) => (d ? `${d.slice(0, 4)}/${d.slice(4, 6)}/${d.slice(6)}` : "–");
 
@@ -33,7 +86,7 @@ function StockCell({ p }) {
   );
 }
 
-function HoldingTable({ rows }) {
+function HoldingTable({ rows, quotes }) {
   const cols = useMemo(() => ({
     id: (p) => p.stock_id, entry: (p) => p.entry_date, days: (p) => p.days, ret: (p) => p.ret,
   }), []);
@@ -45,7 +98,7 @@ function HoldingTable({ rows }) {
           <tr>
             {[["id", "股票", true], ["entry", "買進日", true], ["days", "持有日"], ["ret", "報酬"]]
               .map(([k, label, left]) => <SortTh key={k} k={k} label={label} left={left} sort={sort} onSort={toggle} />)}
-            <th>買價</th><th>收盤</th><th className="left">買進理由</th>
+            <th>買價</th><th>現價（即時）</th><th>即時報酬</th><th className="left">買進理由</th>
           </tr>
         </thead>
         <tbody>
@@ -56,7 +109,8 @@ function HoldingTable({ rows }) {
               <td className="num">{p.days ?? "–"}</td>
               <td><Pct v={p.ret} /></td>
               <td className="num">{p.entry_price ?? "–"}</td>
-              <td className="num">{p.last_close ?? "–"}</td>
+              <td><LivePrice q={quotes?.[p.stock_id]} /></td>
+              <td>{quotes?.[p.stock_id]?.price && p.entry_price ? <Pct v={quotes[p.stock_id].price / p.entry_price - 1} /> : <Pct v={p.ret} />}</td>
               <td className="left" style={{ fontSize: 12 }}><Reasons r={p.buy_reasons} /></td>
             </tr>
           ))}
@@ -84,6 +138,8 @@ export default function ComboPage() {
   const closed = allClosed.filter((c) => !c.replay).slice(0, 40);
   const replayClosed = allClosed.filter((c) => c.replay);
   const watch = data?.intraday_watch || [];
+  const rt = useLiveQuotes([...watch.map((w) => w.stock_id), ...sells.map((p) => p.stock_id), ...holding.map((p) => p.stock_id)]);
+  const q = rt.quotes;
 
   return (
     <div className="page">
@@ -137,22 +193,39 @@ export default function ComboPage() {
 
             <Card title="盤中觀察：只差突破（帶量站上 20 日高會即時提醒）" icon={Sparkles} style={{ marginTop: 12 }}>
               {!watch.length ? <div className="dim">今天沒有只差突破的股票。</div> : (
-                <div className="table-wrap">
-                  <table className="data">
-                    <thead><tr><th className="left">股票</th><th>昨收</th><th>突破價</th><th>距離</th><th className="left">已通過的關卡</th></tr></thead>
-                    <tbody>
-                      {watch.map((w) => (
-                        <tr key={w.stock_id} className="clickable" onClick={() => navigate(`/stock/${w.stock_id}`)}>
-                          <td className="left"><StockCell p={w} /></td>
-                          <td className="num">{w.close}</td>
-                          <td className="num">{w.level}</td>
-                          <td><Pct v={w.dist} /></td>
-                          <td className="left" style={{ fontSize: 12 }}><Reasons r={w.buy_reasons} /></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  <LiveBanner live={rt} />
+                  <div className="table-wrap">
+                    <table className="data">
+                      <thead><tr><th className="left">狀態</th><th className="left">股票</th><th>現價（即時）</th><th>突破價</th><th>離突破還差</th><th>昨收</th><th className="left">已通過的關卡</th></tr></thead>
+                      <tbody>
+                        {watch.map((w) => {
+                          const px = q[w.stock_id]?.price;
+                          const gap = Number.isFinite(px) ? w.level / px - 1 : null;
+                          const hit = gap != null && gap <= 0;
+                          return (
+                            <tr key={w.stock_id} className="clickable" onClick={() => navigate(`/stock/${w.stock_id}`)}
+                              style={hit ? { background: "rgba(239,68,68,.10)", fontWeight: 600 } : undefined}>
+                              <td className="left" style={{ whiteSpace: "nowrap" }}>
+                                {hit ? <>🔔 <b>盤中已突破</b><div className="dim" style={{ fontSize: 11 }}>收盤站穩才確認</div></>
+                                  : gap == null ? <span className="dim">– 無報價</span> : <>⏳ 未突破</>}
+                              </td>
+                              <td className="left"><StockCell p={w} /></td>
+                              <td><LivePrice q={q[w.stock_id]} /></td>
+                              <td className="num"><b>{w.level}</b></td>
+                              <td>{gap == null ? <span className="dim">–</span> : hit ? <b style={{ color: "#ef4444" }}>已站上</b> : <span className="num">+{(gap * 100).toFixed(1)}%</span>}</td>
+                              <td className="num">{w.close}</td>
+                              <td className="left" style={{ fontSize: 12 }}><Reasons r={w.buy_reasons} /></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
+                    🔔 = 現價已高於突破價（網頁即時判斷）。正式的盤中提醒另外要求「連 2 分鐘站上＋帶量＋在均價之上」，所以網頁先亮燈、提醒稍後才到是正常的；收盤仍站在突破價之上，才是組合拳買點。
+                  </div>
+                </>
               )}
             </Card>
 
@@ -160,15 +233,15 @@ export default function ComboPage() {
               {!sells.length ? <div className="dim">目前沒有賣出確認。</div> : (
                 <div className="table-wrap">
                   <table className="data">
-                    <thead><tr><th className="left">股票</th><th className="left">買進日</th><th>買價</th><th>收盤</th><th>報酬</th><th className="left">為什麼賣</th></tr></thead>
+                    <thead><tr><th className="left">股票</th><th className="left">買進日</th><th>買價</th><th>現價（即時）</th><th>報酬</th><th className="left">為什麼賣</th></tr></thead>
                     <tbody>
                       {sells.map((p) => (
                         <tr key={p.stock_id} className="err clickable" onClick={() => navigate(`/stock/${p.stock_id}`)}>
                           <td className="left"><StockCell p={p} /></td>
                           <td className="left num">{fmtDate(p.entry_date)}</td>
                           <td className="num">{p.entry_price}</td>
-                          <td className="num">{p.last_close}</td>
-                          <td><Pct v={p.ret} /></td>
+                          <td><LivePrice q={q[p.stock_id]} /></td>
+                          <td>{q[p.stock_id]?.price && p.entry_price ? <Pct v={q[p.stock_id].price / p.entry_price - 1} /> : <Pct v={p.ret} />}</td>
                           <td className="left" style={{ fontSize: 12 }}><Reasons r={p.sell_reasons} /></td>
                         </tr>
                       ))}
@@ -179,7 +252,7 @@ export default function ComboPage() {
             </Card>
 
             <Card title={`持有中（晨報推薦過的，${holding.length} 檔）`} icon={Wallet} style={{ marginTop: 12 }}>
-              {!holding.length ? <div className="dim">目前沒有。晨報推薦的組合拳候選，進場後會出現在這裡，直到賣出確認。</div> : <HoldingTable rows={holding} />}
+              {!holding.length ? <div className="dim">目前沒有。晨報推薦的組合拳候選，進場後會出現在這裡，直到賣出確認。</div> : <><LiveBanner live={rt} /><HoldingTable rows={holding} quotes={q} /></>}
             </Card>
 
             <Card title="最近結案（已賣出）" icon={History} style={{ marginTop: 12 }}>
