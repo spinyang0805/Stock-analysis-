@@ -75,7 +75,13 @@ PERIODS = (("2020–2021", "20200101", "20211231"), ("2022–2023", "20220101", 
 BUYS = {"main": "環境＋突破＋資金＋另一項確認", "no_env": "不看環境（突破＋資金＋另一項確認）",
         "no_other": "環境＋突破＋資金（不要求籌碼／強度／營收）", "trigger_only": "只要突破（單一訊號，對照組）"}
 SELLS = {"main": "結構破壞＋（資金流出或環境轉壞）／第四階段／停損 10%", "no_stop": "同左但不設 10% 停損",
-         "break_only": "結構破壞就賣（不等確認）"}
+         "break_only": "結構破壞就賣（不等確認）",
+         "strict2": "嚴格 A：≥2 種結構破壞＋≥1 類確認（近 10 天）／第四階段／停損 10%",
+         "strict3": "嚴格 B：≥2 種結構破壞＋≥2 類確認（近 10 天）／第四階段／停損 10%"}
+STRUCT = tuple(k for k in BREAK if k != "s_atr_25")      # a 2.5-ATR pullback is normal noise in a strong trend
+CONF_CATS = {"money": ("s_vol_div",), "chips": ("s_foreign_sell_5", "s_whale_disp", "s_sbl_surge", "s_margin_surge"),
+             "env": WORSE}
+SPLIT = "20260416"                                        # validation half-year starts here (rules fixed before)
 
 
 def parse_args(argv=None):
@@ -86,7 +92,8 @@ def parse_args(argv=None):
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--report", default=os.path.join(OUT_DIR, "research_combo.md"))
     add_common_args(ap)
-    ap.set_defaults(no_holdings=True)
+    ap.set_defaults(no_holdings=False, holdings="0050")
+    ap.add_argument("--codes", help="JSON {group: [codes]}: also report these stocks separately")
     return ap.parse_args(argv)
 
 
@@ -128,7 +135,12 @@ def masks(g):
     brk = recent(any_of(sells, BREAK, n), 5)
     conf = recent(any_of(sells, OUTFLOW, n) | (~bull & prev), 5) | recent(any_of(sells, WORSE, n), 5)
     base = (brk & conf) | stage4
-    sell = {"main": base, "no_stop": base, "break_only": brk | stage4}
+    n_struct = sum(recent(sells[k].to_numpy(bool), 10).astype(int) for k in STRUCT if k in sells)
+    n_conf = (recent(any_of(sells, CONF_CATS["money"], n) | (~bull & prev), 10).astype(int)
+              + recent(any_of(sells, CONF_CATS["chips"], n), 10).astype(int)
+              + recent(any_of(sells, CONF_CATS["env"], n), 10).astype(int))
+    sell = {"main": base, "no_stop": base, "break_only": brk | stage4,
+            "strict2": ((n_struct >= 2) & (n_conf >= 1)) | stage4, "strict3": ((n_struct >= 2) & (n_conf >= 2)) | stage4}
     # warnings only (not exits): how often they fired while the main rule kept holding
     warn = any_of(sells, ("s_rsi_p80", "s_rsi_p90", "s_kd_x_80", "s_bb_upper_fail", "s_shoot_high",
                           "s_macd_down", "s_ma20_break"), n)
@@ -136,7 +148,7 @@ def masks(g):
 
 
 def stock_job(a):
-    sid, g, inu_mask, rank_mask, bench_idx, etf, cp = a
+    sid, g, inu_mask, rank_mask, bench_idx, etf, cp, b50 = a
     g = g.reset_index(drop=True)
     buy, sell, atr, S, warn = masks(g)
     ao, ac = S.o, S.c
@@ -153,12 +165,15 @@ def stock_job(a):
                 return
         e, x = r[:, 1].astype(int), r[:, 2].astype(int)
         net = costs.net(r[:, 3], etf)
-        out[key] = {"d": dates[e], "p": cp[e], "net": net, "xs": net - (bench_idx[x] / bench_idx[e] - 1),
+        out[key] = {"d": dates[e], "xd": dates[x], "p": cp[e], "net": net, "xs": net - (bench_idx[x] / bench_idx[e] - 1),
+                    "x50": net - (b50[x] / b50[e] - 1), "open": r[:, 5].astype(bool),
                     "held": r[:, 4], "warn": [int(warn[a_:b_ + 1].sum()) for a_, b_ in zip(e, x)]}
 
     for bk, bm in buy.items():
         for sk, sm in sell.items():
             for filt, em in (("all", inu_mask), ("rank", inu_mask & rank_mask)):
+                if bk != "main" and sk != "main" and not (bk == "trigger_only" and sk == "break_only"):
+                    continue                                  # only the rows the report shows
                 rows = stop_trades(bm, sm, ao, ac, S.ok, em, STOP if sk != "no_stop" else 0.0)
                 add((bk, sk, filt), rows)
     # baselines
@@ -198,7 +213,7 @@ def stop_trades(buy, sell, ao, ac, ok, entry_ok, stop):
         if x >= n:
             rows.append((t, e, n - 1, ac[n - 1] / entry - 1, n - e, True))
             break
-        rows.append((t, e, x, ao[x] / entry - 1, dec - e + 1, False))
+        rows.append((t, e, x, ao[x] / entry - 1, x - e, False))      # held = sessions to the actual exit
         k = np.searchsorted(b_idx, x)
     return rows
 
@@ -218,6 +233,7 @@ def main(argv=None):
         rets.append(pd.DataFrame({"date": d[keep], "r": np.r_[o[1:] / o[:-1] - 1, np.nan][keep]}))
     br = pd.concat(rets).groupby("date")["r"].mean().reindex(cal).fillna(0.0).clip(-0.2, 0.2)
     bidx_cal = np.r_[1.0, np.cumprod(1 + br.to_numpy())[:-1]]
+    b50_cal = adj["0050"].set_index("date")["aopen"].reindex(cal).ffill().to_numpy(float)
     P = {"open": wide(adj, "aopen", cal), "close": wide(adj, "aclose", cal),
          "rev_yoy": wide(adj, "rev_yoy", cal), "pb": wide(adj, "pb", cal)}
     P["close_ff"] = P["close"].ffill()
@@ -238,60 +254,72 @@ def main(argv=None):
             continue
         cp = np.array([pos[x] for x in d])
         rk = in_rank[sid].to_numpy()[cp] if sid in in_rank else np.zeros(len(d), bool)
-        jobs.append((sid, g, m, rk, bidx_cal[cp], prep["meta"][sid]["etf"], cp))
+        jobs.append((sid, g, m, rk, bidx_cal[cp], prep["meta"][sid]["etf"], cp, b50_cal[cp]))
     log(f"[combo] {len(jobs)} stocks prepared in {time.time() - t0:.0f}s")
     res = {}
     with ProcessPoolExecutor(a.workers) as ex:
-        for out in ex.map(stock_job, jobs, chunksize=4):
+        for (sid, *_), out in zip(jobs, ex.map(stock_job, jobs, chunksize=4)):
             for k, v in out.items():
-                res.setdefault(k, []).append(pd.DataFrame(v))
+                res.setdefault(k, []).append(pd.DataFrame(v).assign(sid=sid))
     res = {k: pd.concat(v, ignore_index=True) for k, v in res.items()}
     log(f"[combo] simulated in {time.time() - t0:.0f}s")
 
-    def cells(df):
-        if df is None or len(df) < 20:
-            return [f"{0 if df is None else len(df)}", "–", "–", "–", "–", "–"]
+    def stat(df):
+        if df is None or len(df) < 10:
+            return None
         t, _ = ev_mod.t_cluster(df["xs"].to_numpy(), (df["p"] // ev_mod.CLUSTER_DAYS).to_numpy())
-        per100 = df["xs"].sum() / df["held"].sum() * 100
-        return [f"{len(df):,}", f"{100 * df['xs'].mean():+.2f}%", f"{100 * (df['xs'] > 0).mean():.0f}%", f"{t:+.1f}",
-                f"{df['held'].mean():.0f}", f"{100 * per100:+.2f}%"]
+        return {"n": len(df), "xs": df["xs"].mean(), "x50": df["x50"].mean(), "net": df["net"].mean(), "t": t,
+                "win": (df["xs"] > 0).mean(), "held": df["held"].mean(), "open": df["open"].mean(),
+                "per100": df["xs"].sum() / df["held"].sum() * 100}
 
-    def per_period(df):
-        out = []
-        for _, lo, hi in PERIODS:
-            sub = df[(df["d"] >= lo) & (df["d"] <= hi)] if df is not None else None
-            if sub is None or len(sub) < 20:
-                out.append("–")
-                continue
-            t, _ = ev_mod.t_cluster(sub["xs"].to_numpy(), (sub["p"] // ev_mod.CLUSTER_DAYS).to_numpy())
-            out.append(f"{100 * sub['xs'].mean():+.2f}% / {t:+.1f} / {len(sub):,}")
-        return out
+    def fmt(s, val=False):
+        if s is None:
+            return "– | – | – | – | –" + (" | –" if val else "")
+        base = (f"{s['n']:,} | {100 * s['xs']:+.2f}% / t {s['t']:+.1f} | {100 * s['x50']:+.2f}% | "
+                f"{s['held']:.0f} 日 | {100 * s['per100']:+.2f}%")
+        return base + (f" | {100 * s['open']:.0f}%" if val else "")
 
-    rows_spec = [(("main", "main"), "**組合拳主要版本**")]
-    rows_spec += [((bk, "main"), f"買：{BUYS[bk]}") for bk in BUYS if bk != "main"]
-    rows_spec += [(("main", sk), f"賣：{SELLS[sk]}") for sk in SELLS if sk != "main"]
-    rows_spec += [(("trigger_only", "break_only"), "單一訊號買、單一訊號賣（對照）"),
-                  (("donchian", ""), "對照：突破 55 日高買、跌破 20 日低賣"),
-                  (("obvs", ""), "對照：OBVS 預設（模式 5，不設停利）")]
-    L = [f"# 組合拳回測（{cal[0]}–{cal[-1]}）", "",
+    rows_spec = [(("main", "main"), "組合拳（上一版賣法）"),
+                 (("main", "strict2"), "**組合拳＋嚴格 A 賣法**"), (("main", "strict3"), "**組合拳＋嚴格 B 賣法**"),
+                 (("main", "no_stop"), "組合拳（上一版賣法，不設 10% 停損）"),
+                 (("main", "break_only"), "組合拳（結構破壞就賣）"),
+                 (("trigger_only", "break_only"), "單一訊號買、單一訊號賣（對照）"),
+                 (("donchian", ""), "對照：突破 55 日高買、跌破 20 日低賣"),
+                 (("obvs", ""), "對照：OBVS 預設（模式 5，不設停利）")]
+    lo_d, hi_d = cal[0], cal[-1]
+    L = [f"# 組合拳：賣出更嚴格，最後半年驗證（資料 {lo_d}–{hi_d}）", "",
          "所有股票共用同一套事先寫好的規則（沒有替任何一檔調參數），股票池為每個時點的成交值前 500 大。"
-         "收盤判斷、隔天開盤成交，扣手續費（6 折）與證交稅。超額 = 報酬 − 同期間股票池平均。", "",
-         "**買進** = 環境（站上上升的季線、大盤非空頭）＋ 近 3 天真突破 ＋ 近 5 天資金確認 ＋ 籌碼／相對強度／營收至少一項。",
-         "**賣出** = 結構破壞 ＋（資金流出 或 環境轉壞），或跌破下彎的季線，或從買價跌 10%。過熱、短線轉弱只提醒、不賣。", ""]
-    hdr = ["| 規則 | 筆數 | 每筆平均超額 | 勝率(贏大盤) | t | 平均持有日 | 每 100 持有日超額 | "
-           + " | ".join(f"{p}（超額 / t / 筆數）" for p, _, _ in PERIODS) + " |",
-           "|---|---|---|---|---|---|---|" + "---|" * len(PERIODS)]
+         "收盤判斷、隔天開盤成交，扣手續費（6 折）與證交稅。", "",
+         "**買進**（不變）= 季線往上且大盤非空頭 ＋ 近 3 天真突破 ＋ 近 5 天資金確認 ＋ 籌碼／相對強度／營收至少一項。",
+         "**嚴格 A 賣法** = 近 10 天出現 ≥2 種不同的結構破壞（頭頭低、底底低、N 字下跌、M 頭、跌破上升趨勢線、均線空頭排列、"
+         "跌破布林下軌、空頭結構）＋ ≥1 類確認（資金流出／籌碼賣出／環境轉壞）；**嚴格 B** = 確認要 ≥2 類。"
+         "兩者都保留：跌破下彎的季線、從買價跌 10%。", "",
+         f"**選規則期** = {lo_d}～{SPLIT} 以前（看得到的成績）；**驗證期** = {SPLIT}～{hi_d}（只看進場日在這段的交易，"
+         "期末還沒賣的以最後收盤計）。", "",
+         "欄位：筆數｜每筆平均贏股票池（t 值）｜每筆平均贏 0050｜平均持有｜每 100 持有日贏股票池", ""]
     for filt, title in (("all", "全部股票"), ("rank", "只做當月「強勢股＋營收成長」前 100 名")):
-        L += [f"## {title}", ""] + hdr
+        L += [f"## {title}", "", "| 規則 | 選規則期 筆數 | 贏股票池 | 贏 0050 | 持有 | 每100日 | **驗證期** 筆數 | 贏股票池 | 贏 0050 | 持有 | 每100日 | 期末未賣 |",
+              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for (bk, sk), nm in rows_spec:
             df = res.get((bk, sk, filt))
-            L.append(f"| {nm} | " + " | ".join(cells(df) + per_period(df)) + " |")
+            # choosing period: only trades already SOLD before the split (no validation prices inside)
+            pre = df[(df["d"] < SPLIT) & (df["xd"] < SPLIT) & ~df["open"]] if df is not None else None
+            post = df[df["d"] >= SPLIT] if df is not None else None
+            L.append(f"| {nm} | {fmt(stat(pre))} | {fmt(stat(post), True)} |")
         L.append("")
-        mm = res.get(("main", "main", filt))
-        if mm is not None and len(mm):
-            L.append(f"主要版本持有期間，「過熱／短線轉弱」警示平均出現 {np.mean(mm['warn']):.1f} 次（照規則不賣）。")
-            L.append("")
-    L += ["t 值以 20 日區塊分群，|t| ≥ 2 才算明顯。「每 100 持有日超額」× 2.5 ≈ 資金全年在場內時一年多賺多少。", ""]
+    if a.codes:
+        import json
+        groups = json.load(open(a.codes, encoding="utf-8"))
+        L += ["## 指定名單（驗證期，全部股票版本）", "",
+              "| 名單 | 規則 | 驗證期筆數 | 贏股票池 | 贏 0050 | 持有 | 每100日 | 期末未賣 |", "|---|---|---|---|---|---|---|---|"]
+        for gname, codes in groups.items():
+            cs = set(codes)
+            for key, nm in ((("main", "main"), "上一版賣法"), (("main", "strict2"), "嚴格 A"), (("main", "strict3"), "嚴格 B")):
+                df = res.get(key + ("all",))
+                sub = df[(df["d"] >= SPLIT) & df["sid"].isin(cs)] if df is not None else None
+                L.append(f"| {gname} | {nm} | {fmt(stat(sub), True)} |")
+        L.append("")
+    L += ["t 值以 20 日區塊分群，|t| ≥ 2 才算明顯。驗證期只有半年，筆數少、多數交易還沒賣完，數字要保守看。", ""]
     os.makedirs(os.path.dirname(a.report), exist_ok=True)
     with open(a.report, "w", encoding="utf-8") as fh:
         fh.write("\n".join(L) + "\n")
