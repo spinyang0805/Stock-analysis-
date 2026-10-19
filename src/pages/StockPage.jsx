@@ -279,15 +279,29 @@ function ValuationCard({ strategy, price }) {
   const v = strategy?.value;
   if (!v) return <Card title="估值位置" icon={PiggyBank}><div className="dim">股利／EPS 資料不足</div></Card>;
   const lo = Math.min(v.cheap, price) * 0.95, hi = Math.max(v.expensive, price) * 1.05;
-  const pos = (x) => `${((x - lo) / (hi - lo)) * 100}%`;
+  const pct = (x) => ((x - lo) / (hi - lo)) * 100;
+  const pos = (x) => `${pct(x)}%`;
+  // labels keep a minimum gap (pushed apart, then kept inside the bar); ticks still mark the true prices
+  const GAP = 17;
+  const marks = [["便宜", v.cheap], ["合理", v.fair], ["昂貴", v.expensive]];
+  const at = marks.map(([, x]) => Math.min(Math.max(pct(x), GAP / 2), 100 - GAP / 2));
+  for (let i = 1; i < at.length; i++) at[i] = Math.max(at[i], at[i - 1] + GAP);
+  const over = at[at.length - 1] - (100 - GAP / 2);
+  if (over > 0) for (let i = 0; i < at.length; i++) at[i] -= over;
+  for (let i = at.length - 2; i >= 0; i--) at[i] = Math.min(at[i], at[i + 1] - GAP);
+  const pp = pct(price);
+  const priceAlign = pp > 85 ? "translateX(-100%)" : pp < 15 ? "translateX(0)" : "translateX(-50%)";
   return (
     <Card title="估值位置" icon={PiggyBank}>
-      <div style={{ position: "relative", height: 70, margin: "6px 4px 6px" }}>
-        <div className="num" style={{ position: "absolute", left: pos(price), top: 0, transform: "translateX(-50%)", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>現價 {fmt(price)}</div>
+      <div style={{ position: "relative", height: 74, margin: "6px 4px 6px" }}>
+        <div className="num" style={{ position: "absolute", left: pos(price), top: 0, transform: priceAlign, fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>現價 {fmt(price)}</div>
         <div style={{ position: "absolute", left: pos(price), top: 18, width: 2, height: 26, background: "#fff", transform: "translateX(-1px)", zIndex: 1 }} />
         <div style={{ position: "absolute", top: 26, left: 0, right: 0, height: 10, borderRadius: 5, background: `linear-gradient(90deg, #38bdf8 ${pos(v.cheap)}, #facc15 ${pos(v.fair)}, #f97316 ${pos(v.expensive)})` }} />
-        {[["便宜", v.cheap], ["合理", v.fair], ["昂貴", v.expensive]].map(([l, x]) => (
-          <div key={l} className="dim num" style={{ position: "absolute", left: pos(x), top: 48, transform: "translateX(-50%)", whiteSpace: "nowrap", textAlign: "center", lineHeight: 1.2 }}>{l}<br />{fmt(x, 1)}</div>
+        {marks.map(([l, x]) => (
+          <div key={`t-${l}`} style={{ position: "absolute", left: pos(x), top: 36, width: 1, height: 6, background: "#94a3b8", transform: "translateX(-0.5px)" }} />
+        ))}
+        {marks.map(([l, x], i) => (
+          <div key={l} className="dim num" style={{ position: "absolute", left: `${at[i]}%`, top: 44, transform: "translateX(-50%)", whiteSpace: "nowrap", textAlign: "center", lineHeight: 1.25, fontSize: 12 }}>{l}<br />{fmt(x, 1)}</div>
         ))}
       </div>
       <div style={{ marginTop: 22 }} className="dim">
