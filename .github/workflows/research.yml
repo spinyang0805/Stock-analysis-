@@ -1,0 +1,52 @@
+name: Research (entry timing / value dips)
+
+# One-off research runs on the full history (read-only). The Markdown report is shown in the run summary and
+# kept as an artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "history years"
+        default: "8"
+
+permissions:
+  contents: read
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
+      YEARS: ${{ github.event.inputs.years || '8' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install deps
+        run: pip install pandas numpy requests psycopg2-binary pytz pyarrow duckdb
+      - name: Download data
+        run: |
+          set -eu
+          case "$YEARS" in ''|*[!0-9]*) echo "years must be numeric"; exit 1;; esac
+          python backend/history_store.py pull
+          gh release view tuning-data --json assets -q '.assets[].name' > /tmp/a.txt
+          [ -s /tmp/a.txt ] && gh release download tuning-data -D history --clobber
+          mkdir -p history/out
+          gh release download tuning-out -p stock_params.json -D history/out --clobber
+      - name: Research
+        run: >
+          python backend/tuning/research_entry.py --source parquet --universe 500 --years "$YEARS"
+          --adjust-source exchange
+      - name: Report
+        if: always()
+        run: '[ -f history/out/research_entry.md ] && cat history/out/research_entry.md >> "$GITHUB_STEP_SUMMARY" || true'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: research-entry
+          path: history/out/research_entry.md
+          if-no-files-found: ignore
