@@ -174,7 +174,7 @@ begin
                  where not exists (select 1 from intraday_event_state s
                                     where s.for_date = d and s.code = r.code and s.event = e
                                       and (s.last_sent_at > now() - interval '30 minutes'
-                                           or abs(r.c1 / s.last_price - 1) < greatest(0.01, 0.5 * coalesce(r.atr, 0) / r.c1)))));
+                                           or abs(r.c1 / s.last_price - 1) < greatest(0.01, 0.5 * coalesce(r.atr, 0) / r.c1))));
     if cardinality(ev) = 0 then continue; end if;
     select coalesce(sum(sent_count), 0) into sent_stock from intraday_event_state where for_date = d and code = r.code;
     if not urgent and (sent_stock >= 3 or day_total >= 20) then continue; end if;
