@@ -74,7 +74,16 @@ def intraday_levels(f, sell_mult, etf=False):
     hh55 = f["high"].iloc[-55:].max() if len(f) >= 55 else np.nan
     trail = last["hc22"] - sell_mult * last["atr"]
     ma20_next = c[-19:].sum() / 19 if len(c) >= 19 else np.nan   # x < this ⇒ close below tomorrow's MA20
+    ma20 = f["close"].rolling(20).mean()
+    ma60 = f["close"].rolling(60).mean()
+    vol20 = f["volume"].iloc[-20:].mean() if len(f) >= 20 else np.nan
+    # base values for the event-based intraday alerts (public.intraday_context); last row is on the raw scale
+    ctx = {"prev_close": fin(float(c[-1])), "ma20": fin(float(ma20.iloc[-1])), "ma60": fin(float(ma60.iloc[-1])),
+           "ma20_up": bool(len(ma20) > 5 and ma20.iloc[-1] > ma20.iloc[-6]),
+           "atr": fin(float(last["atr"])), "avg_vol20": fin(float(vol20) / 1000),   # shares → lots
+           "hh20": fin(float(hh20)), "ll20": fin(float(f["low"].iloc[-20:].min())) if len(f) >= 20 else None}
     return {
+        "ctx": ctx,
         "breakout_20": rnd(hh20, "above", etf), "breakout_55": rnd(hh55, "above", etf),
         "ma5_over_ma20": rnd(ind.ma_cross_level(c, 5, 20), "above", etf),
         "ma20_over_ma60": rnd(ind.ma_cross_level(c, 20, 60), "above", etf),

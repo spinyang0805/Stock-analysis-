@@ -52,7 +52,49 @@ def build(out, state):
     return list(rows.values())
 
 
-def write(out, state, conn=None):
+def build_context(out, state, top=10):
+    """Rows for public.intraday_context (migration 009): every stock the event-based intraday alerts watch.
+    Role priority: holding > tracked > pick (one row per code)."""
+    lv = out.get("intraday_levels") or {}
+    rows = {}
+
+    def add(code, name, role, stop, target):
+        c = (lv.get(code) or {}).get("ctx") or {}
+        if code in rows or not c.get("prev_close"):
+            return
+        rows[code] = {"code": code, "name": name, "role": role, "etf": str(code).startswith("00"),
+                      "prev_close": c["prev_close"], "ma20": c.get("ma20"), "ma60": c.get("ma60"),
+                      "ma20_up": c.get("ma20_up"), "atr": c.get("atr"), "avg_vol20": c.get("avg_vol20"),
+                      "hh20": c.get("hh20"), "ll20": c.get("ll20"),
+                      "stop": stop if stop and stop > 0 else None, "target": target if target and target > 0 else None}
+
+    for s in out.get("sell_alerts", []):
+        add(s["stock_id"], s.get("name"), "holding", s.get("trailing_stop"), None)
+    for p in state:
+        if p["status"] in ("open", "exit_signalled", "waiting"):
+            add(p["stock_id"], p.get("name"), "tracked", p.get("stop_price"), p.get("tp_price"))
+    for b in out.get("buy", [])[:top]:
+        add(b["stock_id"], b.get("name"), "pick", b.get("stop_loss_if_fill_at_ref"), b.get("take_profit_if_fill_at_ref"))
+    return list(rows.values())
+
+
+CTX_COLS = ["code", "name", "role", "etf", "prev_close", "ma20", "ma60", "ma20_up", "atr", "avg_vol20",
+            "hh20", "ll20", "stop", "target"]
+
+
+def write_context(cur, for_date, rows):
+    cur.execute("SELECT to_regclass('public.intraday_context') IS NOT NULL")
+    if not cur.fetchone()[0]:
+        return None                       # migration 009 not applied yet
+    cur.execute("DELETE FROM public.intraday_context WHERE for_date = %s", (for_date,))
+    sql = (f"INSERT INTO public.intraday_context (for_date, {', '.join(CTX_COLS)}) "
+           f"VALUES (%s, {', '.join(['%s'] * len(CTX_COLS))})")
+    for r in rows:
+        cur.execute(sql, [for_date] + [r[k] for k in CTX_COLS])
+    return len(rows)
+
+
+def write(out, state, conn=None, top=10):
     for_date = next_trading_day(out["as_of"])
     rows = build(out, state)
     if not for_date:
@@ -70,12 +112,14 @@ def write(out, state, conn=None):
             for r in rows:
                 cur.execute("INSERT INTO public.alert_levels (for_date, code, kind, direction, price, label, priority) "
                             "VALUES (%s, %s, %s, %s, %s, %s, %s)", (for_date,) + r)
+            n_ctx = write_context(cur, for_date, build_context(out, state, top))
         conn.commit()
     finally:
         if own:
             conn.close()
     print(f"[alerts] {len(rows)} levels for {for_date} "
-          f"({sum(1 for r in rows if r[5] == 1)} priority-1)")
+          f"({sum(1 for r in rows if r[5] == 1)} priority-1); "
+          f"context {n_ctx if n_ctx is not None else 'skipped (009 not applied)'}")
     return len(rows)
 
 
