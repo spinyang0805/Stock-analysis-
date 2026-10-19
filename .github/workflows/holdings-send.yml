@@ -1,0 +1,37 @@
+name: Holdings advice (send now)
+
+# Sends the latest private holdings advice (computed by daily-picks into Supabase private_store) to e-mail and
+# Teams on demand. The daily 08:50 report already includes it; this is for an extra / corrected send.
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "YYYYMMDD (blank = latest)"
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install requests psycopg2-binary
+      - name: Send
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
+          NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          IN_DATE: ${{ github.event.inputs.date }}
+        run: |
+          case "$IN_DATE" in ''|[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;; *) echo "bad date"; exit 1;; esac
+          if [ -n "$IN_DATE" ]; then python backend/tuning/send_holdings.py --date "$IN_DATE"
+          else python backend/tuning/send_holdings.py; fi

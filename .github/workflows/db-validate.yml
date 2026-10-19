@@ -1,0 +1,39 @@
+﻿name: DB validate (dry run)
+
+# Runs a pending migration inside a transaction and ROLLS BACK — checks syntax / runtime errors without changing
+# the database. Usage: dispatch with file=supabase/pending/<name>.sql
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: "SQL file to validate"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install psql
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Validate in a rolled-back transaction
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FILE: ${{ github.event.inputs.file }}
+        run: |
+          set -eu
+          case "$FILE" in supabase/pending/*.sql) ;; *) echo "only supabase/pending/*.sql"; exit 1;; esac
+          test -f "$FILE"
+          tests="${FILE%.sql}.test.sql"
+          {
+            echo "BEGIN;"
+            cat "$FILE"
+            [ -f "$tests" ] && cat "$tests"
+            echo "ROLLBACK;"
+          } > /tmp/v.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f /tmp/v.sql
+          echo "validated (rolled back)"

@@ -318,53 +318,88 @@ def _add_plan(a, pos, price, ma20, ma60, etf):
     a.update(add_at=at, add_shares=q, new_avg=round(new_avg, 2))
 
 
+GROUPS = [  # (title, actions) — most urgent first; each stock is shown as a short card
+    ("🔴 建議出場", ("建議出場", "趁未虧損出場")),
+    ("🟠 建議減碼", ("反彈減碼", "考慮減碼")),
+    ("🟢 可以獲利了結", ("分批獲利了結",)),
+    ("🔵 可以分批攤平", ("分批攤平（長線）", "分批加碼")),
+    ("⚪ 長抱等待", ("長抱等待（基本面佳）", "不攤平，續抱觀察")),
+    ("✅ 續抱", ("續抱", "續抱領息")),
+]
+
+
+def _money(x):
+    return f"{x:+,.0f} 元"
+
+
+def _card(a):
+    zero = "（零成本：配股）" if a["avg"] <= 0 else ""
+    head = f"**{a['name']}（{a['stock_id']}）｜{a['action']}**"
+    pl = f"損益 **{a['pnl']:+.1%}**（現價 {a['price']}，均價 {a['avg']}{zero}"
+    if a.get("mavg") and abs(a["mavg"] - a["avg"]) > 0.005:
+        pl += f"；整體均價 {a['mavg']}" + (f" 為 {a['m_pnl']:+.1%}" if a.get("m_pnl") is not None else "")
+    pl += "）"
+    lines = [head, f"- {pl}"]
+    lv = []
+    if a.get("sell_shares"):
+        lv.append(f"先賣 {a['sell_shares']:,} 股")
+    if a.get("reduce_at"):
+        lv.append(f"反彈到 {a['reduce_at']} 減碼")
+    for i, (at, q, nav) in enumerate(a.get("stages") or [], 1):
+        lv.append(f"第{i}批 {at} 買 {q:,} 股（均價降到 {nav}）")
+    if a.get("add_at"):
+        lv.append(f"{a['add_at']} 加碼 {a['add_shares']:,} 股（均價降到 {a['new_avg']}）")
+    if a.get("stop"):
+        lv.append(f"停損/停利 {a['stop']}" + ("（已跌破）" if a["stop"] > a["price"] else ""))
+    if lv:
+        lines.append("- 價位：" + "；".join(lv))
+    why = [x for x in (a.get("tech") and f"技術面{a['tech']}", a.get("fund") and f"基本面{a['fund']}") if x]
+    if a.get("fund_why"):
+        why[-1] = why[-1] + "（" + "、".join(a["fund_why"][:3]) + "）"
+    if why:
+        lines.append("- 狀態：" + "；".join(why))
+    if a.get("alt"):
+        lines.append("- " + a["alt"])
+    return "\n".join(lines)
+
+
 def render(advices, as_of):
+    """Phone-friendly: a summary, then one short card per stock grouped by what to do."""
     d = f"{as_of[:4]}/{as_of[4:6]}/{as_of[6:]}"
-    L = [f"## 我的持股建議（{d} 收盤，僅寄給你本人）", ""]
+    L = [f"## 我的持股建議（{d} 收盤）", ""]
     if not advices:
         return "\n".join(L + ["目前沒有持股。"]) + "\n"
     tot_cost = sum(a["avg"] * a["shares"] for a in advices)
     tot_pnl = sum(a["pnl_amt"] for a in advices)
     tot_all = sum(a["total_pl"] for a in advices)
-    L.append(f"持股 {len(advices)} 檔，成本約 {tot_cost:,.0f} 元（先進先出）；目前持股的未實現損益約 {tot_pnl:+,.0f} 元"
-             f"（{(tot_pnl / tot_cost if tot_cost else 0):+.1%}）；這些股票從第一次買進到現在的累計總損益（含已賣出的部分）"
-             f"約 {tot_all:+,.0f} 元。皆已扣賣出手續費與證交稅。")
-    L.append("")
-    order = {"建議出場": 0, "趁未虧損出場": 1, "反彈減碼": 2, "分批獲利了結": 3, "長抱等待（基本面佳）": 4,
-             "分批攤平（長線）": 5, "不攤平，續抱觀察": 6, "分批加碼": 7, "考慮減碼": 8, "續抱領息": 9, "續抱": 10}
-    L.append("| 代號 | 名稱 | 股數 | 現價 | 均價（先進先出） | 損益（先進先出） | 整體均價 | 損益（整體均價） | 累計總損益（含已實現） | 殖利率 | 保本價 | 技術面 | 基本面 | 建議 | 價位 | 說明 |")
-    L.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|---|")
-    for a in sorted(advices, key=lambda a: (order.get(a["action"], 9), a["pnl"])):
-        lv = []
-        if a.get("add_at"):
-            lv.append(f"加碼 {a['add_at']} 買 {a['add_shares']:,} 股 → 均價 {a['new_avg']}")
-        for i, (at, q, nav) in enumerate(a.get("stages") or [], 1):
-            lv.append(f"第{i}批 {at} 買 {q:,} 股 → 均價 {nav}")
-        if a.get("alt"):
-            lv.append(a["alt"])
-        if a.get("reduce_at"):
-            lv.append(f"減碼 {a['reduce_at']}")
-        if a.get("sell_shares"):
-            lv.append(f"先賣 {a['sell_shares']:,} 股")
-        if a.get("stop"):
-            lv.append(f"停損/停利 {a['stop']}" + ("（已跌破）" if a["stop"] > a["price"] else ""))
-        extra = "；".join(a["reasons"]) if a["reasons"] else ""
-        zero = "（零成本：配股）" if a["avg"] <= 0 else ""
-        mp = f"{a['m_pnl']:+.1%}" if a.get("m_pnl") is not None else "–"
-        L.append(f"| {a['stock_id']} | {a['name']} | {a['shares']:,} | {a['price']} | {a['avg']}{zero} | {a['pnl']:+.1%} | "
-                 f"{a['mavg']} | {mp} | {a['total_pl']:+,.0f} 元 | "
-                 f"{(format(a['dy'], '.1%') if a.get('dy') else '–')} | {a['breakeven'] or '–'} | {a.get('tech', a['trend'])} | {a.get('fund', '–')} | **{a['action']}** | {'；'.join(lv) or '–'} | "
-                 f"{a['detail']}{('；' + extra) if extra else ''} |")
-    L += ["", "技術面：「中期轉空」= 跌破下彎的季線或波段結構轉空；「短線轉弱」= 跌破月線或出現出場訊號。"
-          "基本面依營收（近 3 月年增、是否創 12 個月新高）、本益比在自身 3 年的位置、法人近 20 日買賣超、殖利率評分："
-          "佳／普通／轉弱。技術轉空但基本面佳 → 可長抱等待（不加碼）；技術與基本面都轉弱 → 建議出場。",
-          "說明：兩種均價——「先進先出」與券商相同，看目前這批持股賺賠；「整體均價」是移動平均成本，"
-          "搭配累計總損益看從以前到現在一共賺了多少。配股、分割增加的股數不另計成本（總成本不變、平均到所有股數）；"
-          "若買進的股票都已賣出、只剩配股，成本為 0。建議以先進先出均價判斷。"
-          "獲利：只有獲利超過該股殖利率才建議賣出，否則續抱領股利。"
-          "虧損：依你的偏好以「分批攤平、長期持有」為主；只有轉為空頭（跌破下彎的季線或波段結構轉空）才建議出場。"
-          "每批加碼現有股數的 1/4，最多兩批，加碼後總投入不超過原本的 2 倍。每檔都列出另一種選擇，由你決定。"
-          "攤平會增加投入金額與風險，沒有任何方法能保證不賠錢。"]
+    L += [f"持股 **{len(advices)} 檔**，目前未實現損益 **{_money(tot_pnl)}**"
+          f"（{(tot_pnl / tot_cost if tot_cost else 0):+.1%}）",
+          f"從第一次買進到現在的累計總損益 **{_money(tot_all)}**（含已賣出的部分，已扣稅費）", ""]
+    by = {}
+    for a in advices:
+        by.setdefault(a["action"], []).append(a)
+    shown = set()
+    for title, acts in GROUPS:
+        items = [a for act in acts for a in by.get(act, [])]
+        if not items:
+            continue
+        items.sort(key=lambda a: a["pnl"])
+        L += [f"### {title}（{len(items)} 檔）", ""]
+        if title.startswith("✅"):                 # long list of holds → one line each
+            for a in items:
+                L.append(f"- {a['name']}（{a['stock_id']}）{a['pnl']:+.1%}｜{a['action']}")
+        else:
+            for a in items:
+                L += [_card(a), ""]
+        L.append("")
+        shown.update(id(a) for a in items)
+    rest = [a for a in advices if id(a) not in shown]
+    if rest:
+        L += ["### 其他", ""] + [_card(a) + "\n" for a in rest]
+    L += ["---",
+          "說明：均價以「先進先出」計算（與券商相同），括號內的整體均價是移動平均成本。"
+          "獲利超過殖利率才建議賣；虧損以分批攤平、長期持有為主，技術面與基本面都轉弱才建議出場。"
+          "攤平會增加風險，沒有任何方法能保證不賠錢。"]
     return "\n".join(L) + "\n"
 
 

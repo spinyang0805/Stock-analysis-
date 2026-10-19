@@ -90,10 +90,74 @@ def send_telegram(subject, body):
             raise RuntimeError(f"Telegram HTTP {r.status_code}: {r.text[:200]}")
 
 
+def _inline(t):
+    t = html.escape(t)
+    import re
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+
+
 def md_to_html(body):
-    """Minimal rendering: keep the plain-text layout (tables/alignment) in a monospace block."""
-    return ("<div style=\"font-family:Consolas,Menlo,monospace;white-space:pre-wrap;font-size:14px\">"
-            f"{html.escape(body)}</div>")
+    """Small Markdown → HTML renderer for e-mail (phone friendly): headings, bold, bullet lists, block quotes,
+    horizontal rules and pipe tables (scrollable). Everything is HTML-escaped first."""
+    out, in_list, table = [], False, []
+
+    def close_list():
+        nonlocal in_list
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+
+    def flush_table():
+        if not table:
+            return
+        rows = [r for r in table if not set(r.replace("|", "").strip()) <= set("-: ")]
+        cells = [[c.strip() for c in r.strip().strip("|").split("|")] for r in rows]
+        h = "".join(f"<th style='padding:4px 6px;border-bottom:1px solid #ccc;text-align:left'>{_inline(c)}</th>"
+                    for c in cells[0])
+        b = "".join("<tr>" + "".join(f"<td style='padding:4px 6px;border-bottom:1px solid #eee'>{_inline(c)}</td>"
+                                     for c in r) + "</tr>" for r in cells[1:])
+        out.append("<div style='overflow-x:auto'><table style='border-collapse:collapse;font-size:13px'>"
+                   f"<tr>{h}</tr>{b}</table></div>")
+        table.clear()
+
+    for ln in body.splitlines():
+        s = ln.rstrip()
+        if s.startswith("|"):
+            close_list()
+            table.append(s)
+            continue
+        flush_table()
+        if not s.strip():
+            close_list()
+            continue
+        if s.startswith("### "):
+            close_list()
+            out.append(f"<h3 style='margin:14px 0 6px;font-size:16px'>{_inline(s[4:])}</h3>")
+        elif s.startswith("## "):
+            close_list()
+            out.append(f"<h2 style='margin:16px 0 8px;font-size:18px'>{_inline(s[3:])}</h2>")
+        elif s.startswith("# "):
+            close_list()
+            out.append(f"<h1 style='margin:16px 0 8px;font-size:20px'>{_inline(s[2:])}</h1>")
+        elif s.strip() == "---":
+            close_list()
+            out.append("<hr style='border:none;border-top:1px solid #ddd'>")
+        elif s.lstrip().startswith(("- ", "• ")):
+            if not in_list:
+                out.append("<ul style='margin:4px 0 8px 18px;padding:0'>")
+                in_list = True
+            out.append(f"<li style='margin:2px 0'>{_inline(s.lstrip()[2:])}</li>")
+        elif s.startswith("> "):
+            close_list()
+            out.append(f"<div style='background:#fff7e6;padding:6px 10px;border-left:3px solid #f0a500'>"
+                       f"{_inline(s[2:])}</div>")
+        else:
+            close_list()
+            out.append(f"<p style='margin:6px 0'>{_inline(s)}</p>")
+    flush_table()
+    close_list()
+    return ("<div style='font-family:-apple-system,Segoe UI,\"Microsoft JhengHei\",sans-serif;font-size:15px;"
+            "line-height:1.5;max-width:680px'>" + "".join(out) + "</div>")
 
 
 def send_email(subject, body):
