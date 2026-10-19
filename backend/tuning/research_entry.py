@@ -46,6 +46,7 @@ def parse_args(argv=None):
     ap.add_argument("--years", type=float, default=8.0)
     ap.add_argument("--params", default=os.path.join(OUT_DIR, "stock_params.json"))
     ap.add_argument("--window", type=int, default=5, help="pull-back limit order validity (sessions)")
+    ap.add_argument("--workers", type=int, default=1, help="unused (common research workflow argument)")
     ap.add_argument("--report", default=os.path.join(OUT_DIR, "research_entry.md"))
     add_common_args(ap)
     ap.set_defaults(no_holdings=True)

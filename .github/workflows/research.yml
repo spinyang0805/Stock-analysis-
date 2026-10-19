@@ -8,6 +8,11 @@ on:
       years:
         description: "history years"
         default: "8"
+      script:
+        description: "research script"
+        type: choice
+        options: [research_entry, research_s2s, research_codex]
+        default: research_entry
 
 permissions:
   contents: read
@@ -20,6 +25,7 @@ jobs:
       PYTHONUNBUFFERED: "1"
       GH_TOKEN: ${{ github.token }}
       YEARS: ${{ github.event.inputs.years || '8' }}
+      SCRIPT: ${{ github.event.inputs.script || 'research_entry' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,14 +45,14 @@ jobs:
           gh release download tuning-out -p stock_params.json -D history/out --clobber
       - name: Research
         run: >
-          python backend/tuning/research_entry.py --source parquet --universe 500 --years "$YEARS"
-          --adjust-source exchange
+          python "backend/tuning/$SCRIPT.py" --source parquet --universe 500 --years "$YEARS"
+          --adjust-source exchange --workers 4
       - name: Report
         if: always()
-        run: '[ -f history/out/research_entry.md ] && cat history/out/research_entry.md >> "$GITHUB_STEP_SUMMARY" || true'
+        run: '[ -f "history/out/$SCRIPT.md" ] && cat "history/out/$SCRIPT.md" >> "$GITHUB_STEP_SUMMARY" || true'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: research-entry
-          path: history/out/research_entry.md
+          name: ${{ env.SCRIPT }}
+          path: history/out/${{ env.SCRIPT }}.md
           if-no-files-found: ignore
