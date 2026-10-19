@@ -273,16 +273,16 @@ declare
   d text := to_char(now() at time zone 'Asia/Taipei', 'YYYYMMDD');
   v_ym text := to_char(now() at time zone 'Asia/Taipei', 'YYYYMM');
   hh text := to_char(now() at time zone 'Asia/Taipei', 'HH24:MI');
-  ids bigint[]; body text; st int; line_ids bigint[]; line_body text; used int; today_line int;
+  ids bigint[]; v_body text; st int; line_ids bigint[]; line_body text; used int; today_line int;
 begin
   select array_agg(id order by urgent desc, id), string_agg(body, E'\n' order by urgent desc, id)
-    into ids, body
+    into ids, v_body
     from intraday_outbox where for_date = d and not teams_sent and (urgent or batch_due);
   if ids is not null then
     st := _post_json(_vault('teams_webhook_url'), jsonb_build_object('type', 'message', 'attachments', jsonb_build_array(
       jsonb_build_object('contentType', 'application/vnd.microsoft.card.adaptive', 'content', jsonb_build_object(
         '$schema', 'http://adaptivecards.io/schemas/adaptive-card.json', 'type', 'AdaptiveCard', 'version', '1.4',
-        'body', jsonb_build_array(jsonb_build_object('type', 'TextBlock', 'text', '⚡ 盤中提醒 ' || hh || E'\n' || body,
+        'body', jsonb_build_array(jsonb_build_object('type', 'TextBlock', 'text', '⚡ 盤中提醒 ' || hh || E'\n' || v_body,
                                                      'wrap', true)))))));
     if st between 200 and 299 then
       update intraday_outbox set teams_sent = true where id = any(ids);
