@@ -58,6 +58,8 @@ def parse_args(argv=None):
     ap.add_argument("--groups", help="JSON {group name: [codes]} → summary report over all of them")
     ap.add_argument("--years", type=float, default=8.0)
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--test-start", help="YYYYMMDD: test window start (default: the last 126 sessions)")
+    ap.add_argument("--test-end", help="YYYYMMDD: data after this date is cut off (default: none)")
     ap.add_argument("--report", default=None)
     add_common_args(ap)
     return ap.parse_args(argv)
@@ -87,9 +89,12 @@ def label(c):
 
 
 def study(job):
-    """One stock. job = (sid, name, g, bench_open aligned to g, etf). Returns a result dict."""
-    sid, name, g, b, etf = job
+    """One stock. job = (sid, name, g, bench_open aligned to g, etf, test_start, test_end). Returns a result dict."""
+    sid, name, g, b, etf, t_start, t_end = job
     g = g.reset_index(drop=True)
+    if t_end:                                          # nothing after the test window exists for this run
+        keep = (g["date"].astype(str) <= t_end).to_numpy()
+        g, b = g[keep].reset_index(drop=True), b[keep]
     objective = "period" if sid == BENCH else "trade"
     f = ind.features(g)
     buys, sells = ind.buy_signals(f), ind.sell_signals(f)
@@ -98,8 +103,8 @@ def study(job):
     atr = f["atr"].to_numpy(float)
     dates = g["date"].astype(str).to_numpy()
     n = len(g)
-    hs = n - HOLDOUT
-    if hs - WARM < 400:
+    hs = int(np.searchsorted(dates, t_start)) if t_start else n - HOLDOUT
+    if hs - WARM < 300 or hs >= n:
         return {"sid": sid, "name": name, "skip": f"歷史太短（{n} 日）"}
     ex_end = WARM + (hs - WARM) * 2 // 3
     costs = Costs()
@@ -161,7 +166,7 @@ def study(job):
 
 def single_report(r):
     pe = r["periods"]
-    L = [f"# {r['sid']} {r['name']}：個股買賣訊號回測（最後半年驗證）", "",
+    L = [f"# {r['sid']} {r['name']}：個股買賣訊號回測（驗證期沒看過）", "",
          f"全部組合 {r['n_cands']:,} 種（向上訊號 × 向下訊號或固定持有天數 × 有無停損）。"
          + ("**0050 本身**：比的是「整段期間照規則進出」vs「一直抱著」，空手錯過上漲也算輸。" if r["objective"] == "period"
             else "超額 = 扣成本報酬 − 同期間 0050。"), "",
@@ -204,7 +209,7 @@ def main(argv=None):
     adj = prep["adjusted"]
     bser = adj[BENCH].set_index("date")["aopen"]
     jobs = [(c, prep["meta"].get(c, {}).get("name", ""), adj[c],
-             bser.reindex(adj[c]["date"]).ffill().bfill().to_numpy(float), bool(prep["meta"].get(c, {}).get("etf")))
+             bser.reindex(adj[c]["date"]).ffill().bfill().to_numpy(float), bool(prep["meta"].get(c, {}).get("etf")), a.test_start, a.test_end)
             for c in codes if c in adj and (a.stock or c != BENCH or BENCH in groups.get("0050 本身", []))]
     log(f"[single] {len(jobs)} stocks")
     with ProcessPoolExecutor(a.workers) as ex:
@@ -227,9 +232,9 @@ def summary_report(res, groups):
     rows = [r for r in res.values() if r["sid"] != BENCH and "skip" not in r]
     any_r = next(iter(rows))
     pe = any_r["periods"]
-    L = ["# 每檔各自找最佳買賣訊號：最後半年驗證（多檔比較）", "",
+    L = ["# 每檔各自找最佳買賣訊號：多檔比較（驗證期沒看過）", "",
          f"每檔都試 {any_r['n_cands']:,} 種組合；探索 {fd(pe[0])}～{fd(pe[1])}、確認 {fd(pe[2])}～{fd(pe[3])} 選出規則，"
-         f"**驗證 {fd(pe[4])}～{fd(pe[5])} 完全沒看過**。超額 = 扣成本報酬 − 同期間 0050。", ""]
+         f"**驗證 {fd(pe[4])}～{fd(pe[5])} 完全沒看過（之後的資料不存在於這次計算）**。超額 = 扣成本報酬 − 同期間 0050。", ""]
 
     def agg(rs):
         ch = [r for r in rs if "rule" in r]
