@@ -73,7 +73,7 @@ def build_context(out, state, top=10, style=None, advice=None):
     lv = out.get("intraday_levels") or {}
     rows = {}
 
-    def add(code, name, role, stop, target, lt=False, allow=False):
+    def add(code, name, role, stop, target, lt=False, allow=False, stop_label=None):
         c = (lv.get(code) or {}).get("ctx") or {}
         if code in rows or not c.get("prev_close"):
             return
@@ -82,7 +82,7 @@ def build_context(out, state, top=10, style=None, advice=None):
                       "ma20_up": c.get("ma20_up"), "atr": c.get("atr"), "avg_vol20": c.get("avg_vol20"),
                       "hh20": c.get("hh20"), "ll20": c.get("ll20"),
                       "stop": stop if stop and stop > 0 else None, "target": target if target and target > 0 else None,
-                      "long_term": bool(lt), "allow_add": bool(allow)}
+                      "long_term": bool(lt), "allow_add": bool(allow), "stop_label": stop_label}
 
     for s in out.get("sell_alerts", []):
         sid = s["stock_id"]
@@ -93,7 +93,9 @@ def build_context(out, state, top=10, style=None, advice=None):
             allow = a.get("allow_add", False)
         else:
             stop, allow = (None if lt else s.get("trailing_stop")), False
-        add(sid, s.get("name"), "holding", stop, None, lt, allow)
+        # in profit the stop protects the gain (停利, act on the close); at a loss it is a real 停損
+        label = ("停利" if (a.get("pnl") or 0) >= 0 else "停損") if a is not None else None
+        add(sid, s.get("name"), "holding", stop, None, lt, allow, label)
     for p in state:
         if p["status"] in ("open", "exit_signalled", "waiting"):
             add(p["stock_id"], p.get("name"), "tracked", p.get("stop_price"), p.get("tp_price"))
@@ -103,7 +105,7 @@ def build_context(out, state, top=10, style=None, advice=None):
 
 
 CTX_COLS = ["code", "name", "role", "etf", "prev_close", "ma20", "ma60", "ma20_up", "atr", "avg_vol20",
-            "hh20", "ll20", "stop", "target", "long_term", "allow_add"]
+            "hh20", "ll20", "stop", "target", "long_term", "allow_add", "stop_label"]
 
 
 def write_context(cur, for_date, rows):
