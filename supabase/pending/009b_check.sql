@@ -130,35 +130,35 @@ begin
     -- 跌破停損（持股 / 追蹤）：連 2 根收在停損 − 緩衝之下；跌深 0.5 ATR 立即視為緊急
     if r.role in ('holding', 'tracked') and r.stop is not null
        and ((r.c1 < r.stop - r.bf and r.c2 < r.stop - r.bf) or r.c1 < r.stop - greatest(r.bf, 0.5 * coalesce(r.atr, 0))) then
-      ev := ev || 'stop'; urgent := r.role = 'holding';
+      ev := ev || 'stop'::text; urgent := r.role = 'holding';
     end if;
     -- 帶量下殺 / 帶量上漲（09:10 後才判斷量能）
     if tw::time >= time '09:10' and r.vwap is not null and r.c6 is not null then
       if r.c1 / r.prev_close - 1 <= -0.02 and r.c1 / r.c6 - 1 <= -0.008 and r.c1 <= r.vwap - r.bf
          and r.c2 <= r.vwap - r.bf and coalesce(r.pace, 0) >= 1.5 and coalesce(r.burst, 0) >= 2 then
-        ev := ev || 'heavy_sell';
+        ev := ev || 'heavy_sell'::text;
       end if;
       if r.c1 / r.prev_close - 1 >= 0.02 and r.c1 / r.c6 - 1 >= 0.008 and r.c1 >= r.vwap + r.bf
          and r.c2 >= r.vwap + r.bf and coalesce(r.pace, 0) >= 1.5 and coalesce(r.burst, 0) >= 2 then
-        ev := ev || 'heavy_rally';
+        ev := ev || 'heavy_rally'::text;
       end if;
     end if;
     -- 跌破支撐：月線、季線、20 日低（昨天還在之上 → 今天連 2 根收在之下）
     if (r.ma20 is not null and r.prev_close > r.ma20 and r.c1 < r.ma20 - r.bf and r.c2 < r.ma20 - r.bf)
        or (r.ma60 is not null and r.prev_close > r.ma60 and r.c1 < r.ma60 - r.bf and r.c2 < r.ma60 - r.bf)
        or (r.ll20 is not null and r.c1 < r.ll20 - r.bf and r.c2 < r.ll20 - r.bf) then
-      ev := ev || 'support_break';
+      ev := ev || 'support_break'::text;
     end if;
     -- 突破 20 日高（推薦 / 追蹤）：連 2 根站上且在均價之上、帶量
     if r.role in ('pick', 'tracked') and r.hh20 is not null and r.c1 > r.hh20 + r.bf and r.c2 > r.hh20 + r.bf
        and r.c1 > coalesce(r.vwap, 0) and coalesce(r.pace, 0) >= 1.5 then
-      ev := ev || 'breakout';
+      ev := ev || 'breakout'::text;
     end if;
     -- 回測月線止跌（推薦 / 追蹤）：月線上揚、今日低點觸及月線、連 2 根收回月線與均價之上
     if r.role in ('pick', 'tracked') and r.ma20_up and r.ma20 is not null
        and least(r.l1, r.l2) <= r.ma20 + r.bf and least(r.l1, r.l2) >= r.ma20 - r.bf
        and r.c1 > r.ma20 + r.bf and r.c2 > r.ma20 + r.bf and r.c1 > coalesce(r.vwap, 0) + r.bf then
-      ev := ev || 'ma20_rebound';
+      ev := ev || 'ma20_rebound'::text;
     end if;
     -- 開盤跳空 ≥3%，且 09:05 時仍保有 75% 的缺口
     if tw::time >= time '09:05' and r.o0 is not null and abs(r.o0 / r.prev_close - 1) >= 0.03
@@ -166,9 +166,9 @@ begin
       ev := ev || (case when r.o0 > r.prev_close then 'gap_up' else 'gap_down' end);
     end if;
     -- 接近漲跌停（距 ±10% 1% 以內，連 2 根）
-    if r.c1 >= r.prev_close * 1.09 and r.c2 >= r.prev_close * 1.09 then ev := ev || 'near_limit_up'; end if;
+    if r.c1 >= r.prev_close * 1.09 and r.c2 >= r.prev_close * 1.09 then ev := ev || 'near_limit_up'::text; end if;
     if r.c1 <= r.prev_close * 0.91 and r.c2 <= r.prev_close * 0.91 then
-      ev := ev || 'near_limit_down'; urgent := urgent or r.role = 'holding';
+      ev := ev || 'near_limit_down'::text; urgent := urgent or r.role = 'holding';
     end if;
     -- 存股 / ETF 持股：不提示減碼；當日跌幅 ≥ max(2%, 1.2 ATR) 提示分批加碼，跌幅加倍再提示（推 LINE）
     if r.role = 'holding' and r.long_term then
@@ -177,9 +177,9 @@ begin
       urgent := false;
       thr := greatest(0.02, 1.2 * coalesce(r.atr, 0) / r.prev_close);
       if r.c1 / r.prev_close - 1 <= -2 * thr and r.c2 / r.prev_close - 1 <= -2 * thr then
-        ev := ev || 'dip_add2'; urgent := true;
+        ev := ev || 'dip_add2'::text; urgent := true;
       elsif r.c1 / r.prev_close - 1 <= -thr and r.c2 / r.prev_close - 1 <= -thr then
-        ev := ev || 'dip_add';
+        ev := ev || 'dip_add'::text;
       end if;
     end if;
     if cardinality(ev) = 0 then continue; end if;
