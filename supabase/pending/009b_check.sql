@@ -392,7 +392,7 @@ begin
         -- 交易所當日參考價與漲跌停價（除權息日的「昨收」不等於前一晚收盤價）
         update intraday_context c
            set ref_price = case when m->>'y' ~ '^[0-9]+(\.[0-9]+)?$' then (m->>'y')::numeric end,
-               limit_up = case when m->>'u' ~ '^[0-9]+(\.[0-9]+)?$' then (m->>'u')::numeric end,
+               limit_up = case when m->>'u' ~ '^[0-9]+(\.[0-9]+)?$' and (m->>'u')::numeric < 9999 then (m->>'u')::numeric end,   -- 9999.95 = 無漲跌幅限制
                limit_down = case when m->>'w' ~ '^[0-9]+(\.[0-9]+)?$' then (m->>'w')::numeric end
           from jsonb_array_elements((res.body::jsonb) -> 'msgArray') m
          where c.for_date = to_char(tw, 'YYYYMMDD') and c.code = m->>'c' and m->>'d' = to_char(tw, 'YYYYMMDD')

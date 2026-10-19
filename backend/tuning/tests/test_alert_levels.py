@@ -55,5 +55,18 @@ def test_long_term_holdings_get_no_trailing_stop():
     style = {"2317": "存股"}
     rows = {r["code"]: r for r in alert_levels.build_context(out, [], style=style)}
     assert rows["00929"]["stop"] is None and rows["2317"]["stop"] is None and rows["2330"]["stop"] == 95.0
+    assert rows["00929"]["long_term"] and rows["2317"]["long_term"] and not rows["2330"]["long_term"]
     kinds = {(r[0], r[1]) for r in alert_levels.build(out, [], style)}
     assert ("00929", "trailing_stop") not in kinds and ("2330", "trailing_stop") in kinds
+
+
+def test_context_follows_evening_advice():
+    ctx = {"prev_close": 100.0}
+    out = {"sell_alerts": [{"stock_id": "6182", "name": "合晶", "trailing_stop": 114.5},
+                           {"stock_id": "8131", "name": "福懋科", "trailing_stop": 61.6}],
+           "intraday_levels": {"6182": {"ctx": ctx}, "8131": {"ctx": ctx}}}
+    advice = {"6182": {"action": "分批攤平（長線）", "stop": None, "allow_add": True},
+              "8131": {"action": "建議出場", "stop": 60.0, "allow_add": False}}
+    rows = {r["code"]: r for r in alert_levels.build_context(out, [], advice=advice)}
+    assert rows["6182"]["long_term"] and rows["6182"]["stop"] is None and rows["6182"]["allow_add"]
+    assert not rows["8131"]["long_term"] and rows["8131"]["stop"] == 60.0 and not rows["8131"]["allow_add"]

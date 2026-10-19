@@ -188,6 +188,7 @@ def main(argv=None):
     report = render(out, state, added, closed_today, known.top)
     line = render_line(out, state, known.top, closed_today)
     # private holdings advice (shares / costs) → never in the public files
+    adv = []
     try:
         from tuning import holdings_report, positions
         adv = holdings_report.advise_all(out, prep, sargs.params, pos, style) if pos else []
@@ -226,7 +227,8 @@ def main(argv=None):
     if known.write_alerts:
         from tuning import alert_levels
         try:
-            alert_levels.write(out, state, top=known.top, style=style)
+            alert_levels.write(out, state, top=known.top, style=style,
+                               advice={a['stock_id']: a for a in adv} if adv else None)
         except Exception as exc:          # alerts are best-effort; the morning report must still be produced
             log(f"[daily] alert levels NOT written: {type(exc).__name__}: {str(exc)[:200]}")
     log(f"[daily] {as_of}: {len(added)} new picks, {len(closed_today)} closed, "

@@ -187,12 +187,20 @@ def advise(pos, g, params, style, sell_alert, levels, costs=Costs()):
          "style": style or ("存股" if etf else "波段"),
          "trend": "多頭" if trend_ok else ("空頭" if trend_bad else "盤整"),
          "reasons": list((sell_alert or {}).get("reasons") or [])}
+    fsc, flab, fwhy = fundamentals(f)
+    # shared with the intraday alerts (intraday_context.allow_add): no adding while the medium-term trend is
+    # bearish or the fundamentals are weakening
+    a["allow_add"] = not trend_bad and flab != "轉弱"
     if a["style"] == "存股":
         pe = f["pe"].where(f["pe"] > 0) if "pe" in f else None
         has_pe = bool(pe is not None and pe.notna().sum() > 120)
         cheap = has_pe and pe.iloc[-1] < ind.val_q(pe, 0.2).iloc[-1]
         exp = has_pe and pe.iloc[-1] > ind.val_q(pe, 0.9).iloc[-1]
-        if cheap:
+        if cheap and not a["allow_add"]:
+            a.update(action="續抱（暫緩加碼）",
+                     detail="存股：本益比在便宜區，但" + ("中期轉空" if trend_bad else f"基本面{flab}") +
+                            "，先不加碼，等站回季線、基本面回穩再分批")
+        elif cheap:
             a.update(action="分批加碼", detail="存股：本益比在自身近 3 年低 20%（便宜區）")
             _add_plan(a, pos, price, ma20, ma60, etf)
         elif exp and pnl > 0:
@@ -212,7 +220,6 @@ def advise(pos, g, params, style, sell_alert, levels, costs=Costs()):
     # below MA20), else 正常; fundamentals: revenue, valuation, institutions, yield
     weak = exit_sig or (np.isfinite(ma20) and price < ma20)
     tech = "中期轉空" if trend_bad else ("短線轉弱" if weak else "正常")
-    fsc, flab, fwhy = fundamentals(f)
     a.update(tech=tech, fund=flab, fund_score=fsc, fund_why=fwhy)
     fund_txt = f"基本面{flab}（{'、'.join(fwhy) or '無明顯訊號'}）"
     reduce_at = _tick_round(min(resist), etf, "up") if resist else None
@@ -323,7 +330,7 @@ GROUPS = [  # (title, actions) — most urgent first; each stock is shown as a s
     ("🟠 建議減碼", ("反彈減碼", "考慮減碼")),
     ("🟢 可以獲利了結", ("分批獲利了結",)),
     ("🔵 可以分批攤平", ("分批攤平（長線）", "分批加碼")),
-    ("⚪ 長抱等待", ("長抱等待（基本面佳）", "不攤平，續抱觀察")),
+    ("⚪ 長抱等待", ("長抱等待（基本面佳）", "不攤平，續抱觀察", "續抱（暫緩加碼）")),
     ("✅ 續抱", ("續抱", "續抱領息")),
 ]
 
