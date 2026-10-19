@@ -32,6 +32,8 @@ alter table public.intraday_context add column if not exists allow_add boolean n
 alter table public.intraday_context add column if not exists ref_price numeric;
 alter table public.intraday_context add column if not exists limit_up numeric;
 alter table public.intraday_context add column if not exists limit_down numeric;
+-- 持股停損價的性質：'停利'（獲利中，保護獲利，收盤確認）/ '停損'（虧損中）；null = 依舊規則
+alter table public.intraday_context add column if not exists stop_label text;
 alter table public.intraday_context enable row level security;
 
 create table if not exists public.intraday_event_state (
@@ -130,7 +132,7 @@ begin
            a.cv / nullif(c.avg_vol20 * _vol_profile(tw::time), 0) pace,
            a.v5 / nullif(c.avg_vol20 * (_vol_profile(tw::time) - _vol_profile((tw - interval '5 minutes')::time)), 0) burst
       from (select x.for_date, x.code, x.name, x.role, x.etf, x.ma20, x.ma60, x.ma20_up, x.atr, x.avg_vol20,
-                   x.hh20, x.ll20, x.stop, x.target, x.long_term, x.allow_add,
+                   x.hh20, x.ll20, x.stop, x.target, x.long_term, x.allow_add, x.stop_label,
                    -- 交易所當日參考價（除權息日已調整）優先於前一晚的收盤價
                    coalesce(x.ref_price, x.prev_close) prev_close,
                    coalesce(x.limit_up, coalesce(x.ref_price, x.prev_close) * 1.1) limit_up,
@@ -212,9 +214,9 @@ begin
                                            or s.last_sent_at > now() - interval '30 minutes'
                                            or abs(r.c1 / s.last_price - 1) < greatest(0.01, 0.5 * coalesce(r.atr, 0) / r.c1))));
     if cardinality(ev) = 0 then continue; end if;
-    -- 緊急 = 去重後仍有「一般持股」的停損 / 接近跌停
+    -- 緊急 = 去重後仍有「一般持股」的停損（虧損中）/ 接近跌停；獲利中的停利價只發 Teams、收盤確認
     urgent := r.role = 'holding' and not coalesce(r.long_term, false)
-              and ev && array['stop', 'near_limit_down']::text[];
+              and (('stop' = any(ev) and r.stop_label is distinct from '停利') or 'near_limit_down' = any(ev));
     select count(*) into sent_stock from intraday_outbox o where o.for_date = d and o.code = r.code;
     if not urgent and (sent_stock >= 3 or day_total >= 20) then continue; end if;
     if urgent and sent_stock >= 5 then continue; end if;
@@ -222,7 +224,7 @@ begin
                                and last_sent_at > now() - interval '10 minutes') then continue; end if;
 
     txt := public._event_text(r.code, r.name, r.role, r.etf, r.c1, r.prev_close, r.stop, r.hh20, r.ma20, r.ma60,
-                              r.vwap, r.bf, r.atr, least(r.l1, r.l2), r.target, ev);
+                              r.vwap, r.bf, r.atr, least(r.l1, r.l2), r.target, ev, r.stop_label);
     if txt is null then continue; end if;
     insert into intraday_outbox (for_date, code, urgent, line_ok, body)
     values (d, r.code, urgent, urgent and r.role = 'holding', txt);
@@ -241,9 +243,11 @@ end $$;
 revoke all on function public.intraday_events() from public, anon, authenticated;
 
 /* 一則事件文字（含建議價） */
+drop function if exists public._event_text(text, text, text, boolean, numeric, numeric, numeric, numeric, numeric,
+  numeric, numeric, numeric, numeric, numeric, numeric, text[]);
 create or replace function public._event_text(p_code text, p_name text, p_role text, p_etf boolean, p_c1 numeric,
   p_prev numeric, p_stop numeric, p_hh20 numeric, p_ma20 numeric, p_ma60 numeric, p_vwap numeric, p_bf numeric,
-  p_atr numeric, p_low numeric, p_target numeric, ev text[])
+  p_atr numeric, p_low numeric, p_target numeric, ev text[], p_stop_label text default null)
 returns text
 language plpgsql as $$
 declare
@@ -259,7 +263,7 @@ declare
 begin
   foreach e in array ev loop
     labels := labels || case e
-      when 'stop' then '跌破停損 ' || p_stop
+      when 'stop' then '跌破' || coalesce(p_stop_label, '停損') || '價 ' || p_stop
       when 'heavy_sell' then '帶量下殺'
       when 'heavy_rally' then '帶量上漲'
       when 'support_break' then '跌破支撐（月線／季線／20日低）'
@@ -285,6 +289,9 @@ begin
     plan := '建議：長期持有可分批加碼（每批約原持股 1/4），第 1 批 ' || tw_round(p_c1, p_etf, 'down')
             || case when sb > 0 and sb < tw_round(p_c1, p_etf, 'down') then '，第 2 批 ' || sb else '' end
             || '；不必一次買滿，可等收盤止跌再買，詳見每日持股建議';
+  elsif is_sell and p_role = 'holding' and p_stop_label = '停利' then
+    -- 獲利中：與晚間建議一致（收盤確認才動作），盤中不叫賣
+    plan := '建議：目前仍獲利，盤中先觀察；收盤仍低於' || coalesce(' ' || p_stop, '支撐') || ' 再分批獲利了結';
   elsif is_sell and p_role = 'holding' then
     sell_px := tw_round(p_c1 - greatest(tw_tick(p_c1, p_etf), 0.001 * p_c1), p_etf, 'down');
     plan := '建議：' || (case when 'stop' = any(ev) or 'near_limit_down' = any(ev) then '依停損出場或減碼' else '可先減碼' end)
