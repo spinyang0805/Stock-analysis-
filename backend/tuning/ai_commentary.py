@@ -103,7 +103,20 @@ def run_groq(report):
         return None
 
 
+def _load_env():
+    """backend/.env → environment (e.g. GEMINI_API_KEY for the gemini CLI's API-key login, GROQ_API_KEY)."""
+    p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if os.path.exists(p):
+        with open(p, encoding="utf-8-sig") as f:
+            for ln in f:
+                ln = ln.strip()
+                if ln and not ln.startswith("#") and "=" in ln:
+                    k, _, v = ln.partition("=")
+                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+
 def main(argv=None):
+    _load_env()
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["cli", "groq"], required=True)
     ap.add_argument("--dir", default=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
