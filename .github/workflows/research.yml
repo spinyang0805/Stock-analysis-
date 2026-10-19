@@ -11,7 +11,7 @@ on:
       script:
         description: "research script"
         type: choice
-        options: [research_entry, research_s2s, research_codex, research_rank]
+        options: [research_entry, research_s2s, research_codex, research_rank, research_style]
         default: research_entry
 
 permissions:
