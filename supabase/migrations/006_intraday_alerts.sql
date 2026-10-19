@@ -65,7 +65,7 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare
   tw timestamp := now() at time zone 'Asia/Taipei';
   d text := to_char(now() at time zone 'Asia/Taipei', 'YYYYMMDD');
-  ym text := to_char(now() at time zone 'Asia/Taipei', 'YYYYMM');
+  v_ym text := to_char(now() at time zone 'Asia/Taipei', 'YYYYMM');
   hits jsonb;
   n int;
   txt text;
@@ -121,8 +121,8 @@ begin
                            case when x->>'dir' = 'below' then '跌破' else '突破' end, x->>'price', x->>'now'), E'\n')
     into line_txt from jsonb_array_elements(hits) x where (x->>'p')::int = 1;
   if line_txt is not null then
-    insert into alert_quota (ym, line_sent) values (ym, 0) on conflict do nothing;
-    select line_sent into used from alert_quota where alert_quota.ym = intraday_alerts.ym for update;
+    insert into alert_quota (ym, line_sent) values (v_ym, 0) on conflict do nothing;
+    select line_sent into used from alert_quota where alert_quota.ym = v_ym for update;
     if used < line_cap then
       line_token := _vault('line_channel_token');
       line_user := _vault('line_user_id');
@@ -132,7 +132,7 @@ begin
             'type', 'text', 'text', format('⚡ 盤中 %s', to_char(tw, 'HH24:MI')) || E'\n' || line_txt))),
           'Bearer ' || line_token);
         if st_line = 200 then
-          update alert_quota set line_sent = line_sent + 1 where alert_quota.ym = intraday_alerts.ym;
+          update alert_quota set line_sent = line_sent + 1 where alert_quota.ym = v_ym;
         end if;
       end if;
     end if;

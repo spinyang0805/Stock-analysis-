@@ -271,7 +271,7 @@ returns void
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   d text := to_char(now() at time zone 'Asia/Taipei', 'YYYYMMDD');
-  ym text := to_char(now() at time zone 'Asia/Taipei', 'YYYYMM');
+  v_ym text := to_char(now() at time zone 'Asia/Taipei', 'YYYYMM');
   hh text := to_char(now() at time zone 'Asia/Taipei', 'HH24:MI');
   ids bigint[]; body text; st int; line_ids bigint[]; line_body text; used int; today_line int;
 begin
@@ -293,8 +293,8 @@ begin
     from intraday_outbox where for_date = d and line_ok and not line_sent;
   if line_ids is not null then
     select count(*) into today_line from intraday_outbox where for_date = d and line_sent;
-    insert into alert_quota (ym, line_sent) values (ym, 0) on conflict do nothing;
-    select line_sent into used from alert_quota where alert_quota.ym = _flush_outbox.ym for update;
+    insert into alert_quota (ym, line_sent) values (v_ym, 0) on conflict do nothing;
+    select line_sent into used from alert_quota where alert_quota.ym = v_ym for update;
     if today_line < 5 and used < 150 and _vault('line_channel_token') is not null then
       st := _post_json('https://api.line.me/v2/bot/message/push',
         jsonb_build_object('to', _vault('line_user_id'), 'messages', jsonb_build_array(jsonb_build_object(
@@ -302,7 +302,7 @@ begin
         'Bearer ' || _vault('line_channel_token'));
       if st = 200 then
         update intraday_outbox set line_sent = true where id = any(line_ids);
-        update alert_quota set line_sent = line_sent + 1 where alert_quota.ym = _flush_outbox.ym;
+        update alert_quota set line_sent = line_sent + 1 where alert_quota.ym = v_ym;
       end if;
     end if;
   end if;
