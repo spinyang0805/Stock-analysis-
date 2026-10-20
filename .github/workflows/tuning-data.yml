@@ -95,7 +95,7 @@ jobs:
       - name: market
         if: contains(env.KINDS, 'market')
         continue-on-error: true
-        run: python backend/tuning/fetch_extra.py market --start 20210101 --sleep 1.5
+        run: python backend/tuning/fetch_extra.py market --start 19990101 --sleep 1.5
 
       - name: revenue
         if: contains(env.KINDS, 'revenue')

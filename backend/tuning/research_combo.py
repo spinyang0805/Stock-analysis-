@@ -120,8 +120,9 @@ def masks(g, detail=False):
     with np.errstate(invalid="ignore"):
         stage2 = (c > ma60) & (ma60 > ma60_prev)
         stage4 = (c < ma60) & (ma60 < ma60_prev)
-    mkt = f["mkt_regime"].fillna(0).to_numpy() if "mkt_regime" in f else np.zeros(n)
-    env = stage2 & (mkt != -1)
+    # missing market data → no buying (never treat an unknown market as "not bearish")
+    mkt = f["mkt_regime"].to_numpy(float) if "mkt_regime" in f else np.full(n, np.nan)
+    env = stage2 & np.isfinite(mkt) & (mkt != -1)
     S = obvs.Series(g)
     bull = S.ema(20) > S.ema(60)
     prev = np.r_[False, bull[:-1]]
