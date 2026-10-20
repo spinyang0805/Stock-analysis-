@@ -59,6 +59,9 @@ def fetch_bot_via_db(conn):
         conn.commit()
         rows = parse_bot_csv(body or "") if status == 200 else []
         if rows:
+            lines = (body or "").lstrip("﻿").splitlines()
+            print("[us_prices] BOT CSV header:", lines[0][:160])
+            print("[us_prices] BOT CSV row   :", lines[1][:160])
             return rows
         print(f"[us_prices] Bank of Taiwan CSV via DB unusable (HTTP {status}, starts {(body or '')[:60]!r})")
     except Exception as exc:
