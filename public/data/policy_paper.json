@@ -1,0 +1,102 @@
+{
+ "meta": {
+  "start": "2026-10-20",
+  "rules": {
+   "day0": "2026-10-20",
+   "first_trade": "2026-10-21 open",
+   "nav_start": 1.0,
+   "asset": "0050",
+   "costs": {
+    "commission": 0.000855,
+    "etf_tax_sell": 0.001,
+    "slippage_per_side": 0.001,
+    "cash_rate": 0.0
+   },
+   "dividends": "0050 cash dividends credited to the line's cash on the ex-date",
+   "lines": {
+    "C10": "50% 0050 / 50% cash; decided at each quarter's last trading-day close (Mar/Jun/Sep/Dec), traded next open",
+    "C1": "50% 0050 / 50% cash; decided at each month's last trading-day close, traded next open",
+    "C8": "H = highest 0050 total-return close since day 0; invested 100%: close <= 0.90*H -> next open 40% 0050 / 60% cash; reduced: close >= 0.95*H -> next open 100% 0050; starts 100% invested",
+    "VT15": "weekly (last session of the week) E = min(1, 0.15 / sigma), sigma = 60-day stdev of daily 0050 total returns x sqrt(252) (pre-day-0 history as warm-up), rounded to 1%; traded next open",
+    "BH": "0050 buy and hold (reference)"
+   }
+  },
+  "generated_at": "2026-10-20 15:40"
+ },
+ "corporate_actions": [],
+ "lines": {
+  "C10": {
+   "nav": [
+    [
+     "2026-10-20",
+     1.0
+    ]
+   ],
+   "weight": 0.0,
+   "decision_log": [],
+   "pending_weight": 0.5,
+   "max_drawdown": 0.0,
+   "cagr": null,
+   "total_return": 0.0
+  },
+  "C1": {
+   "nav": [
+    [
+     "2026-10-20",
+     1.0
+    ]
+   ],
+   "weight": 0.0,
+   "decision_log": [],
+   "pending_weight": 0.5,
+   "max_drawdown": 0.0,
+   "cagr": null,
+   "total_return": 0.0
+  },
+  "C8": {
+   "nav": [
+    [
+     "2026-10-20",
+     1.0
+    ]
+   ],
+   "weight": 0.0,
+   "decision_log": [],
+   "pending_weight": 1.0,
+   "max_drawdown": 0.0,
+   "cagr": null,
+   "total_return": 0.0
+  },
+  "VT15": {
+   "nav": [
+    [
+     "2026-10-20",
+     1.0
+    ]
+   ],
+   "weight": 0.0,
+   "decision_log": [],
+   "pending_weight": 0.49,
+   "max_drawdown": 0.0,
+   "cagr": null,
+   "total_return": 0.0
+  },
+  "BH": {
+   "nav": [
+    [
+     "2026-10-20",
+     1.0
+    ]
+   ],
+   "weight": 0.0,
+   "decision_log": [],
+   "pending_weight": 1.0,
+   "max_drawdown": 0.0,
+   "cagr": null,
+   "total_return": 0.0
+  }
+ },
+ "updated": "20261020",
+ "sessions": 0,
+ "next_c10_decision": "2026-12-31"
+}
