@@ -137,7 +137,7 @@ def _tpex_stocks() -> List[Dict[str, str]]:
     for row in _get_json(TPEX_LISTED):
         code = _pick(row, ["SecuritiesCompanyCode", "公司代號", "Code"])
         name = _pick(row, ["CompanyName", "公司名稱", "簡稱", "Name"])
-        industry = _pick(row, ["Industry", "產業別"], "股票")
+        industry = _pick(row, ["SecuritiesIndustryCode", "Industry", "產業別"], "股票")
         if code:
             items.append({"code": code, "name": name, "market": "上櫃", "type": _infer_type(code, name), "industry": industry})
     return items
