@@ -10,7 +10,7 @@ export const ACCOUNT_DEFS = [
 ];
 
 export const DEFAULT_TRACKER = {
-  loan: 0, rate: 0, months: 120, firstPayment: "", paidOverride: null, startEquity: 0,
+  loan: 0, rate: 0, months: 120, firstPayment: "", disburseDate: "", paidOverride: null, startEquity: 0,
   accounts: ACCOUNT_DEFS.map((a) => ({ ...a, amount: 0 })),
 };
 
@@ -23,7 +23,8 @@ export function sanitizeTracker(o) {
   return {
     loan: Math.max(0, finite(src.loan, d.loan)), rate: Math.max(0, finite(src.rate, d.rate)),
     months: Math.min(480, Math.max(1, Math.round(finite(src.months, d.months)))),
-    firstPayment: fp, paidOverride: po, startEquity: finite(src.startEquity, 0),
+    firstPayment: fp, disburseDate: typeof src.disburseDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(src.disburseDate) ? src.disburseDate : "",
+    paidOverride: po, startEquity: finite(src.startEquity, 0),
     accounts: ACCOUNT_DEFS.map((a) => ({ ...a, amount: Math.max(0, finite((Array.isArray(src.accounts) ? src.accounts : []).find((x) => x?.key === a.key)?.amount, 0)) })),
   };
 }
@@ -120,4 +121,56 @@ export function applyLoanImport(t, parsed) {
     if (hit) hit.amount = a.amount;
   }
   return sanitizeTracker(next);
+}
+
+// ── 報酬率：貸款買進的這一包資產，一年算下來賺幾 %，有沒有贏過信貸利率 ──────────────────────
+const DAY = 86400000;
+const dt = (s) => new Date(`${s}T00:00:00Z`).getTime();
+
+// 撥款日：有填就用，沒填就當作第一期還款日的前一個月
+export function disburseDateOf(t) {
+  if (t.disburseDate) return t.disburseDate;
+  if (!t.firstPayment) return "";
+  const [y, m, d] = t.firstPayment.split("-").map(Number);
+  return paymentDate(`${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`, -1);
+}
+
+// 年化報酬（XIRR）：flows = [{ date 'YYYY-MM-DD', amount }]，投入為負、拿回為正。算不出來回 NaN
+export function xirr(flows) {
+  if (flows.length < 2 || !flows.some((f) => f.amount > 0) || !flows.some((f) => f.amount < 0)) return NaN;
+  const t0 = dt(flows[0].date);
+  const npv = (r) => flows.reduce((s, f) => s + f.amount / (1 + r) ** ((dt(f.date) - t0) / DAY / 365), 0);
+  let lo = -0.99, hi = 10, flo = npv(lo), fhi = npv(hi);
+  if (!(flo * fhi < 0)) return NaN;
+  for (let i = 0; i < 200; i += 1) {
+    const mid = (lo + hi) / 2, fm = npv(mid);
+    if (fm === 0 || hi - lo < 1e-10) return mid;
+    if (flo * fm < 0) { hi = mid; fhi = fm; } else { lo = mid; flo = fm; }
+  }
+  return (lo + hi) / 2;
+}
+
+// 從撥款日到今天：投入 = 貸款 + 起始自有資金；每期還款視為從這包資產拿出去；今天的總資產視為最後拿回
+export function loanPerformance(t, ov, today) {
+  const start = disburseDateOf(t);
+  const invested = t.loan + (t.startEquity || 0);
+  if (!(invested > 0) || !start || !(ov.assets > 0)) return null;
+  const flows = [{ date: start, amount: -invested }];
+  for (let i = 0; i < ov.paid; i += 1) flows.push({ date: paymentDate(t.firstPayment, i), amount: ov.payment });
+  flows.push({ date: today, amount: ov.assets });
+  flows.sort((a, b) => dt(a.date) - dt(b.date));
+  const days = Math.max(0, (dt(today) - dt(start)) / DAY);
+  const gain = ov.assets + ov.totalPaid - invested;          // 投資本身賺的（還沒扣利息）
+  const annual = days >= 1 ? xirr(flows) : NaN;
+  return { start, days, invested, gain, gainPct: gain / invested, annual, loanRate: t.rate / 100,
+    spread: Number.isFinite(annual) ? annual - t.rate / 100 : NaN };
+}
+
+// 假設之後每年賺 r，每月照常從資產拿錢還款，到最後一期還完時剩多少（＝貸款還清後的淨資產，扣掉起始自有資金）
+export function projectToMaturity(t, ov, r) {
+  const left = Math.max(0, ov.months - ov.paid);
+  const g = (1 + r) ** (1 / 12) - 1;
+  let a = ov.assets;
+  for (let i = 0; i < left; i += 1) a = a * (1 + g) - ov.payment;
+  return { monthsLeft: left, endAssets: a, profit: a - (t.startEquity || 0) };
 }

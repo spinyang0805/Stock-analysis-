@@ -8,12 +8,13 @@ import { loadLatestPrices } from "../lib/data.js";
 import { accountOf, computePositions, listAccounts, valuePositions } from "../lib/portfolio.js";
 import { parseXlsx } from "../lib/csvImport.js";
 import { fxSourceLabel } from "../lib/usPortfolio.js";
-import { DEFAULT_TRACKER, applyLoanImport, loanOverview, parseLoanXlsxRows, sanitizeTracker } from "../lib/loanTracker.js";
+import { DEFAULT_TRACKER, applyLoanImport, disburseDateOf, loanOverview, loanPerformance, parseLoanXlsxRows, projectToMaturity, sanitizeTracker } from "../lib/loanTracker.js";
 import { todayISO } from "../lib/format.js";
 
 // 本機暫存依使用者分開（登出、換帳號不會看到上一個人的數字）
 const keyFor = (user) => `loanTracker:${user?.id || "guest"}`;
 const money = (v) => (Number.isFinite(v) ? Math.round(v).toLocaleString("zh-TW") : "--");
+const pct = (v, d = 1) => (Number.isFinite(v) ? `${v >= 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(d)}%` : "--");
 const signedMoney = (v) => (Number.isFinite(v) ? (v < 0 ? "−" : v > 0 ? "+" : "") + Math.round(Math.abs(v)).toLocaleString("zh-TW") : "--");
 
 function loadLocal(key) {
@@ -77,6 +78,14 @@ export default function LoanStatus() {
   const o = loanOverview(t, todayISO(), { fx: fx?.close, twStockTwd: tw.totals.marketValue, usStockTwd: us?.totals.mvTwd || 0 });
   const stockPnl = tw.totals.unrealized + tw.totals.realized + (us ? us.totals.unrealizedTwd + us.totals.realizedTwd : 0);
   const divs = tw.totals.dividends + (us ? us.totals.dividendsTwd : 0);
+  const today = todayISO();
+  const perf = t.loan > 0 && t.firstPayment ? loanPerformance(t, o, today) : null;
+  const [customRate, setCustomRate] = useState(6);
+  const scen = perf ? [
+    ...(Number.isFinite(perf.annual) ? [{ label: "照目前的年化報酬", r: perf.annual, note: perf.days < 365 ? "期間未滿一年，只是參考" : "" }] : []),
+    { label: "剛好等於信貸利率", r: (1 + perf.loanRate / 12) ** 12 - 1, note: "之後只賺到跟利率一樣：利息剛好打平，還完時剩下的就是目前已經多賺的部分（加上它的成長）" },
+    { label: "自訂", r: customRate / 100, custom: true },
+  ].map((x) => ({ ...x, ...projectToMaturity(t, o, x.r) })) : [];
 
   const edit = (patch) => setT((x) => sanitizeTracker({ ...x, ...patch }));
   const setAcct = (key, v) => setT((x) => sanitizeTracker({ ...x, accounts: x.accounts.map((a) => (a.key === key ? { ...a, amount: v } : a)) }));
@@ -117,6 +126,39 @@ export default function LoanStatus() {
           組成：股票損益 {signedMoney(stockPnl)}、股利 {signedMoney(divs)}、已付利息 −{money(o.interestPaid)}（元，其餘為手續費、存款利息等差異）。</p>
       </section>
 
+
+      {perf && (
+        <section className={`loan-hero ${perf.spread > 0 ? "good" : perf.spread < 0 ? "bad" : ""}`} aria-labelledby="loan-perf-h">
+          <h3 id="loan-perf-h" className="loan-hero-q">賺了幾 %？有沒有贏過信貸利率？</h3>
+          <p className="loan-hero-a">
+            從撥款日 {perf.start} 起 {Math.round(perf.days)} 天，這包資產本身賺了 <b className="num">{signedMoney(perf.gain)}</b> 元
+            （<b className="num">{pct(perf.gainPct)}</b>，還沒扣利息）。
+            {Number.isFinite(perf.annual) ? <> 換算成一年是 <b className="num">{pct(perf.annual)}</b>，信貸利率 {(perf.loanRate * 100).toFixed(2)}%，
+              {perf.spread >= 0 ? <>多賺 <b className="num">{(perf.spread * 100).toFixed(1)}</b> 個百分點。</> : <>還差 <b className="num">{(-perf.spread * 100).toFixed(1)}</b> 個百分點。</>}</> : null}
+          </p>
+          {perf.days < 365 && <p className="loan-fine">⚠ 才 {Math.round(perf.days)} 天，換算成一年的數字會被短期漲跌放大很多，看「贏或輸」就好，別把它當成每年都能賺的數字。</p>}
+          <p className="loan-fine">算法：把貸款 {money(perf.invested)} 元當成投入，每期還款當成從這包資產拿出去，今天的總資產 {money(o.assets)} 元當成拿回來，算年化報酬（XIRR）。
+            年化報酬高於信貸利率，就代表借錢投資到目前為止是划算的。</p>
+          <div className="loan-table-wrap">
+            <table className="loan-table">
+              <caption className="loan-fine" style={{ textAlign: "left" }}>如果之後每年都賺這麼多，照常每月還款，到 {o.months} 期還完時：</caption>
+              <thead><tr><th>假設每年報酬</th><th>還完時剩下的資產</th><th>說明</th></tr></thead>
+              <tbody>
+                {scen.map((x) => (
+                  <tr key={x.label}>
+                    <td data-label="假設每年報酬">{x.custom ? (
+                      <label>自訂 <input className="input num" style={{ width: 80 }} type="number" step={0.5} value={customRate} onChange={(e) => setCustomRate(Number(e.target.value) || 0)} aria-label="自訂每年報酬 %" /> %</label>
+                    ) : <>{x.label}（{pct(x.r)}）</>}</td>
+                    <td className="num" data-label="還完時剩下">{signedMoney(x.profit)} 元</td>
+                    <td data-label="說明">{x.note || (x.profit >= 0 ? "還完貸款後還有這麼多是賺的" : "還不完，要自己補這麼多")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="loan-fine">這只是「如果每年都一樣」的算術，實際每年漲跌不同；要看各種可能和機率，請切到「未來預估」分頁。還剩 {Math.max(0, o.months - o.paid)} 期。</p>
+        </section>
+      )}
       <section className="loan-hero" aria-labelledby="loan-pay-h">
         <h3 id="loan-pay-h" className="loan-hero-q">還款進度</h3>
         <p className="loan-hero-a">已還 <b className="num">{o.paid}</b> / {o.months} 期{o.paid < o.due || t.paidOverride !== null ? "（手動調整）" : ""}；每月 <b className="num">{money(o.payment)}</b> 元。</p>
@@ -136,6 +178,8 @@ export default function LoanStatus() {
             <input id="ls-rate" className="input num" type="number" min={0} step={0.01} value={t.rate} onChange={(e) => edit({ rate: e.target.value })} /></div>
           <div className="loan-field"><label className="loan-field-label" htmlFor="ls-months">期數<span className="loan-field-unit">（月）</span></label>
             <input id="ls-months" className="input num" type="number" min={1} value={t.months} onChange={(e) => edit({ months: e.target.value })} /></div>
+          <div className="loan-field"><label className="loan-field-label" htmlFor="ls-disb">撥款日<span className="loan-field-unit">（算報酬率用；留空＝第一期前一個月）</span></label>
+            <input id="ls-disb" className="input" type="date" value={t.disburseDate} placeholder={disburseDateOf(t)} onChange={(e) => edit({ disburseDate: e.target.value })} /></div>
           <div className="loan-field"><label className="loan-field-label" htmlFor="ls-first">第一期還款日</label>
             <input id="ls-first" className="input" type="date" value={t.firstPayment} onChange={(e) => edit({ firstPayment: e.target.value })} /></div>
         </div>

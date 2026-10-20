@@ -100,3 +100,36 @@ test("匯率來源標籤", async () => {
   assert.equal(fxSourceLabel(l([{ ticker: "USDTWD", date: "2026-10-02", close: 30, source: "bot" }]).fx), "臺灣銀行牌告（即期買入）");
   assert.match(fxSourceLabel({ source: "yahoo" }), /Yahoo/);
 });
+
+// ── 報酬率與預測（虛構數字）────────────────────────────────────────────
+import { xirr, loanPerformance, projectToMaturity, disburseDateOf, loanStatus as _ls } from "../src/lib/loanTracker.js";
+
+test("xirr: 投入 100、一年後拿回 110 ≈ 10%", () => {
+  const r = xirr([{ date: "2025-01-01", amount: -100 }, { date: "2026-01-01", amount: 110 }]);
+  assert.ok(Math.abs(r - 0.10) < 1e-6, String(r));
+});
+
+test("撥款日預設為第一期前一個月", () => {
+  assert.equal(disburseDateOf({ firstPayment: "2026-05-10", disburseDate: "" }), "2026-04-10");
+  assert.equal(disburseDateOf({ firstPayment: "2026-05-10", disburseDate: "2026-04-08" }), "2026-04-08");
+});
+
+test("資產剛好以信貸利率成長 → 年化 ≈ 利率、還完剩 ≈ 0", () => {
+  const t = { loan: 1000000, rate: 3, months: 60, firstPayment: "2026-02-01", disburseDate: "2026-01-01", startEquity: 0, paidOverride: null };
+  const st = _ls(t, "2027-01-15");             // 12 期
+  // 資產每月以 3%/12 成長、每期拿出月付 → 剩下的就是剩餘本金
+  const ov = { ...st, assets: st.remaining };
+  const p = loanPerformance(t, ov, "2027-01-01");
+  assert.ok(Math.abs(p.annual - 0.0304) < 0.002, String(p.annual));   // 月複利 3% ≈ 年化 3.04%
+  const end = projectToMaturity(t, ov, (1 + 0.03 / 12) ** 12 - 1);
+  assert.ok(Math.abs(end.endAssets) < 50, String(end.endAssets));
+});
+
+test("投資賺得比利率多 → 價差為正、到期有剩", () => {
+  const t = { loan: 1000000, rate: 3, months: 60, firstPayment: "2026-02-01", disburseDate: "2026-01-01", startEquity: 0, paidOverride: null };
+  const st = _ls(t, "2027-01-15");
+  const ov = { ...st, assets: st.remaining + 50000 };
+  const p = loanPerformance(t, ov, "2027-01-01");
+  assert.ok(p.spread > 0 && p.gain > 0, JSON.stringify(p));
+  assert.ok(projectToMaturity(t, ov, 0.08).endAssets > 0);
+});
