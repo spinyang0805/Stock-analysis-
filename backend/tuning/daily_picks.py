@@ -378,12 +378,35 @@ def main(argv=None):
     save_tracking(known.state, state, known.private)
     report = render(out, state, added, closed_today, known.top, combo)
     line = render_line(out, state, known.top, closed_today, combo)
+    etf_items, etf_pm, etf_plan_ok = [], None, False
+    try:                                              # ETF 持有觀察 (009816 / 00919 / 0050 reference) — public part
+        from datetime import datetime as _dt
+        from tuning import etf_watch
+        day = _dt.strptime(as_of, "%Y%m%d").date()
+        etf_items, _ = etf_watch.build(day)
+        report += etf_watch.render(etf_items)
+        alerts = etf_watch.line_alerts(etf_items, day)
+        if alerts:
+            line += "\n【ETF 提醒】\n" + "\n".join(alerts)
+        if known.private:                             # private plan config (never in the repo)
+            from tuning import private_store
+            body = private_store.get("etf_plan")
+            if body:
+                etf_pm, etf_plan_ok = etf_watch.payment_months_left(json.loads(body), day), True
+    except Exception as exc:
+        log(f"[daily] ETF watch NOT produced: {type(exc).__name__}: {str(exc)[:200]}")
     # private holdings advice (shares / costs) → never in the public files
     adv = []
     try:
         from tuning import holdings_report, positions
         adv = holdings_report.advise_all(out, prep, sargs.params, pos, style) if pos else []
         priv, priv_line = render_private(out, state, adv), positions.render_line(adv)
+        if etf_plan_ok and etf_pm:
+            left, bal, k = etf_pm
+            priv += (f"\n### 扣款戶\n\n已扣 {k} 期，約剩 {bal:,.0f} 元，還可扣 {left} 個月"
+                     + ("（⚠ 不足 6 個月，注意補錢）" if left < 6 else "") + "\n")
+            if left < 6:
+                priv_line = "\n".join([x for x in (priv_line,) if x] + [f"【扣款戶】只夠再扣 {left} 個月"])
         try:                                          # 組合拳 sell rule on the REAL holdings (user request)
             hc = combo_holdings(adv, prep)
             priv += render_combo_holdings(hc)
