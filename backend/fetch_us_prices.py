@@ -149,7 +149,7 @@ def main():
                     "updated_at = now() where not (us_prices.source = 'bot' and excluded.source <> 'bot')",
                     [(t, d, c, src) for d, c in rows])
             conn.commit()
-            print(f"[us_prices] {t} ({src}): {len(rows)} days from {start} (last {rows[-1][0] if rows else '-'})")
+            print(f"[us_prices] {t} ({src}): {len(rows)} days from {start} (last {rows[-1] if rows else '-'})")
             time.sleep(1)
         if failed:
             print("[us_prices] FAILED:", ", ".join(failed))
