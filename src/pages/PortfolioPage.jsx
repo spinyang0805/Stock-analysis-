@@ -149,7 +149,7 @@ export default function PortfolioPage() {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <AccountPicker accounts={accounts} value={view} onChange={setView} />
-          <button type="button" className="btn" onClick={() => navigate("/transactions", { import: 1 })}><FileUp size={16} />匯入 CSV</button>
+          <button type="button" className="btn" onClick={() => navigate("/transactions", { import: 1 })}><FileUp size={16} />匯入對帳單（台股／美股）</button>
           <button type="button" className="btn primary" onClick={() => setTxModal(true)}><Plus size={16} />記一筆</button>
         </div>
       </div>
@@ -159,7 +159,7 @@ export default function PortfolioPage() {
       {!app.transactions.length && !usHeld.length ? (
         <Card>
           <Empty icon={Wallet} title="還沒有任何交易紀錄">
-            <div className="muted">匯入國泰、亞東等券商的對帳單 CSV，或手動記一筆。</div>
+            <div className="muted">匯入國泰、亞東等券商的對帳單（CSV 或 Excel，台股、美股都可以），或手動記一筆。</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
               <button type="button" className="btn primary" onClick={() => navigate("/transactions", { import: 1 })}><FileUp size={16} />匯入對帳單</button>
               <button type="button" className="btn" onClick={() => setTxModal(true)}><Plus size={16} />手動新增</button>

@@ -59,7 +59,7 @@ export default function TransactionsPage() {
           <div className="dim">{app.transactions.length} 筆</div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button type="button" className="btn" aria-pressed={showImport} onClick={() => route.setQuery({ import: showImport ? "" : "1" })}><FileUp size={16} />匯入 CSV</button>
+          <button type="button" className="btn" aria-pressed={showImport} onClick={() => route.setQuery({ import: showImport ? "" : "1" })}><FileUp size={16} />匯入對帳單（台股／美股）</button>
           <button type="button" className="btn primary" onClick={() => setModal({})}><Plus size={16} />記一筆</button>
         </div>
       </div>
