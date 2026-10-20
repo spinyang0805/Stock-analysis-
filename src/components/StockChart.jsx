@@ -31,7 +31,8 @@ const SUBS = [
   { value: "RSI", label: "RSI" },
   { value: "MACD", label: "MACD" },
 ];
-const MA_COLORS = { ma5: "#facc15", ma10: "#fb923c", ma20: "#38bdf8", ma60: "#a78bfa" };
+const MA_COLORS = { ma5: "#facc15", ma10: "#fb923c", ma20: "#38bdf8", ma60: "#a78bfa", ma240: "#2dd4bf" };
+const MA_LABELS = { ma5: "MA5", ma10: "MA10", ma20: "月線20", ma60: "季線60", ma240: "年線240" };
 
 const THEME = {
   layout: { background: { color: "#0e1223" }, textColor: "#cbd5e1", fontFamily: "Fira Code, ui-monospace, monospace" },
@@ -347,7 +348,7 @@ export default function StockChart({ code, market, dailyRows, longBars, longLoad
             <span>量 <b>{fmt((bar.volume || 0) / 1000, 0)}</b> 張</span>
             {period === "1m" && <span style={{ color: "#facc15" }}>均價 <b>{fmt(bar.avg)}</b></span>}
             {period !== "1m" && Object.entries(MA_COLORS).map(([k, c]) => Number.isFinite(bar[k]) && (
-              <span key={k} style={{ color: c }}>{k.toUpperCase()} {fmt(bar[k])}</span>
+              <span key={k} style={{ color: c }}>{MA_LABELS[k] || k.toUpperCase()} {fmt(bar[k])}</span>
             ))}
           </>
         ) : <span>{longLoading ? "長期資料載入中…" : ""}</span>}

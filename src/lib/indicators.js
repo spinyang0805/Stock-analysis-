@@ -1,5 +1,5 @@
 // 技術指標（前端計算，供日/週/月/分時任一週期的圖表使用）
-// 參數與台股看盤軟體慣例一致：MA 5/10/20/60、BB(20,2)、RSI14、KD(9,3,3)、MACD(12,26,9)、ATR14
+// 參數與台股看盤軟體慣例一致：MA 5/10/20/60/240、BB(20,2)、RSI14、KD(9,3,3)、MACD(12,26,9)、ATR14
 
 function sma(values, n) {
   const out = new Array(values.length).fill(NaN);
@@ -30,7 +30,7 @@ export function computeIndicators(bars) {
   if (!n) return [];
   const close = bars.map((b) => b.close);
   const vol = bars.map((b) => b.volume || 0);
-  const ma5 = sma(close, 5), ma10 = sma(close, 10), ma20 = sma(close, 20), ma60 = sma(close, 60);
+  const ma5 = sma(close, 5), ma10 = sma(close, 10), ma20 = sma(close, 20), ma60 = sma(close, 60), ma240 = sma(close, 240);
   const volMa5 = sma(vol, 5);
 
   // 布林 20,2
@@ -88,7 +88,7 @@ export function computeIndicators(bars) {
 
   return bars.map((b, i) => ({
     ...b,
-    ma5: ma5[i], ma10: ma10[i], ma20: ma20[i], ma60: ma60[i],
+    ma5: ma5[i], ma10: ma10[i], ma20: ma20[i], ma60: ma60[i], ma240: ma240[i],
     volume_ma5: volMa5[i],
     bb_upper: bbU[i], bb_lower: bbL[i], bb_width: Number.isFinite(bbU[i]) ? (bbU[i] - bbL[i]) / ma20[i] : NaN,
     rsi14: rsi[i], kd_k: kArr[i], kd_d: dArr[i],
