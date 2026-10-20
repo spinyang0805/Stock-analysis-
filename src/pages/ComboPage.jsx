@@ -172,8 +172,8 @@ function SellCard({ p, q }) {
 
 function HoldingList({ rows, quotes }) {
   const cols = useMemo(() => ({
-    id: (p) => p.stock_id, entry: (p) => p.entry_date, days: (p) => p.days, ret: (p) => p.ret,
-  }), []);
+    id: (p) => p.stock_id, entry: (p) => p.entry_date, days: (p) => p.days, ret: (p) => (quotes ? liveRet(p, quotes) : p.ret),
+  }), [quotes]);
   const { sorted, sort, toggle } = useSort(rows, cols, { key: "ret", dir: "desc" });
   const opts = [["ret", "報酬"], ["entry", "買進日"], ["days", "持有天數"], ["id", "股票代號"]];
   return (

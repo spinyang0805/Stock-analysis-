@@ -393,7 +393,7 @@ def main(argv=None):
             body = private_store.get("etf_plan")
             if body:
                 etf_pm, etf_plan_ok = etf_watch.payment_months_left(json.loads(body), day), True
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:             # SystemExit: missing parquet history
         log(f"[daily] ETF watch NOT produced: {type(exc).__name__}: {str(exc)[:200]}")
     # private holdings advice (shares / costs) → never in the public files
     adv = []

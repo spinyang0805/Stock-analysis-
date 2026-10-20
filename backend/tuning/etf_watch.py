@@ -16,6 +16,7 @@ from datetime import date, datetime
 
 WATCH = [("009816", "凱基台灣TOP50", True), ("00919", "群益台灣精選高息", True), ("0050", "元大台灣50", False)]
 LEVELS = (-0.10, -0.20, -0.30)
+WINDOW_MONTHS = 26                   # prices and ex-dividend events cover the SAME window (else the adjustment is partial)
 DIV_MIN = 0.002                      # a reference-price gap below 0.2% is rounding, not a dividend
 
 
@@ -62,14 +63,17 @@ def level_of(dd):
 
 
 def analyse(code, name, rows, today, exdiv=None):
-    dates, raw, adj, events = adjust_series(rows, exdiv or {})
+    stamp = today.strftime("%Y%m%d")
+    rows = [r for r in rows if r[0] <= stamp]
+    exdiv = {d: v for d, v in (exdiv or {}).items() if d <= stamp}
+    dates, raw, adj, events = adjust_series(rows, exdiv)
     if len(adj) < 30:
         return None
     last = adj[-1]
     ath = max(adj)
     n52 = adj[-250:]
     dd_ath, dd_52 = last / ath - 1, last / max(n52) - 1
-    day = raw[-1] / raw[-2] - 1 if raw[-2] else 0.0
+    day = adj[-1] / adj[-2] - 1 if adj[-2] else 0.0         # adjusted: an ex-div day is not a loss
     return {"code": code, "name": name, "date": dates[-1], "close": raw[-1], "day": day, "dd_ath": dd_ath,
             "dd_52w": dd_52, "since": dates[0], "level": level_of(dd_ath), "ex_div": next_ex_div(events, today),
             "last_ex": events[-1] if events else None}
@@ -110,11 +114,11 @@ def render(items, plan_info=None, private=False):
     L = ["", "### ETF 持有觀察", ""]
     for a in items:
         ex = f"｜預估下次除息 {a['ex_div']:%m/%d}" if a["ex_div"] else ""
-        L.append(f"- {a['name']}（{a['code']}）收 {a['close']:.2f}（{a['day']:+.2%}）｜距歷史高 {a['dd_ath']:+.1%}、"
+        L.append(f"- {a['name']}（{a['code']}）收 {a['close']:.2f}（{a['day']:+.2%}）｜距近 2 年高 {a['dd_ath']:+.1%}、"
                  f"距 52 週高 {a['dd_52w']:+.1%}{ex}")
         if a["code"] != "0050":
             L.append(f"  → {advice(a)}")
-    L.append(f"（高點以還原除息價計，資料自 {min(a['since'] for a in items)} 起）")
+    L.append(f"（高點以還原除息價計，只看近 2 年多，資料自 {min(a['since'] for a in items)} 起）")
     if private and plan_info:
         left, bal, k = plan_info
         L.append(f"扣款戶：已扣 {k} 期，約剩 {bal:,.0f} 元，還可扣 {left} 個月" + ("（⚠ 不足 6 個月，注意補錢）" if left < 6 else ""))
@@ -136,7 +140,7 @@ def line_alerts(items, today):
     return out
 
 
-def load_rows(codes, start="20220101"):
+def load_rows(codes, start):
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from tuning import data
     df = data.load_prices("parquet", start, extra_codes=codes)
@@ -147,12 +151,12 @@ def load_rows(codes, start="20220101"):
     return out
 
 
-def load_exdiv(codes, months=14):
+def load_exdiv(codes, months=WINDOW_MONTHS):
     """Official TWSE 除權除息結果 for the last `months` months → {code: {date: (前收盤價, 參考價)}}. Network (cached)."""
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     import pandas as pd
     from tuning import adjust
-    fx = adjust.ExchangeFetcher(budget=40, interval=1.5)
+    fx = adjust.ExchangeFetcher(budget=WINDOW_MONTHS + 5, interval=1.5)
     out = {c: {} for c in codes}
     cur = pd.Timestamp.today().to_period("M")
     for k in range(months):
@@ -166,12 +170,13 @@ def load_exdiv(codes, months=14):
 def build(today=None, plan=None):
     today = today or date.today()
     codes = [c for c, _, _ in WATCH]
-    rows = load_rows(codes)
+    import pandas as pd
+    start = (pd.Timestamp(today).to_period('M') - (WINDOW_MONTHS - 1)).start_time.strftime('%Y%m%d')
+    rows = load_rows(codes, start)
     try:
         ex = load_exdiv(codes)
-    except Exception as exc:                          # still report prices without dividend info
-        print(f"[etf_watch] ex-dividend data unavailable: {type(exc).__name__}: {str(exc)[:120]}")
-        ex = {}
+    except Exception as exc:                          # without ex-dividend data the drawdown would be wrong → skip the section
+        raise RuntimeError(f"ex-dividend data unavailable: {type(exc).__name__}: {str(exc)[:120]}")
     items = [a for c, n, _ in WATCH if (a := analyse(c, n, rows.get(c, []), today, ex.get(c)))]
     return items, payment_months_left(plan, today)
 
