@@ -1,0 +1,34 @@
+name: US prices (held tickers)
+
+# Daily closes for the US tickers in public.us_transactions + USDTWD → public.us_prices (migration 011).
+# Runs after the US close (06:30 Taipei, Tue–Sat). Only traded tickers are fetched; nothing is committed to the repo.
+on:
+  schedule:
+    - cron: "30 22 * * 1-5"
+  workflow_dispatch:
+
+concurrency:
+  group: us-prices
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install requests psycopg2-binary
+
+      - name: Fetch and upsert
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python backend/fetch_us_prices.py
