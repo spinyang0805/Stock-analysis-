@@ -49,6 +49,24 @@ def parse_bot_csv(text):
     return sorted(out.items())
 
 
+def fetch_bot_via_db(conn):
+    """Same CSV fetched by the database server (public._market_get, migration 001) — a different IP than the runner,
+    used when the runner gets the bot-check page."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select status, body from public._market_get(%s, 20000)", (BOT_CSV,))
+            status, body = cur.fetchone()
+        conn.commit()
+        rows = parse_bot_csv(body or "") if status == 200 else []
+        if rows:
+            return rows
+        print(f"[us_prices] Bank of Taiwan CSV via DB unusable (HTTP {status}, starts {(body or '')[:60]!r})")
+    except Exception as exc:
+        conn.rollback()
+        print(f"[us_prices] Bank of Taiwan CSV via DB: {type(exc).__name__}: {str(exc)[:160]}")
+    return None
+
+
 def fetch_bot():
     try:
         r = requests.get(BOT_CSV, headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
@@ -112,7 +130,7 @@ def main():
         for t, start in sorted(start_from.items()):
             src = "yahoo"
             if t == FX:
-                rows = fetch_bot()
+                rows = fetch_bot() or fetch_bot_via_db(conn)
                 if rows:
                     src = "bot"
                 else:
