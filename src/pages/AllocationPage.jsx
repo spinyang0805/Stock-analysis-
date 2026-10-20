@@ -71,8 +71,8 @@ function Calculator50() {
     try {
       const o = JSON.parse(localStorage.getItem(KEY) || "{}");
       if (o.e0050 == null && o.stock != null) o.e0050 = o.stock;   // 舊版只有一個 0050 欄位
-      return Object.fromEntries([...ETFS.map(([k]) => k), "cash"].map((k) => [k, String(o[k] ?? "")]));
-    } catch { return { e0050: "", e006208: "", e009816: "", cash: "" }; }
+      return Object.fromEntries([...ETFS.map(([k]) => k), "cash", "target"].map((k) => [k, String(o[k] ?? (k === "target" ? "50" : ""))]));
+    } catch { return { e0050: "", e006208: "", e009816: "", cash: "", target: "50" }; }
   });
   const change = (which, v) => {
     const next = { ...vals, [which]: v.replace(/[^\d.]/g, "") };
@@ -82,8 +82,9 @@ function Calculator50() {
 
   const parts = ETFS.map(([k, label]) => [label, Number(vals[k]) || 0]);
   const s = parts.reduce((a, [, v]) => a + v, 0), c = Number(vals.cash) || 0, total = s + c;
+  const t = Math.min(100, Math.max(0, Number(vals.target) || 0)) / 100;   // 使用者自訂目標，預設 50%
   const w = total > 0 ? s / total : null;
-  const diff = total / 2 - s;                 // > 0 買進股票 ETF，< 0 賣出股票 ETF
+  const diff = total * t - s;                 // > 0 買進股票 ETF，< 0 賣出股票 ETF
   return (
     <Card title="再平衡計算機（只在本機）" icon={Calculator} style={{ marginTop: 12 }}>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -92,17 +93,20 @@ function Calculator50() {
             <input className="input" inputMode="numeric" value={vals[k]} onChange={(e) => change(k, e.target.value)} />
           </label>
         ))}
+        <label>目標股票比例（%）<br />
+          <input className="input" inputMode="numeric" value={vals.target} onChange={(e) => change("target", e.target.value)} />
+        </label>
         <label>現金（元）<br />
           <input className="input" inputMode="numeric" value={vals.cash} onChange={(e) => change("cash", e.target.value)} />
         </label>
       </div>
       {w == null ? <div className="dim" style={{ marginTop: 8 }}>輸入金額後顯示結果（沒持有的 ETF 留空即可）。</div> : (
         <div style={{ marginTop: 8, lineHeight: 1.8 }}>
-          股票 ETF 合計 <b className="num">{money(s)}</b> 元，實際股票比例：<b className="num">{(w * 100).toFixed(1)}%</b>，與 50% 相差 <b className="num">{signed((w - 0.5) * 100, 1, " 個百分點")}</b>。<br />
-          {Math.abs(diff) < 1 ? "已經是 50/50，不用動。"
-            : diff > 0 ? <>要回到 50/50：<b>用現金買進約 {money(diff)} 元的股票 ETF</b>（三檔任一或分買皆可）。</>
-              : <>要回到 50/50：<b>賣出約 {money(-diff)} 元的股票 ETF</b>（轉成現金）。</>}
-          <div className="dim">未含手續費與證交稅；只在每季決定日之後的下一個開盤調整。009816 上市未滿一年，尚無崩盤時的歷史可驗證。</div>
+          股票 ETF 合計 <b className="num">{money(s)}</b> 元，實際股票比例：<b className="num">{(w * 100).toFixed(1)}%</b>，與目標 {(t * 100).toFixed(0)}% 相差 <b className="num">{signed((w - t) * 100, 1, " 個百分點")}</b>。<br />
+          {Math.abs(diff) < 1 ? "已經在目標比例，不用動。"
+            : diff > 0 ? <>要回到目標：<b>用現金買進約 {money(diff)} 元的股票 ETF</b>（三檔任一或分買皆可）。</>
+              : <>要回到目標：<b>賣出約 {money(-diff)} 元的股票 ETF</b>（轉成現金）。</>}
+          <div className="dim">未含手續費與證交稅；只在每季決定日之後的下一個開盤調整。009816 上市未滿一年，尚無崩盤時的歷史可驗證。<br />目標比例請事先決定、不要因漲跌改動；股票每多 10%，年化約多 1.3%，但 2008 型最大跌幅約深 6 個百分點（40%：約 −28%／5.8%；50%：約 −34%／7.1%；55%：約 −37%／7.8%；100%：約 −58%／13.8%）。</div>
         </div>
       )}
       <div className="dim" style={{ marginTop: 8 }}>這些數字只存在你這台瀏覽器（localStorage），不會傳到任何伺服器或寫進網站資料。</div>
