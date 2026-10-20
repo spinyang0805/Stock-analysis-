@@ -87,7 +87,8 @@ export default function PortfolioPage() {
 
   const twVal = useMemo(() => valuePositions(positions, prices), [positions, prices]);
   // 美股併入同一份持股：價格維持美元，市值與損益以最新匯率換成台幣，合計也用台幣
-  const showUs = usHeld.length > 0 && (view === ALL || view === SPLIT || view === US_ACCOUNT);
+  // 已出清的美股仍有已實現損益與股利 → 合計看「有沒有美股交易」，持股列才看「還有沒有股數」
+  const showUs = (app.usValued?.rows?.length || 0) > 0 && (view === ALL || view === SPLIT || view === US_ACCOUNT);
   const { held, totals } = useMemo(() => {
     if (!showUs) return twVal;
     const u = app.usValued.totals;
@@ -98,7 +99,10 @@ export default function PortfolioPage() {
     t.marketValue += u.mvTwd; t.cost += u.costTwd; t.unrealized += u.unrealizedTwd;
     t.realized += u.realizedTwd; t.dividends += u.dividendsTwd;
     t.totalPnl = t.unrealized + t.realized + t.dividends;
-    t.unrealizedPct = t.cost > 0 ? (t.unrealized / t.cost) * 100 : NaN;
+    // 報酬率只用「有報價」的成本當分母（和 portfolio.js 一樣），沒報價的部位不稀釋報酬率
+    const twPricedCost = twVal.held.reduce((s, r) => s + (Number.isFinite(r.marketValue) ? r.cost : 0), 0);
+    const pricedCost = twPricedCost + (u.pricedCostTwd || 0);
+    t.unrealizedPct = pricedCost > 0 ? (t.unrealized / pricedCost) * 100 : NaN;
     for (const r of all) r.weight = t.marketValue > 0 && Number.isFinite(r.marketValue) ? (r.marketValue / t.marketValue) * 100 : NaN;
     return { held: all, totals: t };
   }, [twVal, showUs, usHeld, app.usValued]);

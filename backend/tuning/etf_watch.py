@@ -92,38 +92,54 @@ def advice(a):
 
 
 def payment_months_left(plan, today):
-    """Months of payments the payment account still covers. Deductions happen on `day` of each month from `from`."""
+    """Months of payments the payment account still covers. Deductions on `day` of each month from `from` (YYYY-MM),
+    and never after `until` (YYYY-MM, last loan payment) when given. → (months left, balance now, deductions so far)."""
     if not plan:
         return None
     y, m = (int(x) for x in plan["from"].split("-"))
+    end = tuple(int(x) for x in plan["until"].split("-")) if plan.get("until") else None
     day = int(plan.get("day", 1))
     k, cur = 0, date(y, m, min(day, 28))
-    while cur <= today:
+    while cur <= today and (end is None or (y, m) <= end):
         k += 1
         m += 1
         if m > 12:
             y, m = y + 1, 1
         cur = date(y, m, min(day, 28))
     bal = plan["start_balance"] - k * plan["pay"]
-    return max(0, int(bal // plan["pay"])), bal, k
+    left = max(0, int(bal // plan["pay"]))
+    if end is not None:                               # cannot need more months than payments remain
+        left = min(left, max(0, (end[0] - y) * 12 + end[1] - m + 1))
+    return left, bal, k
+
+
+def _add_months(y, m, k):
+    t = y * 12 + (m - 1) + k
+    return t // 12, t % 12 + 1
 
 
 def plan_from_tracker(data, updated):
     """loan_tracker row (site 借貸試算 → 目前狀況) → plan for payment_months_left: the 扣款戶 balance the user saved on
-    `updated` (date), monthly payment from the loan terms, deducted on the first payment's day of month."""
+    `updated` (date; a zero balance is valid), monthly payment from the loan terms, deducted on the first payment's
+    day of month, only within the first..last payment months of the loan."""
     acc = {a.get("key"): a for a in (data.get("accounts") or []) if isinstance(a, dict)}
-    bal = float((acc.get("deduct") or {}).get("amount") or 0)
+    if "deduct" not in acc:
+        return None
+    bal = max(0.0, float(acc["deduct"].get("amount") or 0))
     loan, rate, n = float(data.get("loan") or 0), float(data.get("rate") or 0), int(data.get("months") or 0)
     fp = str(data.get("firstPayment") or "")
-    if bal <= 0 or loan <= 0 or n <= 0 or len(fp) != 10:
+    if loan <= 0 or n <= 0 or len(fp) != 10:
         return None
     r = rate / 100 / 12
     pay = loan / n if r == 0 else loan * r / (1 - (1 + r) ** -n)
-    day = int(fp[8:10])
+    fy, fm, day = int(fp[:4]), int(fp[5:7]), int(fp[8:10])
     y, m = updated.year, updated.month
     if updated.day >= day:                            # this month's deduction is already in the saved balance
-        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
-    return {"start_balance": bal, "from": f"{y:04d}-{m:02d}", "pay": round(pay), "day": day}
+        y, m = _add_months(y, m, 1)
+    if (y, m) < (fy, fm):
+        y, m = fy, fm
+    ly, lm = _add_months(fy, fm, n - 1)
+    return {"start_balance": bal, "from": f"{y:04d}-{m:02d}", "until": f"{ly:04d}-{lm:02d}", "pay": round(pay), "day": day}
 
 
 def render(items, plan_info=None, private=False):
@@ -219,7 +235,12 @@ def selftest():
     tr = {"loan": 2000000, "rate": 2.9, "months": 120, "firstPayment": "2026-05-10",
           "accounts": [{"key": "deduct", "amount": 100000}]}
     pl = plan_from_tracker(tr, date(2026, 10, 20))
-    assert pl == {"start_balance": 100000.0, "from": "2026-11", "pay": 19220, "day": 10}, pl
+    assert pl == {"start_balance": 100000.0, "from": "2026-11", "until": "2036-04", "pay": 19220, "day": 10}, pl
+    assert plan_from_tracker(tr, date(2026, 4, 1))["from"] == "2026-05", "no deduction before the first payment"
+    z = plan_from_tracker({**tr, "accounts": [{"key": "deduct", "amount": 0}]}, date(2026, 10, 20))
+    assert z and payment_months_left(z, date(2026, 10, 21))[0] == 0, "zero balance is a valid (empty) account"
+    late = plan_from_tracker(tr, date(2036, 3, 20))
+    assert payment_months_left(late, date(2037, 1, 1))[2] == 1, "no deductions after the last payment (2036-04)"
     assert plan_from_tracker(tr, date(2026, 10, 5))["from"] == "2026-10"
     assert payment_months_left(pl, date(2026, 11, 10))[:3] == (4, 100000 - 19220, 1)
     print("etf_watch selftest OK")

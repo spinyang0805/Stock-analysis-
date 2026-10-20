@@ -11,25 +11,37 @@ import { fxSourceLabel } from "../lib/usPortfolio.js";
 import { DEFAULT_TRACKER, applyLoanImport, loanOverview, parseLoanXlsxRows, sanitizeTracker } from "../lib/loanTracker.js";
 import { todayISO } from "../lib/format.js";
 
-const KEY = "loanTracker";
+// 本機暫存依使用者分開（登出、換帳號不會看到上一個人的數字）
+const keyFor = (user) => `loanTracker:${user?.id || "guest"}`;
 const money = (v) => (Number.isFinite(v) ? Math.round(v).toLocaleString("zh-TW") : "--");
 const signedMoney = (v) => (Number.isFinite(v) ? (v < 0 ? "−" : v > 0 ? "+" : "") + Math.round(Math.abs(v)).toLocaleString("zh-TW") : "--");
 
-function loadLocal() {
-  try { return sanitizeTracker(JSON.parse(localStorage.getItem(KEY) || "null")); } catch { return DEFAULT_TRACKER; }
+function loadLocal(key) {
+  try { return sanitizeTracker(JSON.parse(localStorage.getItem(key) || "null")); } catch { return DEFAULT_TRACKER; }
 }
 
 export default function LoanStatus() {
   const app = useApp();
   const user = app?.user;
-  const [t, setT] = useState(loadLocal);
+  const key = keyFor(user);
+  const [t, setT] = useState(() => loadLocal(key));
+  const [tKey, setTKey] = useState(key);
+  if (tKey !== key) { setTKey(key); setT(loadLocal(key)); }   // 換人 → 換成那個人的本機資料
   const [msg, setMsg] = useState("");
   const [dbState, setDbState] = useState("idle"); // idle | loading | ok | error
   const [closes, setCloses] = useState({});
   const [acc, setAcc] = useState("cathay");
   const fileRef = useRef(null);
 
-  useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(t)); } catch { /* ignore */ } }, [t]);
+  useEffect(() => { if (tKey === key) { try { localStorage.setItem(key, JSON.stringify(t)); } catch { /* ignore */ } } }, [t, key, tKey]);
+  useEffect(() => {                                 // 舊的共用鍵：交給第一個登入的人（本站只有一位使用者），然後刪掉
+    if (!user) return;
+    try {
+      const old = localStorage.getItem("loanTracker");
+      if (old && !localStorage.getItem(key)) { localStorage.setItem(key, old); setT(loadLocal(key)); }
+      localStorage.removeItem("loanTracker");
+    } catch { /* ignore */ }
+  }, [user, key]);
   useEffect(() => { loadLatestPrices().then(setCloses).catch(() => {}); }, []);
 
   // 登入後載入雲端資料（有就覆蓋本機）

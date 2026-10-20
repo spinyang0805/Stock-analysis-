@@ -394,7 +394,9 @@ def main(argv=None):
             conn = private_store._connect()            # 扣款戶 balance the user saved on the site (借貸試算 → 目前狀況)
             try:
                 with conn.cursor() as cur:
-                    cur.execute("select data, updated_at from public.loan_tracker order by updated_at desc limit 1")
+                    # the owner = the user whose transactions the holdings report uses (single-user site)
+                    cur.execute("select t.data, t.updated_at from public.loan_tracker t where t.user_id = "
+                                "(select user_id from public.transactions group by user_id order by count(*) desc limit 1)")
                     row = cur.fetchone()
             finally:
                 conn.close()

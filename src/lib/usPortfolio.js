@@ -48,7 +48,8 @@ export function parseUsRows(rows) {
     const amountN = numOf(get(r, "應收/付(-)金額"));
     const fx = numOf(get(r, "匯率"));
     const amount = Number.isFinite(amountN) ? amountN : null;
-    const base = [date, ticker, side, shares, price, amount ?? ""].join("|");
+    // 有淨收付金額時沿用原本的鍵（已匯入的列不會變成重複）；沒有時把費用也放進鍵，避免不同費用的兩筆被當成重複
+    const base = [date, ticker, side, shares, price, amount ?? `fee${fee}/${otherFee}`].join("|");
     const n = (seen.get(base) || 0) + 1;
     seen.set(base, n);
     const tx = {
@@ -131,7 +132,7 @@ export function valueUsPositions(positions, prices, fx) {
   const totals = {
     mvUsd: sum(priced, "mvUsd"), costUsd: sum(held, "cost"), unrealizedUsd: sum(priced, "unrealizedUsd"),
     realizedUsd: sum(rows, "realized"), dividendsUsd: sum(rows, "dividends"),
-    mvTwd: sum(priced, "mvTwd"), costTwd: sum(held, "costTwd"), unrealizedTwd: sum(priced, "unrealizedTwd"),
+    mvTwd: sum(priced, "mvTwd"), costTwd: sum(held, "costTwd"), pricedCostTwd: sum(priced, "costTwd"), unrealizedTwd: sum(priced, "unrealizedTwd"),
     realizedTwd: sum(rows, "realizedTwd"), dividendsTwd: sum(rows, "dividendsTwd"),
     unpriced: held.length - priced.length,
   };
