@@ -82,8 +82,8 @@ export default function LoanStatus() {
   const perf = t.loan > 0 && t.firstPayment ? loanPerformance(t, o, today) : null;
   const [customRate, setCustomRate] = useState(6);
   const scen = perf ? [
-    ...(Number.isFinite(perf.annual) ? [{ label: "照目前的年化報酬", r: perf.annual, note: perf.days < 365 ? "期間未滿一年，只是參考" : "" }] : []),
-    { label: "剛好等於信貸利率", r: (1 + perf.loanRate / 12) ** 12 - 1, note: "之後只賺到跟利率一樣：利息剛好打平，還完時剩下的就是目前已經多賺的部分（加上它的成長）" },
+    ...(Number.isFinite(perf.annual) ? [{ label: "照目前", r: perf.annual }] : []),
+    { label: "跟利率一樣", r: (1 + perf.loanRate / 12) ** 12 - 1 },
     { label: "自訂", r: customRate / 100, custom: true },
   ].map((x) => ({ ...x, ...projectToMaturity(t, o, x.r) })) : [];
 
@@ -129,34 +129,36 @@ export default function LoanStatus() {
 
       {perf && (
         <section className={`loan-hero ${perf.spread > 0 ? "good" : perf.spread < 0 ? "bad" : ""}`} aria-labelledby="loan-perf-h">
-          <h3 id="loan-perf-h" className="loan-hero-q">賺了幾 %？有沒有贏過信貸利率？</h3>
+          <h3 id="loan-perf-h" className="loan-hero-q">有沒有贏過信貸利率？</h3>
           <p className="loan-hero-a">
-            從撥款日 {perf.start} 起 {Math.round(perf.days)} 天，這包資產本身賺了 <b className="num">{signedMoney(perf.gain)}</b> 元
-            （<b className="num">{pct(perf.gainPct)}</b>，還沒扣利息）。
-            {Number.isFinite(perf.annual) ? <> 換算成一年是 <b className="num">{pct(perf.annual)}</b>，信貸利率 {(perf.loanRate * 100).toFixed(2)}%，
-              {perf.spread >= 0 ? <>多賺 <b className="num">{(perf.spread * 100).toFixed(1)}</b> 個百分點。</> : <>還差 <b className="num">{(-perf.spread * 100).toFixed(1)}</b> 個百分點。</>}</> : null}
+            {!Number.isFinite(perf.spread) ? "資料不足，還算不出來。"
+              : perf.spread >= 0 ? <>贏了，每年多賺約 <b className="num">{(perf.spread * 100).toFixed(1)}</b> 個百分點。</>
+              : <>還沒贏，每年還差約 <b className="num">{(-perf.spread * 100).toFixed(1)}</b> 個百分點。</>}
           </p>
-          {perf.days < 365 && <p className="loan-fine">⚠ 才 {Math.round(perf.days)} 天，換算成一年的數字會被短期漲跌放大很多，看「贏或輸」就好，別把它當成每年都能賺的數字。</p>}
-          <p className="loan-fine">算法：把貸款 {money(perf.invested)} 元當成投入，每期還款當成從這包資產拿出去，今天的總資產 {money(o.assets)} 元當成拿回來，算年化報酬（XIRR）。
-            年化報酬高於信貸利率，就代表借錢投資到目前為止是划算的。</p>
-          <div className="loan-table-wrap">
-            <table className="loan-table">
-              <caption className="loan-fine" style={{ textAlign: "left" }}>如果之後每年都賺這麼多，照常每月還款，到 {o.months} 期還完時：</caption>
-              <thead><tr><th>假設每年報酬</th><th>還完時剩下的資產</th><th>說明</th></tr></thead>
-              <tbody>
-                {scen.map((x) => (
-                  <tr key={x.label}>
-                    <td data-label="假設每年報酬">{x.custom ? (
-                      <label>自訂 <input className="input num" style={{ width: 80 }} type="number" step={0.5} value={customRate} onChange={(e) => setCustomRate(Number(e.target.value) || 0)} aria-label="自訂每年報酬 %" /> %</label>
-                    ) : <>{x.label}（{pct(x.r)}）</>}</td>
-                    <td className="num" data-label="還完時剩下">{signedMoney(x.profit)} 元</td>
-                    <td data-label="說明">{x.note || (x.profit >= 0 ? "還完貸款後還有這麼多是賺的" : "還不完，要自己補這麼多")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="loan-stats">
+            <div className="loan-stat"><div className="loan-stat-label">已經賺（未扣利息）</div><div className="loan-stat-value num">{pct(perf.gainPct)}</div><div className="loan-stat-sentence">{signedMoney(perf.gain)} 元・{Math.round(perf.days)} 天</div></div>
+            <div className="loan-stat"><div className="loan-stat-label">換算成一年</div><div className="loan-stat-value num">{pct(perf.annual)}</div><div className="loan-stat-sentence">{perf.days < 365 ? "未滿一年，僅供參考" : "年化報酬"}</div></div>
+            <div className="loan-stat"><div className="loan-stat-label">信貸利率</div><div className="loan-stat-value num">{(perf.loanRate * 100).toFixed(2)}%</div><div className="loan-stat-sentence">要贏過這個才划算</div></div>
           </div>
-          <p className="loan-fine">這只是「如果每年都一樣」的算術，實際每年漲跌不同；要看各種可能和機率，請切到「未來預估」分頁。還剩 {Math.max(0, o.months - o.paid)} 期。</p>
+
+          <h4 className="loan-mini-label" style={{ margin: "var(--space-4) 0 var(--space-2)" }}>還完 {o.months} 期時預估剩下（每年都賺一樣多的話）</h4>
+          <div className="loan-minis">
+            {scen.map((x) => (
+              <div className="loan-mini" key={x.label}>
+                <div className="loan-mini-label">{x.custom ? (
+                  <label>每年 <input className="input num" style={{ width: 64, padding: "2px 6px" }} type="number" step={0.5} value={customRate} onChange={(e) => setCustomRate(Number(e.target.value) || 0)} aria-label="自訂每年報酬 %" /> %</label>
+                ) : `${x.label}（${pct(x.r)}）`}</div>
+                <div className="loan-mini-value num">{signedMoney(x.profit)}</div>
+                <div className="loan-mini-sentence">{x.profit >= 0 ? "元，還完後是賺的" : "元，還不完要自己補"}</div>
+              </div>
+            ))}
+          </div>
+
+          <details className="loan-fold" style={{ marginTop: "var(--space-3)" }}>
+            <summary>怎麼算的？</summary>
+            <p className="loan-fine">從撥款日 {perf.start} 起：把貸款 {money(perf.invested)} 元當投入，每期還款當成從這包資產拿出去，今天的總資產 {money(o.assets)} 元當成拿回來，算年化報酬（XIRR）。高於信貸利率就代表借錢投資划算。</p>
+            <p className="loan-fine">「跟利率一樣」那格：利息剛好打平，剩下的就是目前已多賺的部分加上它的成長。預估只是「每年都一樣」的算術；各種可能和機率請看「未來預估」分頁。還剩 {Math.max(0, o.months - o.paid)} 期。</p>
+          </details>
         </section>
       )}
       <section className="loan-hero" aria-labelledby="loan-pay-h">
