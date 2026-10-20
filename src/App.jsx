@@ -2,7 +2,7 @@
 // 個股頁、持股、交易、AI、帳號管理各自在 src/pages/
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import {
-  BarChart3, Bot, ChevronsLeft, ChevronsRight, LineChart, ListOrdered, PieChart, LogIn, LogOut, Sparkles, Trophy, Users, Wallet, UserCircle2,
+  BarChart3, Bot, ChevronsLeft, ChevronsRight, Landmark, LineChart, ListOrdered, Menu, PieChart, LogIn, LogOut, Sparkles, Trophy, Users, Wallet,
 } from "lucide-react";
 import { AppStateProvider, useApp } from "./lib/appState.jsx";
 import { navigate, useRoute } from "./lib/router.js";
@@ -16,6 +16,7 @@ const PnlPage = lazy(() => import("./pages/PnlPage.jsx"));
 const RankPage = lazy(() => import("./pages/RankPage.jsx"));
 const AllocationPage = lazy(() => import("./pages/AllocationPage.jsx"));
 const ComboPage = lazy(() => import("./pages/ComboPage.jsx"));
+const LoanSimPage = lazy(() => import("./pages/LoanSimPage.jsx"));
 
 const LegacyAI = lazy(() => import("./pages/LegacyPages.jsx").then((m) => ({ default: m.AIChatPage })));
 const LegacyAdmin = lazy(() => import("./pages/LegacyPages.jsx").then((m) => ({ default: m.AdminPage })));
@@ -32,6 +33,7 @@ const NAV = [
   { id: "combo", label: "組合拳訊號", short: "訊號", icon: Sparkles, href: () => "/combo" },
   { id: "rank", label: "每月排名", short: "排名", icon: Trophy, href: () => "/rank" },
   { id: "allocation", label: "資產配置", short: "配置", icon: PieChart, href: () => "/allocation" },
+  { id: "loan", label: "借貸試算", short: "借貸", icon: Landmark, href: () => "/loan" },
   { id: "ai", label: "AI 選股", short: "AI", icon: Bot, href: () => "/ai" },
   { id: "admin", label: "帳號管理", icon: Users, href: () => "/admin", role: "admin" },
 ];
@@ -96,6 +98,7 @@ function Shell() {
           {page === "rank" && <RankPage />}
           {page === "combo" && <ComboPage />}
           {page === "allocation" && <AllocationPage />}
+          {page === "loan" && <LoanSimPage />}
           {page === "ai" && <LegacyAI />}
           {page === "admin" && app.role === "admin" && <div className="page"><LegacyAdmin /></div>}
         </Suspense>
@@ -108,23 +111,27 @@ function Shell() {
             <n.icon size={20} aria-hidden="true" /><span>{n.short || n.label}</span>
           </a>
         ))}
-        <button type="button" className="nav-item" onClick={() => (app.user ? setAccount(true) : app.signIn())}>
-          {app.user ? <UserCircle2 size={20} aria-hidden="true" /> : <LogIn size={20} aria-hidden="true" />}
-          <span>{app.user ? "帳號" : "登入"}</span>
+        <button type="button" className="nav-item" onClick={() => setAccount(true)}>
+          <Menu size={20} aria-hidden="true" />
+          <span>更多</span>
         </button>
       </nav>
 
-      {account && app.user && (
-        <Modal title="帳號" onClose={() => setAccount(false)}>
-          <div className="user-chip" style={{ marginBottom: 12 }}>
-            {app.user.user_metadata?.avatar_url ? <img src={app.user.user_metadata.avatar_url} alt="" /> : <span className="avatar">{(app.user.email || "?")[0].toUpperCase()}</span>}
-            <div><div className="name">{name}</div><div className="dim">{app.user.email}</div></div>
-          </div>
+      {account && (
+        <Modal title="更多" onClose={() => setAccount(false)}>
+          {app.user && (
+            <div className="user-chip" style={{ marginBottom: 12 }}>
+              {app.user.user_metadata?.avatar_url ? <img src={app.user.user_metadata.avatar_url} alt="" /> : <span className="avatar">{(app.user.email || "?")[0].toUpperCase()}</span>}
+              <div><div className="name">{name}</div><div className="dim">{app.user.email}</div></div>
+            </div>
+          )}
           <div className="grid" style={{ gap: 8 }}>
             {items.slice(4).map((n) => (
               <button key={n.id} type="button" className="btn" onClick={() => { setAccount(false); navigate(n.href()); }}><n.icon size={16} />{n.label}</button>
             ))}
-            <button type="button" className="btn danger" onClick={() => { setAccount(false); app.signOut(); }}><LogOut size={16} />登出</button>
+            {app.user
+              ? <button type="button" className="btn danger" onClick={() => { setAccount(false); app.signOut(); }}><LogOut size={16} />登出</button>
+              : <button type="button" className="btn primary" onClick={() => { setAccount(false); app.signIn(); }} disabled={!app.configured}><LogIn size={16} />Google 登入</button>}
           </div>
         </Modal>
       )}
