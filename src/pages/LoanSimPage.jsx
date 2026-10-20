@@ -5,6 +5,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Landmark, LineChart, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { Card } from "../components/ui.jsx";
 import "./LoanSimPage.css";
+import LoanStatus from "./LoanStatus.jsx";
 import { fetchStaticJson } from "../lib/data.js";
 import {
   ETF_KEYS, CASH_KEYS, loanPayment, simulate, quantile, SCEN_GROUPS, SCEN_DEFS, DEFAULT_SCEN_ON,
@@ -32,7 +33,7 @@ const DEFAULTS = {
   entry: "lump", dcaN: 12, dipX: 10, dipY: 20, dipM: 12,
   rebalance: false, rebTarget: 50,
   firstMonth: "2004-01", sel: "",
-  tab: "future", scen: "base", retMkt: 8, ret919: 7, volMkt: 20, vol919: 15, method: "boot", origin: nextMonthLabel(),
+  tab: "status", scen: "base", retMkt: 8, ret919: 7, volMkt: 20, vol919: 15, method: "boot", origin: nextMonthLabel(),
 };
 
 const SCENARIOS = { cons: ["保守", 4, 4], base: ["基準", 8, 7], opt: ["樂觀", 11, 9] };
@@ -60,7 +61,7 @@ function sanitize(o) {
     rebalance: !!o.rebalance, rebTarget: num(o.rebTarget, 0, 100, d.rebTarget),
     firstMonth: typeof o.firstMonth === "string" && /^(19|20)\d{2}-(0[1-9]|1[0-2])$/.test(o.firstMonth) ? o.firstMonth : d.firstMonth,
     sel: typeof o.sel === "string" ? o.sel : "",
-    tab: o.tab === "hist" ? "hist" : "future",
+    tab: o.tab === "hist" ? "hist" : o.tab === "future" ? "future" : "status",
     scen: o.scen === "custom" || SCENARIOS[o.scen] ? o.scen : d.scen,
     retMkt: num(o.retMkt, -20, 40, d.retMkt), ret919: num(o.ret919, -20, 40, d.ret919),
     volMkt: num(o.volMkt, 1, 80, d.volMkt), vol919: num(o.vol919, 1, 80, d.vol919),
@@ -274,6 +275,7 @@ export default function LoanSimPage() {
   const model = p;
   const months = hist?.months, tr = hist?.tr;
   const isFuture = p.tab === "future";
+  const isHist = p.tab === "hist";
   const [seed, setSeed] = useState(20261101);
   const [scenOn, setScenOn] = useState(DEFAULT_SCEN_ON);
   const [custom, setCustom] = useState([]);
@@ -343,14 +345,32 @@ export default function LoanSimPage() {
   }) : []), [snaps, hist]);
 
   const out = useMemo(() => {
-    if (!months || !tr || isFuture) return null;
+    if (!months || !tr || !isHist) return null;
     const starts = [];
     for (let i = 0; i + n < months.length; i += 1) if (months[i] >= p.firstMonth) starts.push(i);
     if (!starts.length) return { starts, results: [] };
     const results = starts.map((i) => ({ month: months[i], idx: i, ...simulate(tr.slice(i, i + n + 1), months.slice(i, i + n + 1), model, false) }));
     return { starts, results };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [months, tr, isFuture, JSON.stringify(model)]);
+  }, [months, tr, isHist, JSON.stringify(model)]);
+
+  const isStatus = p.tab === "status";
+  const headEl = (
+    <header className="loan-head">
+        <h2><Landmark size={22} aria-hidden="true" />借貸試算</h2>
+        <p className="loan-lead">{isStatus ? "追蹤這筆貸款還了多少、還剩多少，以及貸款買的股票現在是賺還是賠。" : "如果借一筆錢去買 ETF、每月還款，最後大概能賺多少、會不會不夠還？輸入只存在這台瀏覽器，不會送出。"}</p>
+      </header>
+  );
+  const tabsEl = (
+    <div className="loan-tabs" role="group" aria-label="試算方式">
+        {[["status", "目前狀況", "還了多少、現在賺賠"], ["future", "未來預估", "模擬 2,000 種可能的未來"], ["hist", "歷史驗證", "套用過去真實的漲跌"]].map(([v, t, d]) => (
+          <button key={v} type="button" className={`loan-tab${p.tab === v ? " on" : ""}`} aria-pressed={p.tab === v} onClick={() => set({ tab: v })}>
+            <span className="loan-tab-t">{t}</span><span className="loan-tab-d">{d}</span>
+          </button>
+        ))}
+      </div>
+  );
+  if (isStatus) return <div className="page loan-page">{headEl}{tabsEl}<LoanStatus /></div>;
 
   if (hist === undefined) return <div className="page dim">載入中…</div>;
   if (!hist) return <div className="page"><div className="notice warn">讀不到 etf_history.json，無法試算。</div></div>;
@@ -525,7 +545,7 @@ export default function LoanSimPage() {
           {p.rebalance && <Wrap><Field label="目標股票比例" suffix="%" value={p.rebTarget} onChange={(v) => set({ rebTarget: v })} max={100} /></Wrap>}
         </Group>
 
-        {!isFuture && (
+        {isHist && (
           <Group title="5. 歷史資料起點" summary={`從 ${p.firstMonth} 起`}>
             <div className="loan-field">
               <label htmlFor="loan-first" className="loan-field-label">歷史資料從哪個月開始算</label>
@@ -546,18 +566,8 @@ export default function LoanSimPage() {
 
   return (
     <div className="page loan-page">
-      <header className="loan-head">
-        <h2><Landmark size={22} aria-hidden="true" />借貸試算</h2>
-        <p className="loan-lead">如果借一筆錢去買 ETF、每月還款，最後大概能賺多少、會不會不夠還？輸入只存在這台瀏覽器，不會送出。</p>
-      </header>
-
-      <div className="loan-tabs" role="group" aria-label="試算方式">
-        {[["future", "未來預估", "模擬 2,000 種可能的未來"], ["hist", "歷史驗證", "套用過去真實的漲跌"]].map(([v, t, d]) => (
-          <button key={v} type="button" className={`loan-tab${p.tab === v ? " on" : ""}`} aria-pressed={p.tab === v} onClick={() => set({ tab: v })}>
-            <span className="loan-tab-t">{t}</span><span className="loan-tab-d">{d}</span>
-          </button>
-        ))}
-      </div>
+      {headEl}
+      {tabsEl}
 
       {isFuture && job.err && (
         <div className="notice warn loan-gap">
@@ -746,7 +756,7 @@ export default function LoanSimPage() {
       ))}
 
       {/* ===== 歷史驗證 ===== */}
-      {!isFuture && (results.length === 0 ? (
+      {isHist && (results.length === 0 ? (
         <>
           <div className="notice warn loan-gap">沒有足夠長的歷史可以跑這個期數／進場月份。</div>
           {assumptions}

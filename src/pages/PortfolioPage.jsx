@@ -9,6 +9,7 @@ import { useApp } from "../lib/appState.jsx";
 import { isStale, useQuotes } from "../lib/useQuotes.js";
 import { accountOf, computePositions, equityCurve, listAccounts, periodChange, valuePositions } from "../lib/portfolio.js";
 import AccountPicker, { ALL, SPLIT, useAccountView } from "../components/AccountPicker.jsx";
+import { US_ACCOUNT, fxSourceLabel } from "../lib/usPortfolio.js";
 import { fetchLongHistory } from "../lib/market.js";
 import { fetchStockBundle, loadLatestPrices, normalizeRows } from "../lib/data.js";
 import { computeIndicators } from "../lib/indicators.js";
@@ -27,7 +28,11 @@ export default function PortfolioPage() {
   const [closes, setCloses] = useState({});
   const [advice, setAdvice] = useState({});
   const [sort, setSort] = useState("mv");
-  const accounts = useMemo(() => listAccounts(app.transactions), [app.transactions]);
+  const usHeld = app.usValued?.held || [];
+  const accounts = useMemo(() => {
+    const a = listAccounts(app.transactions);
+    return usHeld.length ? [...a, US_ACCOUNT] : a;
+  }, [app.transactions, usHeld.length]);
   const [view, setView] = useAccountView(accounts);
   const txs = useMemo(() => (view === ALL || view === SPLIT ? app.transactions : app.transactions.filter((t) => accountOf(t) === view)), [app.transactions, view]);
   const positions = useMemo(() => computePositions(txs, { byAccount: view === SPLIT }), [txs, view]);
@@ -80,7 +85,23 @@ export default function PortfolioPage() {
   }, [codes, q.quotes, closes, history]);
   const live = useMemo(() => Object.fromEntries(Object.entries(q.quotes).map(([c, v]) => [c, v.price]).filter(([, v]) => Number.isFinite(v))), [q.quotes]);
 
-  const { held, totals } = useMemo(() => valuePositions(positions, prices), [positions, prices]);
+  const twVal = useMemo(() => valuePositions(positions, prices), [positions, prices]);
+  // 美股併入同一份持股：價格維持美元，市值與損益以最新匯率換成台幣，合計也用台幣
+  const showUs = usHeld.length > 0 && (view === ALL || view === SPLIT || view === US_ACCOUNT);
+  const { held, totals } = useMemo(() => {
+    if (!showUs) return twVal;
+    const u = app.usValued.totals;
+    const usRows = usHeld.map((r) => ({ ...r, isUS: true, account: US_ACCOUNT, avgCost: r.avgCost, fifoAvg: NaN, fifoPct: NaN,
+      marketValue: r.mvTwd, unrealized: r.unrealizedTwd, cost: r.costTwd }));
+    const all = [...twVal.held, ...usRows];
+    const t = { ...twVal.totals };
+    t.marketValue += u.mvTwd; t.cost += u.costTwd; t.unrealized += u.unrealizedTwd;
+    t.realized += u.realizedTwd; t.dividends += u.dividendsTwd;
+    t.totalPnl = t.unrealized + t.realized + t.dividends;
+    t.unrealizedPct = t.cost > 0 ? (t.unrealized / t.cost) * 100 : NaN;
+    for (const r of all) r.weight = t.marketValue > 0 && Number.isFinite(r.marketValue) ? (r.marketValue / t.marketValue) * 100 : NaN;
+    return { held: all, totals: t };
+  }, [twVal, showUs, usHeld, app.usValued]);
   const curve = useMemo(() => equityCurve(txs, history, { livePrices: live, today: todayISO() }), [txs, history, live]);
   // 今日損益：昨日已持有的股數 × 漲跌；今天買進的以（現價 − 成交價）計
   const dayPnl = useMemo(() => {
@@ -88,6 +109,7 @@ export default function PortfolioPage() {
     let sum = 0;
     for (const r of held) {
       const qq = q.quotes[r.code];
+      if (r.isUS) continue;
       if (!Number.isFinite(qq?.price) || !Number.isFinite(qq?.change)) continue;
       const todays = txs.filter((t) => t.stock_id === r.code && t.trade_date === today && t.side === "buy" && (!r.account || accountOf(t) === r.account));
       const boughtToday = todays.reduce((s, t) => s + Number(t.shares), 0);
@@ -134,7 +156,7 @@ export default function PortfolioPage() {
 
       {app.error && <div className="notice err" style={{ marginBottom: 12 }}>{app.error}</div>}
 
-      {!app.transactions.length ? (
+      {!app.transactions.length && !usHeld.length ? (
         <Card>
           <Empty icon={Wallet} title="還沒有任何交易紀錄">
             <div className="muted">匯入國泰、亞東等券商的對帳單 CSV，或手動記一筆。</div>
@@ -198,14 +220,14 @@ export default function PortfolioPage() {
                     const qq = q.quotes[r.code];
                     const adv = advice[r.code];
                     return (
-                      <tr key={`${r.code}|${r.account}`} className="clickable" onClick={() => navigate(`/stock/${r.code}`, { tab: "position" })}>
-                        <td className="left"><b className="num" style={{ color: "var(--gold)" }}>{r.code}</b> {r.name}
+                      <tr key={`${r.code}|${r.account}`} className={r.isUS ? "" : "clickable"} onClick={r.isUS ? undefined : () => navigate(`/stock/${r.code}`, { tab: "position" })}>
+                        <td className="left"><b className="num" style={{ color: "var(--gold)" }}>{r.code}</b> {r.name}{r.isUS && <> <Badge tone="blue">美股</Badge></>}
                           {view === ALL && r.accounts?.length > 1 && <span className="dim">（{r.accounts.length} 個帳戶）</span>}</td>
-                        <td className="left">{view === SPLIT ? <Badge>{r.account}</Badge> : <Badge tone={app.styleOf(r.code) === "波段" ? "warn" : "blue"}>{app.styleOf(r.code)}</Badge>}</td>
+                        <td className="left">{view === SPLIT ? <Badge>{r.account}</Badge> : r.isUS ? <Badge tone="blue">美股</Badge> : <Badge tone={app.styleOf(r.code) === "波段" ? "warn" : "blue"}>{app.styleOf(r.code)}</Badge>}</td>
                         <td>{fmtInt(r.shares)}</td>
-                        <td>{fmt(r.avgCost)}</td>
+                        <td>{r.isUS ? "US$" : ""}{fmt(r.avgCost)}</td>
                         <td>{fmt(r.fifoAvg)}</td>
-                        <td style={{ color: trendColor(qq?.change), fontWeight: 700 }}>{fmt(r.price)}</td>
+                        <td style={{ color: trendColor(qq?.change), fontWeight: 700 }}>{r.isUS ? (Number.isFinite(r.price) ? `US$${fmt(r.price)}` : "尚無報價") : fmt(r.price)}</td>
                         <td style={{ color: trendColor(qq?.change) }}>{signed(qq?.changePct, 2, "%")}</td>
                         <td>{fmtInt(r.marketValue)}</td>
                         <td style={{ color: trendColor(r.unrealized) }}>{signed(r.unrealized, 0)}</td>
@@ -224,11 +246,11 @@ export default function PortfolioPage() {
                 const qq = q.quotes[r.code];
                 const adv = advice[r.code];
                 return (
-                  <button type="button" key={`${r.code}|${r.account}`} className="card" style={{ textAlign: "left", cursor: "pointer", padding: 12 }} onClick={() => navigate(`/stock/${r.code}`, { tab: "position" })}>
+                  <button type="button" key={`${r.code}|${r.account}`} className="card" style={{ textAlign: "left", cursor: r.isUS ? "default" : "pointer", padding: 12 }} onClick={r.isUS ? undefined : () => navigate(`/stock/${r.code}`, { tab: "position" })}>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                      <b className="num" style={{ color: "var(--gold)" }}>{r.code}</b><span>{r.name}</span>
+                      <b className="num" style={{ color: "var(--gold)" }}>{r.code}</b><span>{r.name}{r.isUS && <> <Badge tone="blue">美股</Badge></>}</span>
                       {r.account && <span className="dim">{r.account}</span>}
-                      <span className="num" style={{ marginLeft: "auto", color: trendColor(qq?.change), fontWeight: 800 }}>{fmt(r.price)}</span>
+                      <span className="num" style={{ marginLeft: "auto", color: trendColor(qq?.change), fontWeight: 800 }}>{r.isUS ? (Number.isFinite(r.price) ? `US$${fmt(r.price)}` : "尚無報價") : fmt(r.price)}</span>
                     </div>
                     <div className="num" style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 6 }}>
                       <span className="muted">{fmtInt(r.shares)} 股・整體 {fmt(r.avgCost)}・先進先出 {fmt(r.fifoAvg)}（{signed(r.fifoPct, 1, "%")}）</span>
@@ -242,6 +264,15 @@ export default function PortfolioPage() {
                 );
               })}
             </div>
+            {(usHeld.length > 0 || app.usError) && (
+              <div className="dim" style={{ marginTop: 8 }}>
+                美股（國泰複委託）：價格與均價為美元，市值、損益與上方合計用{app.usValued.fx ? `匯率 ${fmt(app.usValued.fx.close, 3)}（${app.usValued.fx.date}，${fxSourceLabel(app.usValued.fx)}）` : ""}換成台幣。
+                {!app.usValued.fx && <b>尚無匯率報價，美股暫不計入台幣合計。</b>}
+                {app.usValued.totals.unpriced > 0 && <> 有 {app.usValued.totals.unpriced} 檔尚無報價（不計入市值合計）。</>}
+                {app.usError && <span> 美股資料讀取失敗：{app.usError}</span>}
+                資產變化曲線只含台股。
+              </div>
+            )}
             <div className="dim" style={{ marginTop: 8 }}>兩種均價：「整體均價」採移動平均成本（含手續費），看從以前到現在的整體成本；「先進先出均價」與券商相同（賣出先扣最早買進的批次），看目前這批持股的賺賠。配股、股票分割不另計成本（總成本平均到所有股數）。各帳戶分開計算後再合併。點任一檔看個股部位與進出場建議；「風格」可在個股頁的進出場頁籤切換。</div>
           </Card>
         </>

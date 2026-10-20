@@ -11,7 +11,7 @@ p.loan-hint { margin: var(--space-2) 0 0; }
 .loan-card { margin-top: var(--space-4); }
 
 /* 分頁 */
-.loan-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-bottom: var(--space-4); }
+.loan-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); margin-bottom: var(--space-4); }
 .loan-tab { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--card); color: var(--fg-2); cursor: pointer; text-align: left; min-height: 56px; }
 .loan-tab:hover { background: var(--card-2); }
 .loan-tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -115,6 +115,9 @@ p.loan-hint { margin: var(--space-2) 0 0; }
 .loan-notes { margin: 0; padding-left: 18px; line-height: 1.8; font-size: 13.5px; color: var(--fg-2); }
 
 @media (max-width: 760px) {
+  .loan-tab { padding: 8px 10px; }
+  .loan-tab-t { font-size: 14px; }
+  .loan-tab-d { display: none; }
   .loan-stats, .loan-minis, .loan-minis.four { grid-template-columns: 1fr; }
   .loan-minis.four { grid-template-columns: 1fr 1fr; }
   .loan-hero-a { font-size: 16px; }
@@ -132,3 +135,17 @@ p.loan-hint { margin: var(--space-2) 0 0; }
 @media (prefers-reduced-motion: reduce) {
   .loan-stale, .loan-assume > summary::after, .loan-fold > summary::after, .loan-group > summary::after { transition: none; }
 }
+
+/* 目前狀況分頁 */
+.loan-net { font-size: 36px; font-weight: 800; margin: 4px 0; overflow-wrap: anywhere; }
+.loan-net.good { color: #22c55e; }
+.loan-net.bad { color: #f87171; }
+.loan-bar { height: 14px; border-radius: 999px; background: var(--card-2); border: 1px solid var(--border); overflow: hidden; margin: var(--space-2) 0; }
+.loan-bar > i { display: block; height: 100%; background: var(--accent); }
+.loan-asset { width: 100%; border-collapse: collapse; font-size: 14px; }
+.loan-asset th, .loan-asset td { padding: 8px 6px; border-bottom: 1px solid var(--border); text-align: right; }
+.loan-asset th { text-align: left; font-weight: 600; }
+.loan-asset .input { width: 140px; text-align: right; }
+.loan-asset tfoot th, .loan-asset tfoot td { font-weight: 800; }
+.loan-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin-top: var(--space-3); }
+@media (max-width: 760px) { .loan-asset, .loan-asset tbody, .loan-asset tfoot { display: block; } .loan-asset tr { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 8px; border-bottom: 1px solid var(--border); padding: 6px 0; } .loan-asset th, .loan-asset td { border: 0; padding: 2px 0; } .loan-asset .input { width: 120px; } .loan-net { font-size: 30px; } }

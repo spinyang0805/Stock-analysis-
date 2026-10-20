@@ -2,6 +2,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { supabase, supabaseConfigured } from "./supabase.js";
 import { computePositions } from "./portfolio.js";
+import { computeUsPositions, latestUsPrices, valueUsPositions } from "./usPortfolio.js";
 
 export const AppCtx = createContext(null);
 const Ctx = AppCtx;
@@ -12,6 +13,9 @@ export function AppStateProvider({ children }) {
   const [authReady, setAuthReady] = useState(false);
   const [transactions, setTransactions] = useState([]);
   const [settings, setSettings] = useState({});
+  const [usTx, setUsTx] = useState([]);
+  const [usPriceRows, setUsPriceRows] = useState([]);
+  const [usError, setUsError] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -28,7 +32,7 @@ export function AppStateProvider({ children }) {
   }, [user]);
 
   const reload = useCallback(async () => {
-    if (!user) { setTransactions([]); setSettings({}); return; }
+    if (!user) { setTransactions([]); setSettings({}); setUsTx([]); setUsPriceRows([]); setUsError(""); return; }
     setLoading(true); setError("");
     const all = [];
     let txErr = null;
@@ -43,6 +47,24 @@ export function AppStateProvider({ children }) {
     if (txErr) setError(txErr.message);
     setTransactions(all);
     setSettings(Object.fromEntries((st.data || []).map((s) => [s.stock_id, s])));
+    // 美股：資料表還沒建立或查詢失敗時不影響台股，只記錄錯誤
+    try {
+      const us = [];
+      let usErr = null;
+      for (let from = 0; ; from += 1000) {
+        const { data, error: e } = await supabase.from("us_transactions").select("*").order("trade_date", { ascending: true }).range(from, from + 999);
+        if (e) { usErr = e; break; }
+        us.push(...(data || []));
+        if (!data || data.length < 1000) break;
+      }
+      const since = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+      const pr = usErr ? { data: [] } : await supabase.from("us_prices").select("ticker,date,close,source").gte("date", since).order("date", { ascending: false }).limit(5000);
+      setUsTx(usErr ? [] : us);
+      setUsPriceRows(pr.data || []);
+      setUsError(usErr ? usErr.message : pr.error ? pr.error.message : "");
+    } catch (e) {
+      setUsTx([]); setUsPriceRows([]); setUsError(String(e?.message || e));
+    }
     setLoading(false);
   }, [user]);
 
@@ -64,10 +86,17 @@ export function AppStateProvider({ children }) {
   const positionOf = useCallback((code) => positions.find((p) => p.code === String(code) && p.shares > 0) || null, [positions]);
   const styleOf = useCallback((code) => settings[code]?.style || "存股", [settings]);
 
+  const usPositions = useMemo(() => computeUsPositions(usTx), [usTx]);
+  const usValued = useMemo(() => {
+    const { prices, fx } = latestUsPrices(usPriceRows);
+    return valueUsPositions(usPositions, prices, fx);
+  }, [usPositions, usPriceRows]);
+
   const value = useMemo(() => ({
     configured: supabaseConfigured, authReady, user, role, signIn, signOut,
     transactions, settings, positions, positionOf, styleOf, setStyle, reload, loading, error,
-  }), [authReady, user, role, signIn, signOut, transactions, settings, positions, positionOf, styleOf, setStyle, reload, loading, error]);
+    usTransactions: usTx, usValued, usError,
+  }), [authReady, user, role, signIn, signOut, transactions, settings, usTx, usValued, usError, positions, positionOf, styleOf, setStyle, reload, loading, error]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
