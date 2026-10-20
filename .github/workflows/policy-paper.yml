@@ -1,0 +1,73 @@
+name: Allocation policy (paper)
+
+# Frozen forward paper test of the 0050 / cash allocation rules (C10 real-money policy + C1, C8, VT15, buy&hold).
+# Day 0 = 2026-10-20; the script recomputes everything from day 0 each run. Output public/data/policy_paper.json
+# is committed to main (public data, no holdings) and shown on the 資產配置 page.
+on:
+  schedule:
+    - cron: "10 11 * * 1-6"     # 19:10 Taipei, after the close
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: policy-paper
+  cancel-in-progress: false
+
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install pandas numpy requests psycopg2-binary pytz pyarrow duckdb
+
+      - name: Trading day?
+        id: day
+        run: |
+          python - <<'EOF' >> "$GITHUB_OUTPUT"
+          import sys; sys.path.insert(0, "backend")
+          from datetime import datetime, timedelta, timezone
+          import trading_calendar as cal
+          d = datetime.now(timezone(timedelta(hours=8))).strftime("%Y%m%d")
+          print(f"trading={'true' if cal.is_trading_day(d) else 'false'}")
+          EOF
+
+      - name: Download data
+        if: steps.day.outputs.trading == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -eu
+          python backend/history_store.py pull
+          python backend/history_store.py append --days 15     # latest days from Supabase (local only, no push)
+          names=$(gh release view tuning-data --json assets -q '.assets[].name')
+          [ -n "$names" ] && gh release download tuning-data -D history --clobber
+          for a in $names; do [ -f "history/$a" ] || { echo "::error::missing tuning-data/$a"; exit 1; }; done
+
+      - name: Run paper test
+        if: steps.day.outputs.trading == 'true' || github.event_name == 'workflow_dispatch'
+        run: python backend/tuning/policy_paper.py --source parquet --adjust-source exchange
+
+      - name: Commit
+        if: steps.day.outputs.trading == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data/policy_paper.json
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          git commit -m "data: allocation policy paper test $(date +%Y-%m-%d)"
+          for i in 1 2 3; do git pull --rebase -q && git push -q && exit 0; sleep 10; done
+          exit 1

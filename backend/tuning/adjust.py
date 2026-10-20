@@ -339,3 +339,26 @@ def adjust_all(clean, codes, fetcher, source="finmind", exchange=None):
         if (i + 1) % 100 == 0:
             log(f"[adjust] {i + 1}/{len(codes)} (FinMind requests this run: {fetcher.fetched})")
     return out, pd.DataFrame(covs).set_index("stock_id")
+
+
+def typed_events(code, fetcher, exchange, source, start_ymd, end_ymd):
+    """Typed corporate actions of one stock → [{date 'YYYYMMDD', kind, factor, share_ratio}] (read-only accessor,
+    same sources / caches as adjust_all). kind: 'dividend' (cash; share_ratio 1) | 'split' | 'par_value' |
+    'capital_reduction' (share_ratio = 1 / factor: held shares scale, no cash)."""
+    out = []
+    if source == "exchange":
+        df, _ = exchange.load(start_ymd, end_ymd)
+        df = df[df["stock_id"] == code]
+    else:
+        df, _ = fetcher.events("TaiwanStockDividendResult", code)
+    out += [{"date": r.date, "kind": "dividend", "factor": float(r.factor), "share_ratio": 1.0}
+            for r in df.itertuples()]
+    for ds, kind in (("TaiwanStockParValueChange", "par_value"), ("TaiwanStockSplitPrice", "split"),
+                     ("TaiwanStockCapitalReductionReferencePrice", "capital_reduction")):
+        # same request form / cache as adjust_all: par-value is one GLOBAL request (_all.json, no data_id —
+        # FinMind rejects data_id there), the other two are per stock
+        e, _ = fetcher.events(ds) if ds == "TaiwanStockParValueChange" else fetcher.events(ds, code)
+        e = e[e["stock_id"] == code]
+        out += [{"date": r.date, "kind": kind, "factor": float(r.factor), "share_ratio": 1 / float(r.factor)}
+                for r in e.itertuples()]
+    return out

@@ -2,7 +2,7 @@
 // 個股頁、持股、交易、AI、帳號管理各自在 src/pages/
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import {
-  BarChart3, Bot, ChevronsLeft, ChevronsRight, LineChart, ListOrdered, LogIn, LogOut, Sparkles, Trophy, Users, Wallet, UserCircle2,
+  BarChart3, Bot, ChevronsLeft, ChevronsRight, LineChart, ListOrdered, PieChart, LogIn, LogOut, Sparkles, Trophy, Users, Wallet, UserCircle2,
 } from "lucide-react";
 import { AppStateProvider, useApp } from "./lib/appState.jsx";
 import { navigate, useRoute } from "./lib/router.js";
@@ -14,6 +14,7 @@ import TransactionsPage from "./pages/TransactionsPage.jsx";
 
 const PnlPage = lazy(() => import("./pages/PnlPage.jsx"));
 const RankPage = lazy(() => import("./pages/RankPage.jsx"));
+const AllocationPage = lazy(() => import("./pages/AllocationPage.jsx"));
 const ComboPage = lazy(() => import("./pages/ComboPage.jsx"));
 
 const LegacyAI = lazy(() => import("./pages/LegacyPages.jsx").then((m) => ({ default: m.AIChatPage })));
@@ -30,6 +31,7 @@ const NAV = [
   { id: "transactions", label: "交易紀錄", short: "交易", icon: ListOrdered, href: () => "/transactions" },
   { id: "combo", label: "組合拳訊號", short: "訊號", icon: Sparkles, href: () => "/combo" },
   { id: "rank", label: "每月排名", short: "排名", icon: Trophy, href: () => "/rank" },
+  { id: "allocation", label: "資產配置", short: "配置", icon: PieChart, href: () => "/allocation" },
   { id: "ai", label: "AI 選股", short: "AI", icon: Bot, href: () => "/ai" },
   { id: "admin", label: "帳號管理", icon: Users, href: () => "/admin", role: "admin" },
 ];
@@ -93,6 +95,7 @@ function Shell() {
           {page === "pnl" && <PnlPage />}
           {page === "rank" && <RankPage />}
           {page === "combo" && <ComboPage />}
+          {page === "allocation" && <AllocationPage />}
           {page === "ai" && <LegacyAI />}
           {page === "admin" && app.role === "admin" && <div className="page"><LegacyAdmin /></div>}
         </Suspense>

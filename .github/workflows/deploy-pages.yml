@@ -7,7 +7,7 @@ on:
     branches: [main]
     paths-ignore: ["backend/**", "supabase/**", ".omc/**", "docs/**"]
   workflow_run:
-    workflows: ["Update stock data (JSON)", "Track new stocks", "Monthly ranking (paper)"]
+    workflows: ["Update stock data (JSON)", "Track new stocks", "Monthly ranking (paper)", "Allocation policy (paper)"]
     types: [completed]
   workflow_dispatch:
 
