@@ -390,9 +390,21 @@ def main(argv=None):
             line += "\n【ETF 提醒】\n" + "\n".join(alerts)
         if known.private:                             # private plan config (never in the repo)
             from tuning import private_store
-            body = private_store.get("etf_plan")
-            if body:
-                etf_pm, etf_plan_ok = etf_watch.payment_months_left(json.loads(body), day), True
+            plan = None
+            conn = private_store._connect()            # 扣款戶 balance the user saved on the site (借貸試算 → 目前狀況)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("select data, updated_at from public.loan_tracker order by updated_at desc limit 1")
+                    row = cur.fetchone()
+            finally:
+                conn.close()
+            if row:
+                plan = etf_watch.plan_from_tracker(row[0], row[1].date())
+            if plan is None:
+                body = private_store.get("etf_plan")  # optional manual override
+                plan = json.loads(body) if body else None
+            if plan:
+                etf_pm, etf_plan_ok = etf_watch.payment_months_left(plan, day), True
     except (Exception, SystemExit) as exc:             # SystemExit: missing parquet history
         log(f"[daily] ETF watch NOT produced: {type(exc).__name__}: {str(exc)[:200]}")
     # private holdings advice (shares / costs) → never in the public files
