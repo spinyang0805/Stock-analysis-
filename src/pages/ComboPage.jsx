@@ -2,33 +2,17 @@
 // 資料：public/data/combo_signals.json（backend/tuning/combo_daily.py）
 import React, { useEffect, useMemo, useState } from "react";
 import { History, LogOut, Sparkles, Wallet } from "lucide-react";
-import { Card, Empty, Kpi } from "../components/ui.jsx";
-import { SortTh, useSort } from "../components/SortableTh.jsx";
+import { Empty } from "../components/ui.jsx";
+import { useSort } from "../components/SortableTh.jsx";
 import { fetchStaticJson } from "../lib/data.js";
 import { fetchQuotes } from "../lib/market.js";
 import { signed, trendColor } from "../lib/format.js";
 import { navigate } from "../lib/router.js";
+import "./ComboPage.css";
 
-// 燈號：圓燈＋文字（綠 = 買點／突破、黃 = 接近／等待、紅 = 賣出、灰 = 尚遠）
-const LIGHTS = {
-  green: { c: "#22c55e", bg: "rgba(34,197,94,.14)" },
-  yellow: { c: "#eab308", bg: "rgba(234,179,8,.16)" },
-  red: { c: "#ef4444", bg: "rgba(239,68,68,.14)" },
-  gray: { c: "#94a3b8", bg: "rgba(148,163,184,.14)" },
-};
-
-function Light({ color = "gray", label, sub, pulse = false, size = 14 }) {
-  const l = LIGHTS[color];
-  return (
-    <span className="light" style={{ background: l.bg, color: l.c }}>
-      <i className={pulse ? "light-dot pulse" : "light-dot"}
-        style={{ width: size, height: size, background: l.c, boxShadow: `0 0 8px ${l.c}` }} aria-hidden="true" />
-      <span>
-        <b>{label}</b>
-        {sub && <span className="light-sub">{sub}</span>}
-      </span>
-    </span>
-  );
+// 狀態標籤：圓點＋文字（綠 = 可買／已突破、黃 = 接近／等待、紅 = 賣出、灰 = 尚遠）
+function Chip({ color = "gray", label, pulse = false }) {
+  return <span className={`combo-chip is-${color}${pulse ? " is-pulse" : ""}`}>{label}</span>;
 }
 
 // 台股盤中（台北時間週一～五 09:00–13:35）
@@ -63,15 +47,20 @@ function useLiveQuotes(codes) {
 
 function LiveBanner({ live }) {
   const t = live.at ? live.at.toLocaleTimeString("zh-TW", { hour12: false, timeZone: "Asia/Taipei" }) : "–";
-  const style = { padding: "6px 10px", borderRadius: 8, fontSize: 13, marginBottom: 8,
-    background: live.open ? "rgba(34,197,94,.12)" : "rgba(148,163,184,.15)" };
   return (
-    <div style={style}>
-      {live.open ? <b>🟢 盤中即時：每 60 秒自動更新</b> : <b>⚪ 非交易時間：顯示最近一筆報價</b>}
-      <span className="dim">　最後更新 {t}</span>
-      {live.error && <span style={{ color: "#ef4444" }}>　（{live.error}）</span>}
+    <div className={`combo-live${live.open ? " is-open" : ""}`} role="status">
+      <Chip color={live.open ? "green" : "gray"} label={live.open ? "盤中：每 60 秒自動更新報價" : "非交易時間：顯示最近一筆報價"} pulse={live.open} />
+      <span className="dim">最後更新 {t}</span>
+      {live.error && <span className="combo-err">（{live.error}）</span>}
     </div>
   );
+}
+
+const fmtDate = (d) => (d ? `${d.slice(0, 4)}/${d.slice(4, 6)}/${d.slice(6)}` : "–");
+
+function Pct({ v }) {
+  if (v == null) return <span className="dim">–</span>;
+  return <span className="num" style={{ color: trendColor(v) }}>{signed(v * 100, 1, "%")}</span>;
 }
 
 function LivePrice({ q }) {
@@ -83,63 +72,165 @@ function LivePrice({ q }) {
   );
 }
 
-const fmtDate = (d) => (d ? `${d.slice(0, 4)}/${d.slice(4, 6)}/${d.slice(6)}` : "–");
-
-function Pct({ v }) {
-  if (v == null) return <span className="dim">–</span>;
-  return <span className="num" style={{ color: trendColor(v) }}>{signed(v * 100, 1, "%")}</span>;
+// 理由收進「看理由」，預設收合
+function Why({ r, title }) {
+  if (!r || !Object.keys(r).length) return null;
+  return (
+    <details className="combo-why">
+      <summary>{title}</summary>
+      <ul className="combo-why-list">
+        {Object.entries(r).map(([k, v]) => (
+          <li key={k}><b>{k}</b>{v.join("、")}</li>
+        ))}
+      </ul>
+    </details>
+  );
 }
 
-function Reasons({ r }) {
-  if (!r || !Object.keys(r).length) return <span className="dim">–</span>;
+function Name({ p }) {
   return (
-    <div style={{ display: "grid", gap: 2 }}>
-      {Object.entries(r).map(([k, v]) => (
-        <div key={k}><b>{k}</b>：<span className="dim">{v.join("、")}</span></div>
-      ))}
+    <button type="button" className="combo-name" onClick={() => navigate(`/stock/${p.stock_id}`)} aria-label={`查看 ${p.name} ${p.stock_id} 個股頁`}>
+      <span className="num">{p.stock_id}</span>{p.name}
+      {p.in_rank && <span className="combo-tag" title="也在當月排名前 20">排名前 20</span>}
+      {p.replay && <span className="combo-tag" title="上線前回放的模擬部位，晨報沒有推薦過">模擬</span>}
+    </button>
+  );
+}
+
+function Stat({ label, children, big, wide }) {
+  return (
+    <div className={wide ? "combo-wide" : undefined}>
+      <dt>{label}</dt>
+      <dd className={big ? "is-big" : undefined}>{children}</dd>
     </div>
   );
 }
 
-function StockCell({ p }) {
+const liveRet = (p, q) => (q?.[p.stock_id]?.price && p.entry_price ? q[p.stock_id].price / p.entry_price - 1 : p.ret);
+
+function BuyCard({ p }) {
   return (
-    <><b className="num">{p.stock_id}</b> {p.name}{p.in_rank ? " ⭐" : ""}
-      {p.replay && <span className="dim" style={{ fontSize: 11, marginLeft: 4 }} title="上線前回放的模擬部位，晨報沒有推薦過">（回放）</span>}</>
+    <article className="combo-item is-green">
+      <div className="combo-item-top">
+        <Name p={p} />
+        <Chip color="green" label="可買進" />
+      </div>
+      <dl className="combo-stats">
+        <Stat label="今日收盤" big><span className="num">{p.signal_close}</span></Stat>
+        <Stat label="怎麼做">明天開盤買進</Stat>
+      </dl>
+      <Why r={p.buy_reasons} title="為什麼可以買（看理由）" />
+    </article>
   );
 }
 
-function HoldingTable({ rows, quotes }) {
+function WatchCard({ w, q, open }) {
+  const px = q[w.stock_id]?.price;
+  const gap = Number.isFinite(px) ? w.level / px - 1 : null;
+  const hit = gap != null && gap <= 0;
+  const chip = hit ? <Chip color="green" label="盤中已突破" pulse={open} />
+    : gap == null ? <Chip color="gray" label="沒有報價" />
+      : gap <= 0.02 ? <Chip color="yellow" label="接近突破" />
+        : <Chip color="gray" label="還沒到" />;
+  return (
+    <article className={`combo-item is-${hit ? "green" : gap != null && gap <= 0.02 ? "yellow" : "gray"}`}>
+      <div className="combo-item-top">
+        <Name p={w} />
+        {chip}
+      </div>
+      <dl className="combo-stats">
+        <Stat label="現價（即時）" big><LivePrice q={q[w.stock_id]} /></Stat>
+        <Stat label="要站上的價位" big><span className="num">{w.level}</span></Stat>
+        <Stat label="離突破還差">
+          {gap == null ? <span className="dim">–</span> : hit ? <b style={{ color: "var(--combo-green)" }}>已站上</b> : <span className="num">+{(gap * 100).toFixed(1)}%</span>}
+        </Stat>
+        <Stat label="昨天收盤"><span className="num">{w.close}</span></Stat>
+      </dl>
+      {hit && <div className="dim">盤中站上不算數，收盤仍站穩才確認買進。</div>}
+      <Why r={w.buy_reasons} title="已通過的條件（看理由）" />
+    </article>
+  );
+}
+
+function SellCard({ p, q }) {
+  return (
+    <article className="combo-item is-red">
+      <div className="combo-item-top">
+        <Name p={p} />
+        <Chip color="red" label="該賣出" />
+      </div>
+      <dl className="combo-stats">
+        <Stat label="怎麼做">明天開盤賣出</Stat>
+        <Stat label="目前報酬" big><Pct v={liveRet(p, q)} /></Stat>
+        <Stat label="買進日"><span className="num">{fmtDate(p.entry_date)}</span></Stat>
+        <Stat label="買價 / 現價"><span className="num">{p.entry_price ?? "–"}</span> / <LivePrice q={q[p.stock_id]} /></Stat>
+      </dl>
+      <Why r={p.sell_reasons} title="為什麼要賣（看理由）" />
+    </article>
+  );
+}
+
+function HoldingList({ rows, quotes }) {
   const cols = useMemo(() => ({
     id: (p) => p.stock_id, entry: (p) => p.entry_date, days: (p) => p.days, ret: (p) => p.ret,
   }), []);
   const { sorted, sort, toggle } = useSort(rows, cols, { key: "ret", dir: "desc" });
+  const opts = [["ret", "報酬"], ["entry", "買進日"], ["days", "持有天數"], ["id", "股票代號"]];
   return (
-    <div className="table-wrap">
-      <table className="data">
-        <thead>
-          <tr>
-            <th className="left">燈號</th>
-            {[["id", "股票", true], ["entry", "買進日", true], ["days", "持有日"], ["ret", "報酬"]]
-              .map(([k, label, left]) => <SortTh key={k} k={k} label={label} left={left} sort={sort} onSort={toggle} />)}
-            <th>買價</th><th>現價（即時）</th><th>即時報酬</th><th className="left">買進理由</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((p) => (
-            <tr key={p.stock_id + p.signal_date} className="clickable" onClick={() => navigate(`/stock/${p.stock_id}`)}>
-              <td className="left">{p.status === "waiting" ? <Light color="yellow" label="待進場" /> : <Light color="green" label="續抱" />}</td>
-              <td className="left"><StockCell p={p} /></td>
-              <td className="left num">{fmtDate(p.entry_date)}</td>
-              <td className="num">{p.days ?? "–"}</td>
-              <td><Pct v={p.ret} /></td>
-              <td className="num">{p.entry_price ?? "–"}</td>
-              <td><LivePrice q={quotes?.[p.stock_id]} /></td>
-              <td>{quotes?.[p.stock_id]?.price && p.entry_price ? <Pct v={quotes[p.stock_id].price / p.entry_price - 1} /> : <Pct v={p.ret} />}</td>
-              <td className="left" style={{ fontSize: 12 }}><Reasons r={p.buy_reasons} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <>
+      <div className="combo-sortbar" role="group" aria-label="排序方式">
+        排序：
+        {opts.map(([k, label]) => (
+          <button key={k} type="button" aria-pressed={sort.key === k} onClick={() => toggle(k, k === "id" ? "asc" : "desc")}>
+            {label}{sort.key === k ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}
+          </button>
+        ))}
+      </div>
+      <div className="combo-list">
+        {sorted.map((p) => {
+          const waiting = p.status === "waiting";
+          return (
+            <article key={p.stock_id + p.signal_date} className={`combo-item is-${waiting ? "yellow" : "green"}`}>
+              <div className="combo-item-top">
+                <Name p={p} />
+                <Chip color={waiting ? "yellow" : "green"} label={waiting ? "等待進場" : "繼續持有"} />
+              </div>
+              <dl className="combo-stats">
+                <Stat label={quotes ? "目前報酬（即時）" : "報酬"} big><Pct v={quotes ? liveRet(p, quotes) : p.ret} /></Stat>
+                <Stat label="持有天數"><span className="num">{p.days ?? "–"}</span> 天</Stat>
+                <Stat label="買進日"><span className="num">{fmtDate(p.entry_date)}</span></Stat>
+                <Stat label="買價 / 現價"><span className="num">{p.entry_price ?? "–"}</span>{quotes && <> / <LivePrice q={quotes[p.stock_id]} /></>}</Stat>
+              </dl>
+              <Why r={p.buy_reasons} title="當初為什麼買（看理由）" />
+            </article>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function Section({ icon: Icon, title, count, hint, children }) {
+  return (
+    <section className="combo-section">
+      <div className="combo-section-head">
+        <h2><Icon size={18} aria-hidden="true" />{title}</h2>
+        {count != null && <span className="combo-count">{count} 檔</span>}
+      </div>
+      {hint && <p className="combo-section-hint">{hint}</p>}
+      {children}
+    </section>
+  );
+}
+
+const Nothing = ({ children }) => <div className="combo-empty">{children}</div>;
+
+function ClosedItem({ p }) {
+  return (
+    <div className="combo-closed">
+      <div className="combo-closed-top"><Name p={p} /><Pct v={p.ret} /></div>
+      <div className="num">{fmtDate(p.entry_date)} 買 {p.entry_price} → {fmtDate(p.exit_date)} 賣 {p.exit_price}（持有 {p.days} 天，已扣成本）</div>
+      <Why r={p.sell_reasons} title="賣出理由" />
     </div>
   );
 }
@@ -164,159 +255,111 @@ export default function ComboPage() {
   const watch = data?.intraday_watch || [];
   const rt = useLiveQuotes([...watch.map((w) => w.stock_id), ...sells.map((p) => p.stock_id), ...holding.map((p) => p.stock_id)]);
   const q = rt.quotes;
+  const names = (arr) => arr.map((p) => `${p.name}`).join("、");
+  const wins = closed.filter((c) => c.ret > 0).length;
 
   return (
-    <div className="page">
+    <div className="page combo-page">
       <div className="page-head">
         <div>
           <div className="eyebrow">COMBINATION SIGNALS</div>
           <h1 className="page-title">組合拳訊號</h1>
-          <div className="dim">{data?.updated ? `資料至 ${fmtDate(data.updated)} 收盤` : ""}</div>
+          <div className="dim">{data?.updated ? `資料至 ${fmtDate(data.updated)} 收盤` : ""}　這是紙上追蹤，不是你的持股，也不是下單建議。</div>
         </div>
       </div>
 
-      <Card>
-        <div className="dim" style={{ lineHeight: 1.7 }}>
-          <b>買進</b>要四關都過：站上往上走的季線且大盤不是空頭 → 近 3 天真突破（新高、W 底頸線、趨勢線…）→ 近 5 天資金流入（OBV、量增）→
-          籌碼、相對強度、營收至少一項。<b>賣出</b>要「真的轉壞」：近 10 天 ≥2 種結構破壞（頭頭低、跌破趨勢線…）加上 ≥2 類確認（資金流出、籌碼賣出、環境轉壞），
-          或跌破往下彎的季線，或比買價跌 10%。過熱（RSI、KD 高檔）不賣。⭐ = 也在當月排名前 20。
-          這裡是紙上追蹤，不是你的持股，也不是下單建議；標「回放」的是上線（{fmtDate(since)}）前用歷史資料模擬的部位，晨報不會提醒。回測 2020–2026 每筆平均贏股票池約 1.8%，但最近半年只打平、輸 0050。
-        </div>
-      </Card>
-
-      {data === undefined ? <Card style={{ marginTop: 12 }}><div className="dim">載入中…</div></Card>
+      {data === undefined ? <div className="combo-empty">載入中…</div>
         : !data ? (
-          <Card style={{ marginTop: 12 }}><Empty icon={Sparkles} title="還沒有組合拳資料">每個交易日晚上 19:00 後產生。</Empty></Card>
+          <Empty icon={Sparkles} title="還沒有組合拳資料">每個交易日晚上 19:00 後產生。</Empty>
         ) : (
           <>
-            <div className="kpis" style={{ marginTop: 12 }}>
-              <Kpi label={<Light color={fresh.length ? "green" : "gray"} label="今日買進候選" size={10} />} value={fresh.length} sub="明日開盤進場" />
-              <Kpi label={<Light color={sells.length ? "red" : "gray"} label="賣出確認" size={10} />} value={sells.length} sub="明日開盤賣出" tone={sells.length ? "down" : undefined} />
-              <Kpi label={<Light color={watch.some((w) => (rt.quotes[w.stock_id]?.price ?? 0) >= w.level) ? "green" : watch.length ? "yellow" : "gray"} label="盤中觀察" size={10} />} value={watch.length} sub="只差突破" />
-              <Kpi label={<Light color={holding.length ? "green" : "gray"} label="追蹤持有中" size={10} />} value={holding.length} sub="直到賣出確認" />
-              <Kpi label="已結案" value={closed.length} sub={closed.length ? `勝率 ${Math.round(closed.filter((c) => c.ret > 0).length / closed.length * 100)}%` : "上線後累積"} />
-            </div>
+            <section className="card combo-today" aria-labelledby="combo-today-h">
+              <h2 id="combo-today-h">今天要做什麼</h2>
+              <ul>
+                <li>
+                  <Chip color={sells.length ? "red" : "gray"} label="賣出" />
+                  <span>{sells.length ? <><b>明天開盤賣出 {sells.length} 檔</b>：{names(sells)}</> : "目前沒有要賣的股票。"}</span>
+                </li>
+                <li>
+                  <Chip color={fresh.length ? "green" : "gray"} label="買進" />
+                  <span>{fresh.length ? <><b>明天開盤可買進 {fresh.length} 檔</b>：{names(fresh)}</> : "今天沒有新的買進候選，不用動作。"}</span>
+                </li>
+                <li>
+                  <Chip color={watch.length ? "yellow" : "gray"} label="觀察" />
+                  <span>{watch.length ? <>另有 <b>{watch.length} 檔</b>只差一步突破，盤中看即時報價。</> : "沒有只差突破的股票。"}</span>
+                </li>
+                <li>
+                  <Chip color={holding.length ? "green" : "gray"} label="持有" />
+                  <span>追蹤中 {holding.length} 檔，沒被標為「該賣出」就續抱。</span>
+                </li>
+              </ul>
+            </section>
 
-            <Card title="今日買進候選（明日開盤進場）" icon={Sparkles} style={{ marginTop: 12 }}>
-              {!fresh.length ? <div className="dim">今天沒有股票通過四關。</div> : (
-                <div className="table-wrap">
-                  <table className="data">
-                    <thead><tr><th className="left">燈號</th><th className="left">股票</th><th>收盤</th><th className="left">為什麼買（各關通過的訊號）</th></tr></thead>
-                    <tbody>
-                      {fresh.map((p) => (
-                        <tr key={p.stock_id} className="clickable" onClick={() => navigate(`/stock/${p.stock_id}`)}>
-                          <td className="left"><Light color="green" label="買點確認" sub="明日開盤進場" /></td>
-                          <td className="left"><StockCell p={p} /></td>
-                          <td className="num">{p.signal_close}</td>
-                          <td className="left" style={{ fontSize: 12 }}><Reasons r={p.buy_reasons} /></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Card>
+            <Section icon={Sparkles} title="買進候選" count={fresh.length + watch.length}>
+              <h3 className="combo-sub">今天收盤確認，明天開盤買（{fresh.length} 檔）</h3>
+              {!fresh.length ? <Nothing>今天沒有股票通過全部條件。</Nothing>
+                : <div className="combo-list">{fresh.map((p) => <BuyCard key={p.stock_id} p={p} />)}</div>}
 
-            <Card title="盤中觀察：只差突破（帶量站上 20 日高會即時提醒）" icon={Sparkles} style={{ marginTop: 12 }}>
-              {!watch.length ? <div className="dim">今天沒有只差突破的股票。</div> : (
+              <h3 className="combo-sub">還差一點：盤中觀察（{watch.length} 檔）</h3>
+              {!watch.length ? <Nothing>今天沒有只差突破的股票。</Nothing> : (
                 <>
+                  <p className="combo-section-hint">
+                    現價站上「要站上的價位」就會亮綠燈，離價位 2% 以內亮黃燈。網頁先亮燈、手機提醒晚一點到是正常的（提醒還要求連續 2 分鐘站上、量有放大）。最後要收盤仍站穩才算買點。
+                  </p>
                   <LiveBanner live={rt} />
-                  <div className="table-wrap">
-                    <table className="data">
-                      <thead><tr><th className="left">狀態</th><th className="left">股票</th><th>現價（即時）</th><th>突破價</th><th>離突破還差</th><th>昨收</th><th className="left">已通過的關卡</th></tr></thead>
-                      <tbody>
-                        {watch.map((w) => {
-                          const px = q[w.stock_id]?.price;
-                          const gap = Number.isFinite(px) ? w.level / px - 1 : null;
-                          const hit = gap != null && gap <= 0;
-                          return (
-                            <tr key={w.stock_id} className="clickable" onClick={() => navigate(`/stock/${w.stock_id}`)}
-                              style={hit ? { background: "rgba(34,197,94,.10)", fontWeight: 600 } : undefined}>
-                              <td className="left" style={{ whiteSpace: "nowrap" }}>
-                                {hit ? <Light color="green" label="盤中已突破" sub="收盤站穩才確認" pulse={rt.open} />
-                                  : gap == null ? <Light color="gray" label="無報價" />
-                                    : gap <= 0.02 ? <Light color="yellow" label="接近突破" sub={`還差 ${(gap * 100).toFixed(1)}%`} />
-                                      : <Light color="gray" label="未突破" sub={`還差 ${(gap * 100).toFixed(1)}%`} />}
-                              </td>
-                              <td className="left"><StockCell p={w} /></td>
-                              <td><LivePrice q={q[w.stock_id]} /></td>
-                              <td className="num"><b>{w.level}</b></td>
-                              <td>{gap == null ? <span className="dim">–</span> : hit ? <b style={{ color: "#22c55e" }}>已站上</b> : <span className="num">+{(gap * 100).toFixed(1)}%</span>}</td>
-                              <td className="num">{w.close}</td>
-                              <td className="left" style={{ fontSize: 12 }}><Reasons r={w.buy_reasons} /></td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
-                    燈號：🟢 盤中已突破（閃爍）、🟡 離突破 2% 以內、⚪ 還遠。🟢 只代表現價已高於突破價（網頁即時判斷）。正式的盤中提醒另外要求「連 2 分鐘站上＋帶量＋在均價之上」，所以網頁先亮燈、提醒稍後才到是正常的；收盤仍站在突破價之上，才是組合拳買點。
-                  </div>
+                  <div className="combo-list">{watch.map((w) => <WatchCard key={w.stock_id} w={w} q={q} open={rt.open} />)}</div>
                 </>
               )}
-            </Card>
+            </Section>
 
-            <Card title="賣出確認（紙上追蹤：明日開盤賣出，賣出後自動移除）" icon={LogOut} style={{ marginTop: 12 }}>
-              {!sells.length ? <div className="dim">目前沒有賣出確認。</div> : (
-                <div className="table-wrap">
-                  <table className="data">
-                    <thead><tr><th className="left">燈號</th><th className="left">股票</th><th className="left">買進日</th><th>買價</th><th>現價（即時）</th><th>報酬</th><th className="left">為什麼賣</th></tr></thead>
-                    <tbody>
-                      {sells.map((p) => (
-                        <tr key={p.stock_id} className="err clickable" onClick={() => navigate(`/stock/${p.stock_id}`)}>
-                          <td className="left"><Light color="red" label="賣出確認" sub="明日開盤賣" /></td>
-                          <td className="left"><StockCell p={p} /></td>
-                          <td className="left num">{fmtDate(p.entry_date)}</td>
-                          <td className="num">{p.entry_price}</td>
-                          <td><LivePrice q={q[p.stock_id]} /></td>
-                          <td>{q[p.stock_id]?.price && p.entry_price ? <Pct v={q[p.stock_id].price / p.entry_price - 1} /> : <Pct v={p.ret} />}</td>
-                          <td className="left" style={{ fontSize: 12 }}><Reasons r={p.sell_reasons} /></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+            <Section icon={LogOut} title="賣出確認" count={sells.length} hint="這些已出現轉壞訊號，紙上追蹤明天開盤賣出，賣出後會自動從清單移除。">
+              {!sells.length ? <Nothing>目前沒有要賣的股票。</Nothing>
+                : <div className="combo-list">{sells.map((p) => <SellCard key={p.stock_id} p={p} q={q} />)}</div>}
+            </Section>
+
+            <Section icon={Wallet} title="持有中" count={holding.length} hint="晨報推薦過、目前還在追蹤的股票，會一直列在這裡直到出現賣出確認。">
+              {!holding.length ? <Nothing>目前沒有。晨報推薦的候選進場後會出現在這裡。</Nothing> : (
+                <>
+                  <LiveBanner live={rt} />
+                  <HoldingList rows={holding} quotes={q} />
+                </>
               )}
-            </Card>
+            </Section>
 
-            <Card title={`持有中（晨報推薦過的，${holding.length} 檔）`} icon={Wallet} style={{ marginTop: 12 }}>
-              {!holding.length ? <div className="dim">目前沒有。晨報推薦的組合拳候選，進場後會出現在這裡，直到賣出確認。</div> : <><LiveBanner live={rt} /><HoldingTable rows={holding} quotes={q} /></>}
-            </Card>
-
-            <Card title="最近結案（已賣出）" icon={History} style={{ marginTop: 12 }}>
-              {!closed.length ? <div className="dim">還沒有結案紀錄（上線後推薦過的股票賣出後會列在這裡）。</div> : (
-                <div className="table-wrap" style={{ maxHeight: 420 }}>
-                  <table className="data">
-                    <thead><tr><th className="left">股票</th><th className="left">買進</th><th className="left">賣出</th><th>持有日</th><th>報酬(扣成本)</th><th className="left">賣出理由</th></tr></thead>
-                    <tbody>
-                      {closed.map((p) => (
-                        <tr key={p.stock_id + p.signal_date}>
-                          <td className="left"><StockCell p={p} /></td>
-                          <td className="left num">{fmtDate(p.entry_date)} @ {p.entry_price}</td>
-                          <td className="left num">{fmtDate(p.exit_date)} @ {p.exit_price}</td>
-                          <td className="num">{p.days}</td>
-                          <td><Pct v={p.ret} /></td>
-                          <td className="left" style={{ fontSize: 12 }}><Reasons r={p.sell_reasons} /></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Card>
+            <details className="combo-fold">
+              <summary>
+                <History size={16} aria-hidden="true" style={{ marginRight: 8 }} />
+                歷史結案紀錄（{closed.length} 筆{closed.length ? `，賺錢 ${Math.round(wins / closed.length * 100)}%` : ""}）
+              </summary>
+              <div className="combo-fold-body">
+                {!closed.length ? <Nothing>還沒有結案紀錄（上線後推薦過的股票賣出後會列在這裡）。</Nothing>
+                  : <div className="combo-closed-list">{closed.map((p) => <ClosedItem key={p.stock_id + p.signal_date} p={p} />)}</div>}
+              </div>
+            </details>
 
             {(replay.length > 0 || replayClosed.length > 0) && (
-              <details className="card" style={{ marginTop: 12 }}>
-                <summary style={{ cursor: "pointer", fontWeight: 700 }}>
-                  參考：上線前回放的模擬部位（{replay.length} 檔持有、{replayClosed.length} 筆結案；不是推薦、也不是你的持股）
-                </summary>
-                <div className="dim" style={{ margin: "8px 0", fontSize: 12 }}>
-                  用最近 40 個交易日的歷史資料模擬「如果當時照規則買」的結果，只用來觀察規則的表現；晨報不會針對這些股票提醒。
+              <details className="combo-fold">
+                <summary>參考：上線前的模擬部位（{replay.length} 檔持有、{replayClosed.length} 筆結案）</summary>
+                <div className="combo-fold-body">
+                  <p>用最近 40 個交易日的歷史資料，模擬「如果當時照規則買」的結果，只用來觀察規則表現。這不是推薦，也不是你的持股，晨報不會針對這些股票提醒。</p>
+                  {replay.length > 0 && <HoldingList rows={replay} />}
                 </div>
-                {replay.length > 0 && <HoldingTable rows={replay} />}
               </details>
             )}
+
+            <details className="combo-fold">
+              <summary>規則說明（買進、賣出怎麼判斷）</summary>
+              <div className="combo-fold-body">
+                <p><b>買進</b>要四個條件都過：</p>
+                <p>1. 股價站上「往上走的季線」，而且大盤不是空頭。<br />
+                  2. 最近 3 天真的突破（創新高、W 底頸線、趨勢線等）。<br />
+                  3. 最近 5 天有資金流入（量增、OBV 上升）。<br />
+                  4. 籌碼、相對強勁、營收，至少一項也不錯。</p>
+                <p><b>賣出</b>要「真的轉壞」：最近 10 天至少 2 種結構破壞（高點越來越低、跌破趨勢線等），再加上至少 2 類確認（資金流出、籌碼賣出、大盤轉壞）；或跌破往下彎的季線；或比買價跌 10%。只是短線過熱（RSI、KD 在高檔）不會賣。</p>
+                <p>標「排名前 20」的是也在當月排名前 20 名。標「模擬」的是上線（{fmtDate(since)}）前用歷史資料模擬的部位。</p>
+                <p>回測 2020–2026，每筆平均贏過股票池約 1.8%；但最近半年只打平，輸給 0050。</p>
+              </div>
+            </details>
           </>
         )}
     </div>

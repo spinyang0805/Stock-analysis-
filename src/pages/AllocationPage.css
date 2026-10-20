@@ -1,0 +1,71 @@
+/* 資產配置頁：class 前綴 .alloc-，只用 styles.css 既有的 tokens（深色模式自動跟著走） */
+.alloc-stack { display: flex; flex-direction: column; gap: var(--space-4); }
+.alloc-sub { color: var(--fg-3); font-size: 13px; line-height: 1.7; margin: 0; }
+.alloc-h { margin: 0 0 var(--space-2); font-size: 15px; font-weight: 700; color: var(--fg); }
+
+/* 開頭建議 */
+.alloc-hero { border-color: var(--accent); background: linear-gradient(180deg, var(--card-2), var(--card)); }
+.alloc-hero-label { font-size: 12px; color: var(--accent-2); font-weight: 700; letter-spacing: .5px; }
+.alloc-hero-main { font-size: 26px; line-height: 1.35; font-weight: 800; margin: 6px 0 4px; color: var(--fg); }
+.alloc-hero-main em { font-style: normal; color: var(--accent-2); }
+.alloc-hero-meta { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.alloc-hero-meta > div { min-width: 140px; }
+.alloc-hero-meta small { display: block; color: var(--fg-4); font-size: 12px; }
+.alloc-hero-meta b { font-size: 17px; color: var(--fg); }
+
+/* 步驟 */
+.alloc-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); counter-reset: s; }
+.alloc-steps li { counter-increment: s; display: flex; gap: var(--space-3); align-items: flex-start; line-height: 1.7; color: var(--fg-2); font-size: 14px; }
+.alloc-steps li::before { content: counter(s); flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--muted); color: var(--accent-2); font-weight: 700; font-size: 13px; display: grid; place-items: center; margin-top: 2px; }
+
+/* 計算機 */
+.alloc-form { display: grid; gap: var(--space-4); }
+.alloc-group { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.alloc-group-title { font-size: 13px; font-weight: 700; color: var(--fg-2); margin-bottom: var(--space-2); }
+.alloc-field { display: flex; flex-direction: column; gap: 4px; }
+.alloc-field > span { font-size: 13px; font-weight: 600; color: var(--fg-2); }
+.alloc-field > small { font-size: 12px; color: var(--fg-4); line-height: 1.5; }
+.alloc-result { border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--card-2); padding: var(--space-4); }
+.alloc-result.is-empty { color: var(--fg-3); font-size: 14px; border-style: dashed; background: transparent; }
+.alloc-result-action { font-size: 22px; font-weight: 800; line-height: 1.4; color: var(--fg); }
+.alloc-result-action.buy { color: var(--up); }
+.alloc-result-action.sell { color: var(--down); }
+.alloc-result-hint { font-size: 13px; color: var(--fg-3); margin-top: 2px; }
+.alloc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.alloc-stats small { display: block; color: var(--fg-4); font-size: 12px; }
+.alloc-stats b { font-size: 16px; }
+.alloc-privacy { font-size: 12px; color: var(--fg-4); display: flex; gap: 6px; align-items: flex-start; line-height: 1.6; }
+
+/* 可收合說明 */
+.alloc-fold { border-top: 1px solid var(--border); padding-top: var(--space-3); }
+.alloc-fold > summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; font-size: 14px; font-weight: 700; color: var(--fg-2); list-style: none; }
+.alloc-fold > summary::-webkit-details-marker { display: none; }
+.alloc-fold > summary::before { content: "▸"; margin-right: 8px; color: var(--accent-2); transition: transform .15s; }
+.alloc-fold[open] > summary::before { transform: rotate(90deg); }
+.alloc-fold > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.alloc-fold-body { padding: var(--space-2) 0 0 20px; color: var(--fg-3); font-size: 13px; line-height: 1.8; }
+.alloc-fold-body p { margin: 0 0 var(--space-2); }
+.alloc-risk { width: 100%; border-collapse: collapse; margin-top: var(--space-2); font-size: 13px; }
+.alloc-risk th, .alloc-risk td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+.alloc-risk th:first-child, .alloc-risk td:first-child { text-align: left; }
+.alloc-risk th { color: var(--fg-3); font-weight: 600; font-size: 12px; }
+.alloc-risk tr.is-you td { color: var(--fg); font-weight: 700; }
+
+/* 紙上測試卡片 */
+.alloc-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-3); margin-top: var(--space-3); }
+.alloc-pcard { border: 1px solid var(--border); border-left-width: 4px; border-radius: var(--radius); padding: var(--space-3); background: var(--card-2); }
+.alloc-pcard h4 { margin: 0; font-size: 15px; color: var(--fg); }
+.alloc-pcard p { margin: 2px 0 var(--space-2); font-size: 12px; color: var(--fg-4); line-height: 1.5; }
+.alloc-pcard-ret { font-size: 24px; font-weight: 800; }
+.alloc-pcard dl { display: grid; grid-template-columns: auto auto; gap: 2px var(--space-3); margin: var(--space-2) 0 0; font-size: 13px; }
+.alloc-pcard dt { color: var(--fg-4); }
+.alloc-pcard dd { margin: 0; text-align: right; }
+.alloc-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--fg-3); margin-bottom: 4px; }
+
+.alloc-disclaimer { font-size: 12px; color: var(--fg-4); line-height: 1.7; text-align: center; padding: var(--space-2) 0 var(--space-4); }
+
+@media (max-width: 600px) {
+  .alloc-hero-main { font-size: 21px; }
+  .alloc-result-action { font-size: 19px; }
+  .alloc-group { grid-template-columns: 1fr; }
+}

@@ -1,0 +1,82 @@
+/* 組合拳訊號頁：所有樣式以 .combo- 開頭，只用站上既有的色票變數 */
+.combo-page { --combo-green: #22c55e; --combo-yellow: #eab308; --combo-red: #ef4444; --combo-gray: #94a3b8; }
+
+/* 今日重點 */
+.combo-today { border-left: 4px solid var(--accent); padding: var(--space-4); }
+.combo-today h2 { margin: 0 0 var(--space-3); font-size: 17px; color: var(--fg); }
+.combo-today ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.combo-today li { display: flex; align-items: flex-start; gap: 10px; font-size: 15px; line-height: 1.55; color: var(--fg-2); }
+.combo-today li b { color: var(--fg); }
+.combo-today a { color: var(--accent-2); }
+
+/* 狀態標籤：圓點 + 文字 */
+.combo-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.6; color: var(--fg); border: 1px solid var(--combo-gray); background: rgba(148,163,184,.14); white-space: nowrap; flex-shrink: 0; }
+.combo-chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--combo-gray); flex-shrink: 0; }
+.combo-chip.is-green { border-color: var(--combo-green); background: rgba(34,197,94,.14); }
+.combo-chip.is-green::before { background: var(--combo-green); }
+.combo-chip.is-yellow { border-color: var(--combo-yellow); background: rgba(234,179,8,.16); }
+.combo-chip.is-yellow::before { background: var(--combo-yellow); }
+.combo-chip.is-red { border-color: var(--combo-red); background: rgba(239,68,68,.14); }
+.combo-chip.is-red::before { background: var(--combo-red); }
+.combo-chip.is-pulse::before { animation: combo-pulse 1.4s ease-in-out infinite; }
+@keyframes combo-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .combo-chip.is-pulse::before { animation: none; } }
+
+/* 區塊 */
+.combo-section { margin-top: var(--space-5); }
+.combo-section-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin-bottom: var(--space-3); }
+.combo-section-head h2 { margin: 0; font-size: 18px; color: var(--fg); display: flex; align-items: center; gap: 8px; }
+.combo-section-head .combo-count { font-size: 13px; color: var(--fg-3); font-weight: 600; }
+.combo-section-hint { font-size: 13px; color: var(--fg-3); margin: 0 0 var(--space-3); line-height: 1.6; }
+.combo-empty { padding: var(--space-3) var(--space-4); border: 1px dashed var(--border-strong); border-radius: var(--radius); color: var(--fg-3); font-size: 14px; }
+.combo-sub { margin: var(--space-4) 0 var(--space-2); font-size: 14px; color: var(--fg-2); font-weight: 700; }
+
+/* 股票卡片 */
+.combo-list { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.combo-item { background: var(--card); border: 1px solid var(--border); border-left-width: 4px; border-radius: var(--radius); padding: var(--space-3) var(--space-4); display: grid; gap: var(--space-3); min-width: 0; }
+.combo-item.is-green { border-left-color: var(--combo-green); }
+.combo-item.is-yellow { border-left-color: var(--combo-yellow); }
+.combo-item.is-red { border-left-color: var(--combo-red); }
+.combo-item.is-gray { border-left-color: var(--combo-gray); }
+.combo-item-top { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-2); }
+.combo-name { background: none; border: 0; padding: 0; margin: 0; color: var(--fg); font: inherit; font-size: 16px; font-weight: 700; text-align: left; cursor: pointer; min-height: 32px; }
+.combo-name:hover { text-decoration: underline; }
+.combo-name .num { color: var(--fg-3); font-size: 13px; font-weight: 600; margin-right: 6px; }
+.combo-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 600; color: var(--fg-3); border: 1px solid var(--border-strong); vertical-align: middle; }
+.combo-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); margin: 0; }
+.combo-stats > div { min-width: 0; }
+.combo-stats dt { font-size: 12px; color: var(--fg-3); }
+.combo-stats dd { margin: 0; font-size: 15px; color: var(--fg); }
+.combo-stats dd.is-big { font-size: 17px; font-weight: 700; }
+.combo-stats .combo-wide { grid-column: 1 / -1; }
+
+/* 理由（可收合） */
+.combo-why { border-top: 1px solid var(--border); padding-top: var(--space-2); }
+.combo-why summary, .combo-fold summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent-2); min-height: 32px; display: flex; align-items: center; }
+.combo-why-list { margin: var(--space-2) 0 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; line-height: 1.6; }
+.combo-why-list li { color: var(--fg-3); }
+.combo-why-list b { color: var(--fg-2); margin-right: 4px; }
+
+/* 排序 */
+.combo-sortbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: var(--space-3); font-size: 13px; color: var(--fg-3); }
+.combo-sortbar button { min-height: 32px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--card-2); color: var(--fg-2); font-size: 13px; cursor: pointer; }
+.combo-sortbar button[aria-pressed="true"] { border-color: var(--accent); color: var(--fg); font-weight: 700; }
+
+/* 盤中狀態列 */
+.combo-live { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 8px 12px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: var(--space-3); background: rgba(148,163,184,.14); color: var(--fg-2); }
+.combo-live.is-open { background: rgba(34,197,94,.12); }
+.combo-live .combo-err { color: var(--combo-red); }
+
+/* 折疊區 */
+.combo-fold { margin-top: var(--space-4); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3) var(--space-4); }
+.combo-fold > summary { font-size: 15px; font-weight: 700; color: var(--fg); }
+.combo-fold-body { margin-top: var(--space-3); }
+.combo-fold-body p { margin: 0 0 var(--space-2); line-height: 1.7; color: var(--fg-2); font-size: 14px; }
+.combo-closed-list { display: grid; gap: var(--space-2); max-height: 480px; overflow: auto; }
+.combo-closed { background: var(--card-2); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); display: grid; gap: 4px; font-size: 13px; color: var(--fg-3); }
+.combo-closed-top { display: flex; justify-content: space-between; gap: var(--space-2); font-size: 14px; color: var(--fg); }
+
+@media (max-width: 600px) {
+  .combo-list { grid-template-columns: 1fr; }
+  .combo-today li { font-size: 15px; }
+}

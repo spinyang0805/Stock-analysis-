@@ -1,0 +1,134 @@
+/* 借貸試算頁專用樣式（前綴 .loan-）；只用 styles.css 的主題變數，深色模式自動沿用 */
+.loan-page { max-width: 1100px; }
+.loan-page * { min-width: 0; }
+.loan-head h2 { display: flex; gap: 8px; align-items: center; margin: 0 0 4px; font-size: 22px; }
+.loan-lead { margin: 0 0 var(--space-3); color: var(--fg-3); font-size: 14px; line-height: 1.6; }
+.loan-gap { margin-bottom: var(--space-3); }
+.loan-hint { display: block; margin: 4px 0 0; color: var(--fg-4); font-size: 12.5px; line-height: 1.6; }
+p.loan-hint { margin: var(--space-2) 0 0; }
+.loan-note { margin: var(--space-3) 0 0; line-height: 1.8; font-size: 14px; color: var(--fg-2); }
+.loan-fine { margin: var(--space-3) 0 0; color: var(--fg-4); font-size: 12.5px; line-height: 1.7; }
+.loan-card { margin-top: var(--space-4); }
+
+/* 分頁 */
+.loan-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-bottom: var(--space-4); }
+.loan-tab { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--card); color: var(--fg-2); cursor: pointer; text-align: left; min-height: 56px; }
+.loan-tab:hover { background: var(--card-2); }
+.loan-tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.loan-tab-t { font-size: 16px; font-weight: 800; }
+.loan-tab-d { font-size: 12px; opacity: .85; }
+
+/* 結論區 */
+.loan-hero { background: var(--card); border: 1px solid var(--border); border-left: 5px solid var(--accent); border-radius: var(--radius); padding: var(--space-4); margin-bottom: var(--space-4); }
+.loan-hero.good { border-left-color: #16a34a; }
+.loan-hero.warn { border-left-color: var(--warn); }
+.loan-hero.bad { border-left-color: #dc2626; }
+.loan-pending { color: var(--fg-3); }
+.loan-stale { opacity: .55; transition: opacity .15s; }
+.loan-hero-q { margin: 0; font-size: 13px; color: var(--fg-3); font-weight: 700; }
+.loan-hero-a { margin: 6px 0 var(--space-3); font-size: 18px; line-height: 1.7; font-weight: 600; }
+.loan-hero-a b { font-size: 20px; }
+.loan-stats { display: grid; gap: var(--space-3); grid-template-columns: repeat(3, 1fr); }
+.loan-stat { background: var(--card-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.loan-stat-label { font-size: 13px; color: var(--fg-3); font-weight: 700; }
+.loan-stat-value { font-size: 26px; font-weight: 800; margin: 2px 0; overflow-wrap: anywhere; }
+.loan-stat-sentence { font-size: 12.5px; color: var(--fg-4); line-height: 1.55; }
+.loan-stat.good .loan-stat-value { color: #22c55e; }
+.loan-stat.warn .loan-stat-value { color: var(--warn); }
+.loan-stat.bad .loan-stat-value { color: #f87171; }
+.loan-minis { display: grid; gap: var(--space-3); grid-template-columns: repeat(3, 1fr); margin-top: var(--space-3); }
+.loan-minis.four { grid-template-columns: repeat(4, 1fr); margin-top: 0; }
+.loan-mini { border-top: 1px solid var(--border); padding-top: var(--space-2); }
+.loan-mini-label { font-size: 12.5px; color: var(--fg-3); }
+.loan-mini-value { font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+.loan-mini-sentence { font-size: 12px; color: var(--fg-4); line-height: 1.5; }
+
+/* 調整假設 */
+.loan-assume, .loan-fold { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: var(--space-4); }
+.loan-fold { margin: var(--space-3) 0 0; background: transparent; }
+.loan-assume > summary, .loan-fold > summary, .loan-group > summary { cursor: pointer; list-style: none; display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; min-height: 48px; justify-content: center; position: relative; padding-right: 38px; }
+.loan-assume > summary::-webkit-details-marker, .loan-fold > summary::-webkit-details-marker, .loan-group > summary::-webkit-details-marker { display: none; }
+.loan-assume > summary::after, .loan-fold > summary::after, .loan-group > summary::after { content: ""; position: absolute; right: 16px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--fg-3); border-bottom: 2px solid var(--fg-3); transform: translateY(-70%) rotate(45deg); transition: transform .15s; }
+.loan-assume[open] > summary::after, .loan-fold[open] > summary::after, .loan-group[open] > summary::after { transform: translateY(-30%) rotate(-135deg); }
+.loan-assume-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 800; }
+.loan-assume-sum, .loan-group-sum, .loan-fold-hint { font-size: 12.5px; color: var(--fg-4); line-height: 1.5; }
+.loan-fold-title, .loan-group-title { font-size: 14.5px; font-weight: 700; }
+.loan-assume-body { padding: 0 14px 14px; display: grid; gap: var(--space-2); }
+.loan-group { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.loan-group-body, .loan-fold-body { padding: 4px 14px 14px; }
+.loan-fold-body { padding-top: var(--space-2); }
+.loan-assume-foot { display: flex; justify-content: flex-end; }
+
+/* 欄位 */
+.loan-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: var(--space-3) var(--space-4); margin-top: var(--space-2); }
+.loan-field { display: flex; flex-direction: column; gap: 4px; }
+.loan-field-label { font-size: 13.5px; color: var(--fg-2); font-weight: 600; line-height: 1.4; }
+.loan-field-unit { color: var(--fg-4); font-weight: 400; font-size: 12.5px; }
+.loan-field-row { display: flex; gap: var(--space-2); align-items: center; }
+.loan-field-row input[type="range"] { flex: 1; min-width: 60px; accent-color: var(--accent); }
+.loan-field-row .input { width: 120px; flex: none; }
+.loan-field-row .input[type="month"] { width: 100%; }
+.loan-field > select.input { width: 100%; }
+.loan-row-label { margin: var(--space-3) 0 6px; font-size: 13px; font-weight: 700; color: var(--fg-3); }
+.loan-inline { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.loan-choice { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.loan-choice label { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; min-height: 38px; border: 1px solid var(--border-strong); border-radius: 999px; cursor: pointer; font-size: 14px; background: var(--card); }
+.loan-choice label.on { border-color: var(--accent); background: rgba(59, 130, 246, .16); font-weight: 700; }
+.loan-check { display: flex; align-items: flex-start; gap: 8px; margin-top: var(--space-3); font-size: 14px; cursor: pointer; }
+.loan-check input { margin-top: 4px; }
+.loan-order { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: 4px; }
+.loan-order li { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.loan-order-n { width: 20px; color: var(--fg-3); }
+.loan-order-name { flex: 1; }
+
+/* 圖表與圖例 */
+.loan-svg { width: 100%; height: auto; display: block; color: var(--fg-2); }
+.loan-legend { list-style: none; margin: 0 0 var(--space-2); padding: 0; display: flex; flex-wrap: wrap; gap: 6px var(--space-4); font-size: 13px; color: var(--fg-2); }
+.loan-legend li { display: inline-flex; align-items: center; gap: 6px; }
+
+/* 歷史劇本清單 */
+.loan-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: flex-end; margin: var(--space-2) 0; }
+.loan-toolbar-item { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--fg-3); }
+.loan-toolbar-item .input { width: auto; min-width: 180px; }
+.loan-scen { list-style: none; margin: var(--space-2) 0; padding: 0; display: grid; gap: var(--space-2); grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); }
+.loan-scen li { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; display: grid; gap: 6px; background: var(--surface); opacity: .65; }
+.loan-scen li.on { opacity: 1; border-color: var(--border-strong); }
+.loan-scen label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; font-size: 14px; }
+.loan-scen-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.loan-scen-tag { font-size: 11.5px; font-weight: 400; color: var(--fg-3); border: 1px solid var(--border-strong); border-radius: 999px; padding: 0 8px; }
+.loan-scen-nums { margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.loan-scen-nums dt { font-size: 11.5px; color: var(--fg-4); }
+.loan-scen-nums dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+
+/* 表格：桌面橫向表，手機轉成卡片 */
+.loan-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: var(--space-3); display: block; overflow-x: auto; }
+.loan-table caption { text-align: left; font-weight: 700; padding: 4px 0; color: var(--fg-3); caption-side: top; display: block; }
+.loan-table th, .loan-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+.loan-table th:first-child, .loan-table td:first-child { text-align: left; }
+.loan-table thead th { color: var(--fg-3); font-weight: 600; }
+.loan-table tbody th { font-weight: 600; text-align: left; }
+
+/* 存檔 */
+.loan-snaps { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); }
+.loan-snaps li { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; display: grid; gap: 4px; font-size: 13.5px; line-height: 1.6; }
+.loan-snap-head { display: flex; justify-content: space-between; align-items: center; }
+.loan-notes { margin: 0; padding-left: 18px; line-height: 1.8; font-size: 13.5px; color: var(--fg-2); }
+
+@media (max-width: 760px) {
+  .loan-stats, .loan-minis, .loan-minis.four { grid-template-columns: 1fr; }
+  .loan-minis.four { grid-template-columns: 1fr 1fr; }
+  .loan-hero-a { font-size: 16px; }
+  .loan-stat-value { font-size: 24px; }
+  .loan-scen-nums { grid-template-columns: 1fr 1fr; }
+  .loan-field-row .input { width: 104px; }
+  .loan-table.stack, .loan-table.stack tbody, .loan-table.stack tr, .loan-table.stack th, .loan-table.stack td { display: block; }
+  .loan-table.stack { overflow: visible; }
+  .loan-table.stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .loan-table.stack tr { border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: var(--space-2); padding: 6px 10px; background: var(--surface); }
+  .loan-table.stack tbody th { padding: 4px 0; border: 0; font-size: 14px; }
+  .loan-table.stack td { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; border: 0; white-space: normal; text-align: right; }
+  .loan-table.stack td::before { content: attr(data-label); color: var(--fg-4); text-align: left; font-family: var(--font); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loan-stale, .loan-assume > summary::after, .loan-fold > summary::after, .loan-group > summary::after { transition: none; }
+}

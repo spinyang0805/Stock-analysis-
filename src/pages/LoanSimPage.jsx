@@ -1,9 +1,10 @@
 // 借貸試算：用 0050 還原總報酬月資料，回測「借錢投資、每月還款」在每一個歷史起點的結果
 // 資料：public/data/etf_history.json（{ months, tr }）。所有輸入只存在 React state + 本機 localStorage，不會送出。
 // 模型與 .omc/plans/loan/loan_sim.py 的 sim() 一致（再加上配息、薪水、多檔 ETF、可選賣出順序）
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Landmark, LineChart, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { Card } from "../components/ui.jsx";
+import "./LoanSimPage.css";
 import { fetchStaticJson } from "../lib/data.js";
 import {
   ETF_KEYS, CASH_KEYS, loanPayment, simulate, quantile, SCEN_GROUPS, SCEN_DEFS, DEFAULT_SCEN_ON,
@@ -83,71 +84,148 @@ function useDebounced(v, ms) {
 
 // 數字欄 + 滑桿；一改動就即時重算
 function Field({ label, value, onChange, min = 0, max, step = 1, suffix, hint }) {
+  const id = useId();
   const set = (v) => onChange(v === "" ? 0 : Number(v));
   return (
-    <label style={{ display: "block", minWidth: 200, flex: "1 1 220px" }}>
-      <span style={{ fontSize: 13 }}>{label}{suffix ? `（${suffix}）` : ""}</span>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 2 }}>
-        {max != null && <input type="range" min={min} max={max} step={step} value={Math.min(max, Math.max(min, value))} onChange={(e) => set(e.target.value)} style={{ flex: 1, minWidth: 80 }} />}
-        <input className="input num" type="number" min={min} step={step} value={Number.isFinite(value) ? value : 0} onChange={(e) => set(e.target.value)} style={{ width: max != null ? 120 : "100%" }} />
+    <div className="loan-field">
+      <label htmlFor={id} className="loan-field-label">{label}{suffix ? <span className="loan-field-unit">（{suffix}）</span> : null}</label>
+      <div className="loan-field-row">
+        {max != null && <input type="range" aria-label={`${label}（滑桿）`} min={min} max={max} step={step} value={Math.min(max, Math.max(min, value))} onChange={(e) => set(e.target.value)} />}
+        <input id={id} className="input num" type="number" inputMode="decimal" min={min} step={step} value={Number.isFinite(value) ? value : 0} onChange={(e) => set(e.target.value)} />
       </div>
-      {hint && <span className="dim">{hint}</span>}
-    </label>
+      {hint && <span className="loan-hint">{hint}</span>}
+    </div>
   );
 }
 
-const Wrap = ({ children }) => <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>{children}</div>;
+const Wrap = ({ children }) => <div className="loan-fields">{children}</div>;
 
-function Kpi({ label, value, sub }) {
-  return <div className="kpi"><div className="label">{label}</div><div className="value num">{value}</div>{sub && <div className="sub dim">{sub}</div>}</div>;
+// 設定分組：標題 + 一行目前設定摘要，點開才看到欄位
+function Group({ title, summary, defaultOpen = false, children }) {
+  return (
+    <details className="loan-group" open={defaultOpen}>
+      <summary>
+        <span className="loan-group-title">{title}</span>
+        {summary ? <span className="loan-group-sum">{summary}</span> : null}
+      </summary>
+      <div className="loan-group-body">{children}</div>
+    </details>
+  );
 }
 
-// 各起點最終淨值（依時間排列）；紅色 = 該起點途中需自掏腰包；點柱子可切換指定起點
+// 單選：膠囊按鈕（仍是原生 radio，鍵盤可操作）
+function Choice({ name, value, options, onChange }) {
+  return (
+    <div className="loan-choice" role="radiogroup">
+      {options.map(([v, t]) => (
+        <label key={v} className={value === v ? "on" : ""}>
+          <input type="radio" name={name} checked={value === v} onChange={() => onChange(v)} /> {t}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+// 摺疊區塊：次要資訊預設收起
+function Fold({ title, hint, children, defaultOpen = false }) {
+  return (
+    <details className="loan-fold" open={defaultOpen}>
+      <summary><span className="loan-fold-title">{title}</span>{hint ? <span className="loan-fold-hint">{hint}</span> : null}</summary>
+      <div className="loan-fold-body">{children}</div>
+    </details>
+  );
+}
+
+// 主要數字：一個大數字 + 一句白話
+function Stat({ label, value, sentence, tone }) {
+  return (
+    <div className={`loan-stat${tone ? ` ${tone}` : ""}`}>
+      <div className="loan-stat-label">{label}</div>
+      <div className="loan-stat-value num">{value}</div>
+      <div className="loan-stat-sentence">{sentence}</div>
+    </div>
+  );
+}
+
+function Mini({ label, value, sentence }) {
+  return (
+    <div className="loan-mini">
+      <div className="loan-mini-label">{label}</div>
+      <div className="loan-mini-value num">{value}</div>
+      <div className="loan-mini-sentence">{sentence}</div>
+    </div>
+  );
+}
+
+// 圖例小圖示：同時用線型／形狀區分，不只靠顏色
+function Swatch({ kind, color = "currentColor" }) {
+  return (
+    <svg width="28" height="12" viewBox="0 0 28 12" aria-hidden="true" focusable="false">
+      {kind === "line" && <line x1="1" x2="27" y1="6" y2="6" stroke={color} strokeWidth="2.5" />}
+      {kind === "dash" && <line x1="1" x2="27" y1="6" y2="6" stroke={color} strokeWidth="2.5" strokeDasharray="5 3" />}
+      {kind === "thin" && <line x1="1" x2="27" y1="6" y2="6" stroke={color} strokeWidth="1.5" />}
+      {kind === "thick" && <line x1="1" x2="27" y1="6" y2="6" stroke={color} strokeWidth="4.5" />}
+      {kind === "band" && <rect x="1" y="1" width="26" height="10" rx="2" fill={color} opacity="0.3" />}
+      {kind === "bar" && <rect x="7" y="1" width="14" height="10" rx="1.5" fill={color} />}
+      {kind === "hatch" && <><rect x="7" y="1" width="14" height="10" rx="1.5" fill={color} opacity="0.35" stroke={color} /><path d="M7 11 L21 1 M7 6 L14 1 M14 11 L21 6" stroke={color} strokeWidth="1.2" /></>}
+    </svg>
+  );
+}
+const Legend = ({ items }) => (
+  <ul className="loan-legend" aria-label="圖例">
+    {items.map(([kind, color, text]) => <li key={text}><Swatch kind={kind} color={color} /><span>{text}</span></li>)}
+  </ul>
+);
+
+// 各起點最終淨值（依時間排列）；斜線柱 = 該起點途中需自掏腰包；點柱子可切換指定起點
 function ResultBars({ results, selIdx, onPick }) {
-  const W = 720, H = 220, L = 56, B = 22, T = 8;
+  const W = 720, H = 220, L = 60, B = 24, T = 8;
   const vals = results.map((r) => r.final);
   const hi = Math.max(...vals, 0), lo = Math.min(...vals, 0);
   const y = (v) => T + (1 - (v - lo) / (hi - lo || 1)) * (H - B - T);
   const bw = (W - L - 6) / results.length;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }} role="img" aria-label="各起點最終淨值">
+    <svg viewBox={`0 0 ${W} ${H}`} className="loan-svg" role="img" aria-label="各進場月份的最終淨值">
+      <defs>
+        <pattern id="loan-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="6" height="6" fill="#dc2626" opacity="0.45" /><line x1="0" y1="0" x2="0" y2="6" stroke="#dc2626" strokeWidth="3" />
+        </pattern>
+      </defs>
       <line x1={L} x2={W - 6} y1={y(0)} y2={y(0)} stroke="currentColor" strokeOpacity="0.35" />
-      <text x={4} y={y(hi) + 4} fontSize="11" fill="currentColor" opacity="0.6">{money(hi / 10000)}萬</text>
-      <text x={4} y={y(0) + 4} fontSize="11" fill="currentColor" opacity="0.6">0</text>
-      {lo < 0 && <text x={4} y={y(lo) + 4} fontSize="11" fill="currentColor" opacity="0.6">{signedMoney(lo / 10000)}萬</text>}
+      <text x={4} y={y(hi) + 8} fontSize="14" fill="currentColor" opacity="0.7">{money(hi / 10000)}萬</text>
+      <text x={4} y={y(0) + 4} fontSize="14" fill="currentColor" opacity="0.7">0</text>
+      {lo < 0 && <text x={4} y={y(lo) + 4} fontSize="14" fill="currentColor" opacity="0.7">{signedMoney(lo / 10000)}萬</text>}
       {results.map((r, i) => (
         <rect key={r.month} x={L + i * bw} width={Math.max(bw - 0.4, 0.5)} y={Math.min(y(r.final), y(0))} height={Math.abs(y(r.final) - y(0)) || 0.5}
-          fill={r.ruin ? "#dc2626" : r.final < 0 ? "#f59e0b" : "#2563eb"} opacity={i === selIdx ? 1 : 0.6} style={{ cursor: "pointer" }} onClick={() => onPick(r.month)}>
+          fill={r.ruin ? "url(#loan-hatch)" : r.final < 0 ? "#f59e0b" : "#2563eb"} opacity={i === selIdx ? 1 : 0.65} stroke={i === selIdx ? "currentColor" : "none"} style={{ cursor: "pointer" }} onClick={() => onPick(r.month)}>
           <title>{`${r.month} 起：${signedMoney(r.final)} 元${r.ruin ? "（途中需自掏腰包）" : ""}`}</title>
         </rect>
       ))}
-      <text x={L} y={H - 6} fontSize="11" fill="currentColor" opacity="0.6">{results[0]?.month}</text>
-      <text x={W - 6} y={H - 6} fontSize="11" textAnchor="end" fill="currentColor" opacity="0.6">{results[results.length - 1]?.month}</text>
+      <text x={L} y={H - 6} fontSize="14" fill="currentColor" opacity="0.7">{results[0]?.month}</text>
+      <text x={W - 6} y={H - 6} fontSize="14" textAnchor="end" fill="currentColor" opacity="0.7">{results[results.length - 1]?.month}</text>
     </svg>
   );
 }
 
 function PotChart({ series }) {
-  const W = 720, H = 220, L = 56, B = 22, T = 8;
+  const W = 720, H = 220, L = 60, B = 12, T = 8;
   const hi = Math.max(...series.map((s) => Math.max(s.pot, s.bal)), 1), lo = Math.min(...series.map((s) => s.pot), 0);
   const x = (k) => L + (k / (series.length - 1 || 1)) * (W - L - 8);
   const y = (v) => T + (1 - (v - lo) / (hi - lo || 1)) * (H - B - T);
   const line = (f) => series.map((s) => `${x(s.k).toFixed(1)},${y(f(s)).toFixed(1)}`).join(" ");
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }} role="img" aria-label="資金池與剩餘貸款">
-      <text x={4} y={y(hi) + 4} fontSize="11" fill="currentColor" opacity="0.6">{money(hi / 10000)}萬</text>
-      <text x={4} y={y(lo) + 4} fontSize="11" fill="currentColor" opacity="0.6">{signedMoney(lo / 10000)}萬</text>
-      <polyline fill="none" stroke="#2563eb" strokeWidth="2" points={line((s) => s.pot)} />
-      <polyline fill="none" stroke="#dc2626" strokeWidth="2" strokeDasharray="5 3" points={line((s) => s.bal)} />
-      <text x={L + 6} y={H - 6} fontSize="11" fill="#2563eb">藍：資金池（股票＋現金）</text>
-      <text x={L + 190} y={H - 6} fontSize="11" fill="#dc2626">紅虛線：剩餘貸款</text>
+    <svg viewBox={`0 0 ${W} ${H}`} className="loan-svg" role="img" aria-label="資金池與剩餘貸款">
+      <text x={4} y={y(hi) + 8} fontSize="14" fill="currentColor" opacity="0.7">{money(hi / 10000)}萬</text>
+      <text x={4} y={y(lo) + 4} fontSize="14" fill="currentColor" opacity="0.7">{signedMoney(lo / 10000)}萬</text>
+      <polyline fill="none" stroke="#2563eb" strokeWidth="2.5" points={line((s) => s.pot)} />
+      <polyline fill="none" stroke="#dc2626" strokeWidth="2.5" strokeDasharray="5 3" points={line((s) => s.bal)} />
     </svg>
   );
 }
 
-// 淨資產扇形圖：p10–p90 範圍、中位數、剩餘貸款
+// 淨資產扇形圖：較差 10%～較好 10% 範圍、中位數、剩餘貸款（說明改放 HTML 圖例，不擠在圖裡）
 function FanChart({ fan, lines, actual }) {
-  const W = 720, H = 260, L = 56, B = 22, T = 8;
+  const W = 720, H = 260, L = 60, B = 24, T = 8;
   const all = [...lines.flatMap((l) => l.net), ...(actual ? actual.net : [])];
   const hi = Math.max(...fan.map((s) => Math.max(s.p90, s.bal)), ...all, 1), lo = Math.min(...fan.map((s) => s.p10), ...all, 0);
   const x = (k) => L + (k / (fan.length - 1 || 1)) * (W - L - 8);
@@ -157,24 +235,22 @@ function FanChart({ fan, lines, actual }) {
   const band = [...pts((s) => s.p90), ...pts((s) => s.p10).reverse()].join(" ");
   const ticks = fan.filter((s) => s.k > 0 && (s.label.endsWith("-12") || s.k === fan.length - 1));
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }} role="img" aria-label="未來淨資產範圍、歷史劇本與剩餘貸款">
+    <svg viewBox={`0 0 ${W} ${H}`} className="loan-svg" role="img" aria-label="未來淨資產範圍、歷史劇本與剩餘貸款">
       <line x1={L} x2={W - 8} y1={y(0)} y2={y(0)} stroke="currentColor" strokeOpacity="0.35" />
-      <text x={4} y={y(hi) + 4} fontSize="11" fill="currentColor" opacity="0.6">{money(hi / 10000)}萬</text>
-      <text x={4} y={y(0) + 4} fontSize="11" fill="currentColor" opacity="0.6">0</text>
-      {lo < 0 && <text x={4} y={y(lo) + 4} fontSize="11" fill="currentColor" opacity="0.6">{signedMoney(lo / 10000)}萬</text>}
+      <text x={4} y={y(hi) + 8} fontSize="14" fill="currentColor" opacity="0.7">{money(hi / 10000)}萬</text>
+      <text x={4} y={y(0) + 4} fontSize="14" fill="currentColor" opacity="0.7">0</text>
+      {lo < 0 && <text x={4} y={y(lo) + 4} fontSize="14" fill="currentColor" opacity="0.7">{signedMoney(lo / 10000)}萬</text>}
       <polygon points={band} fill="#2563eb" opacity="0.18" />
-      <polyline fill="none" stroke="#2563eb" strokeWidth="2" points={pts((s) => s.p50).join(" ")} />
-      <polyline fill="none" stroke="#dc2626" strokeWidth="2" strokeDasharray="5 3" points={pts((s) => s.bal).join(" ")} />
+      <polyline fill="none" stroke="#2563eb" strokeWidth="2.5" points={pts((s) => s.p50).join(" ")} />
+      <polyline fill="none" stroke="#dc2626" strokeWidth="2.5" strokeDasharray="5 3" points={pts((s) => s.bal).join(" ")} />
       {lines.map((l) => (
         <g key={l.id}>
           <polyline fill="none" stroke={l.color} strokeWidth="1.6" points={seg(l.net, 0, l.histMonths)} />
           {l.histMonths < l.net.length - 1 && <polyline fill="none" stroke={l.color} strokeWidth="1.6" strokeDasharray="4 3" points={seg(l.net, l.histMonths, l.net.length - 1)} />}
         </g>
       ))}
-      {actual && actual.net.length > 1 && <polyline fill="none" stroke="currentColor" strokeWidth="3" points={seg(actual.net, 0, actual.net.length - 1)} />}
-      {ticks.map((s) => <text key={s.k} x={x(s.k)} y={H - 8} fontSize="10" textAnchor="middle" fill="currentColor" opacity="0.6">{s.label.slice(0, 4)}</text>)}
-      <text x={L + 6} y={T + 12} fontSize="11" fill="#2563eb">藍線：模擬淨資產中位數；淺藍帶：較差 10% 到較好 10% 之間</text>
-      <text x={L + 6} y={T + 26} fontSize="11" fill="#dc2626">紅虛線：剩餘貸款</text>
+      {actual && actual.net.length > 1 && <polyline fill="none" stroke="currentColor" strokeWidth="3.5" points={seg(actual.net, 0, actual.net.length - 1)} />}
+      {ticks.map((s) => <text key={s.k} x={x(s.k)} y={H - 6} fontSize="13" textAnchor="middle" fill="currentColor" opacity="0.7">{s.label.slice(0, 4)}</text>)}
     </svg>
   );
 }
@@ -202,6 +278,7 @@ export default function LoanSimPage() {
   const [scenOn, setScenOn] = useState(DEFAULT_SCEN_ON);
   const [custom, setCustom] = useState([]);
   const [pick, setPick] = useState("");
+  const [scenSort, setScenSort] = useState("def");
   const [snaps, setSnaps] = useState(() => {
     try {
       const a = JSON.parse(localStorage.getItem(SNAP_KEY) || "[]");
@@ -245,13 +322,20 @@ export default function LoanSimPage() {
     return () => { dead = true; if (w) w.terminate(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFuture, hist, curKey, retry]);
-  const mc = job.mc, sumry = job.sumry;
-
-  const sc = useMemo(() => {
+  const scNow = useMemo(() => {
     if (!hist || !isFuture) return null;
     return runScenarios(dp, hist, futureLabels(dp.origin, dp.n), custom);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hist, isFuture, custom, JSON.stringify({ ...dp, sel: 0, tab: 0, firstMonth: 0, method: 0 })]);
+
+  // 單一資料來源：mc／sumry／sc／所用設定 一起成套更新。
+  // 只有「worker 結果的 key 與目前設定+種子相同」且劇本也算好時才換成新的一整套；重算中就整套維持上一次，絕不混用新舊數字
+  const live = !!(job.mc && scNow && job.key === curKey);
+  const lastRef = useRef(null);
+  if (live) lastRef.current = { mc: job.mc, sumry: job.sumry, sc: scNow, dp };
+  const V = lastRef.current;
+  const mc = V ? V.mc : null, sumry = V ? V.sumry : null, sc = V ? V.sc : null;
+  const sdp = V ? V.dp : dp, sn = sdp.n;
 
   // 每個存檔用它自己當時的完整設定與起算月份，重算實際走勢
   const snapActual = useMemo(() => (hist ? snaps.map((sn) => {
@@ -281,7 +365,7 @@ export default function LoanSimPage() {
   const ruinN = results.filter((r) => r.ruin).length, anyN = results.filter((r) => r.short > 1e-6).length;
   const maxShort = Math.max(0, ...results.map((r) => r.short));
   const lowNetRes = results.reduce((a, r) => (!a || r.lowNet < a.lowNet ? r : a), null);
-  const pending = isFuture && (job.busy || !mc || !sc || dp !== p);
+  const pending = isFuture && (!live || job.busy || dp !== p);
   const canSave = !pending && !job.err && job.key === curKey;      // 結果必須是用現在這組設定與種子算出來的
   const allLines = sc ? sc.list.map((l, i) => ({ ...l, color: `hsl(${(i * 47) % 360} 70% 42%)` })) : [];
   const lines = allLines.filter((l) => scenOn[l.id]);
@@ -303,8 +387,8 @@ export default function LoanSimPage() {
     const d = new Date(), date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const r = (v) => Math.round(v);
     const snap = {
-      date, start: mc.fan[0].label, n: p.n, seed,
-      spec: JSON.parse(JSON.stringify(dp)),                // 完整模擬設定（含還款順序、進場、成本、利率、方法、起算月份）
+      date, start: mc.fan[0].label, n: sn, seed,
+      spec: JSON.parse(JSON.stringify(sdp)),                // 完整模擬設定（含還款順序、進場、成本、利率、方法、起算月份）
       head: { net: mc.head.net.map(r), needP: mc.head.needP },
       fan: { p10: mc.fan.map((s) => r(s.p10)), p50: mc.fan.map((s) => r(s.p50)), p90: mc.fan.map((s) => r(s.p90)) },
       scen: lines.map((l) => ({ name: l.name, final: r(l.final), needs: l.needs, net: l.net.map(r) })),
@@ -317,30 +401,36 @@ export default function LoanSimPage() {
   const selIdx = results.findIndex((r) => r.month === selMonth);
   const pct = (a, b) => (b ? `${((a / b) * 100).toFixed(1)}%` : "–");
 
-  return (
-    <div className="page">
-      <h2 style={{ display: "flex", gap: 8, alignItems: "center" }}><Landmark size={22} />借貸試算</h2>
-      <div className="dim" style={{ marginBottom: 8 }}>每個欄位都能改，結果即時重算。輸入只存在這台瀏覽器（localStorage），不會送出。</div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        {[["future", "未來預估"], ["hist", "用過去歷史驗證"]].map(([v, t]) => (
-          <button key={v} type="button" className={`btn${p.tab === v ? " primary" : ""}`} aria-pressed={p.tab === v} onClick={() => set({ tab: v })}>{t}</button>
-        ))}
-      </div>
+  const groupName = Object.fromEntries(SCEN_GROUPS);
+  const sortedLines = scenSort === "hi" ? [...allLines].sort((a, b) => b.final - a.final) : scenSort === "lo" ? [...allLines].sort((a, b) => a.final - b.final) : allLines;
+  const setScenAll = (on, ids) => setScenOn((m) => ({ ...m, ...Object.fromEntries(ids.map((id) => [id, on])) }));
+  const needTone = (pr) => (pr < 0.05 ? "good" : pr < 0.2 ? "warn" : "bad");
+  const needWord = (pr) => (pr < 0.05 ? "風險低" : pr < 0.2 ? "要留意" : "風險高");
+  const histNeedPr = results.length ? ruinN / results.length : 0;
+  const amtMismatch = Math.abs(amtSum - p.loan) > 0.5;
 
-      <div className="grid two">
-        <Card title="貸款" icon={Landmark}>
+  // ===== 調整假設（所有欄位集中、分組、預設收起）=====
+  const assumptions = (
+    <details className="loan-assume">
+      <summary>
+        <span className="loan-assume-title"><SlidersHorizontal size={18} aria-hidden="true" />調整假設</span>
+        <span className="loan-assume-sum">
+          貸 {money(p.loan / 10000)} 萬・年利率 {p.rate}%・{n} 個月・每月還 {money(pay)} 元
+          {amtMismatch ? "・注意：資金配置合計與貸款金額不同" : ""}
+        </span>
+      </summary>
+      <div className="loan-assume-body">
+        <Group title="1. 貸款條件" summary={`${money(p.loan)} 元、${p.rate}%、${n} 個月`} defaultOpen>
           <Wrap>
             <Field label="貸款金額" suffix="元" value={p.loan} onChange={(v) => set({ loan: v })} max={10000000} step={50000} />
             <Field label="年利率" suffix="%" value={p.rate} onChange={(v) => set({ rate: v })} max={10} step={0.05} />
-            <Field label="期數" suffix="月" value={p.n} onChange={(v) => set({ n: v })} min={1} max={360} step={1} />
-            <Field label="每月薪水支付" suffix="元" value={p.salary} onChange={(v) => set({ salary: v })} max={100000} step={1000} hint="每月先用薪水付款，不夠才動用下面的資金；計入淨值扣除" />
+            <Field label="還款期數" suffix="月" value={p.n} onChange={(v) => set({ n: v })} min={1} max={360} step={1} />
+            <Field label="每月用薪水支付的金額" suffix="元" value={p.salary} onChange={(v) => set({ salary: v })} max={100000} step={1000} hint="每月先用薪水還款，不夠才動用下面的資金；這筆錢會從淨資產扣掉" />
           </Wrap>
-          <div style={{ marginTop: 8, lineHeight: 1.8 }}>
-            每月還款 <b className="num">{money(pay)}</b> 元；總還款 <b className="num">{money(totalPaid)}</b> 元；總利息 <b className="num">{money(totalPaid - p.loan)}</b> 元
-          </div>
-        </Card>
+          <p className="loan-note">每月還款 <b className="num">{money(pay)}</b> 元；總還款 <b className="num">{money(totalPaid)}</b> 元；其中利息 <b className="num">{money(totalPaid - p.loan)}</b> 元。</p>
+        </Group>
 
-        <Card title="資金配置（各帳戶金額）" icon={SlidersHorizontal}>
+        <Group title="2. 借來的錢放在哪裡" summary={`合計 ${money(amtSum)} 元`}>
           <Wrap>
             <Field label="扣款戶現金" suffix="元" value={p.amt.deduct} onChange={(v) => setAmt("deduct", v)} max={3000000} step={10000} />
             <Field label="預備金現金" suffix="元" value={p.amt.reserve} onChange={(v) => setAmt("reserve", v)} max={3000000} step={10000} />
@@ -349,328 +439,386 @@ export default function LoanSimPage() {
             <Field label="00919" suffix="元" value={p.amt.e00919} onChange={(v) => setAmt("e00919", v)} max={5000000} step={10000} />
             <Field label="0050" suffix="元" value={p.amt.e0050} onChange={(v) => setAmt("e0050", v)} max={5000000} step={10000} />
             <Field label="006208" suffix="元" value={p.amt.e006208} onChange={(v) => setAmt("e006208", v)} max={5000000} step={10000} />
+            <Field label="銀行存款利率" suffix="%／年" value={p.cashRate} onChange={(v) => set({ cashRate: v })} max={6} step={0.05} hint="現金放銀行每年賺的利息（扣款戶、預備金、其他現金適用），和 00919 配息無關" />
           </Wrap>
-          <Wrap>
-            <Field label="銀行存款利率" suffix="扣款戶、預備金、其他現金" value={p.cashRate} onChange={(v) => set({ cashRate: v })} max={6} step={0.05} hint="現金放在銀行每年賺的利息，和 00919 的配息無關" />
-          </Wrap>
-          <div style={{ marginTop: 8 }}>
-            合計 <b className="num">{money(amtSum)}</b> 元，貸款 <b className="num">{money(p.loan)}</b> 元
-            {Math.abs(amtSum - p.loan) > 0.5 && (
-              <div className="notice warn" style={{ marginTop: 6 }}>
-                {amtSum > p.loan ? `合計比貸款多 ${money(amtSum - p.loan)} 元（視為另外投入的自有資金，結果沒有扣掉這筆本金）。` : `合計比貸款少 ${money(p.loan - amtSum)} 元（這部分貸款資金沒有被算進去）。`}
-              </div>
-            )}
-          </div>
-          <div className="dim" style={{ marginTop: 6 }}>{isFuture ? "009816、0050、006208 用同一組報酬假設（追蹤相近的台灣前 50 大指數）。" : "所有股票 ETF 都用 0050 還原總報酬歷史代替（009816、006208 追蹤相近的台灣前 50 大指數）。"}</div>
-        </Card>
-      </div>
-
-      {isFuture && (
-        <Card title="未來報酬假設" icon={LineChart} style={{ marginTop: 12 }}>
-          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 8 }}>
-            <span>情境：</span>
-            {[...Object.entries(SCENARIOS).map(([v, a]) => [v, a[0]]), ["custom", "自訂"]].map(([v, t]) => (
-              <label key={v}><input type="radio" name="scen" checked={p.scen === v} onChange={() => set(SCENARIOS[v] ? { scen: v, retMkt: SCENARIOS[v][1], ret919: SCENARIOS[v][2] } : { scen: v })} /> {t}</label>
-            ))}
-          </div>
-          <Wrap>
-            <label style={{ display: "block", minWidth: 200, flex: "1 1 220px" }}>
-              <span style={{ fontSize: 13 }}>預估起算月份</span>
-              <div style={{ marginTop: 2 }}><input className="input" type="month" value={p.origin} onChange={(e) => e.target.value && set({ origin: e.target.value })} /></div>
-              <span className="dim">從這個月起算；以後資料庫有了這些月份，會自動補上實際走勢</span>
-            </label>
-            <Field label="009816／0050／006208 年化報酬（複利／CAGR，約為中位數情況）" suffix="%／年" value={p.retMkt} onChange={(v) => set({ retMkt: v, scen: "custom" })} min={-20} max={30} step={0.5} hint="含配息的總報酬，每年複利成長的速度；例：8 代表 10 年約變 2.16 倍。有漲有跌時，平均值會比這個數字略高" />
-            <Field label="00919 年化報酬（複利／CAGR，約為中位數情況）" suffix="%／年" value={p.ret919} onChange={(v) => set({ ret919: v, scen: "custom" })} min={-20} max={30} step={0.5} hint="含配息的全部報酬；上面的配息率是從這裡面領出來的" />
-            <Field label="009816／0050／006208 年波動" suffix="%" value={p.volMkt} onChange={(v) => set({ volMkt: v })} min={1} max={60} step={1} hint="數字越大，每年漲跌越劇烈" />
-            <Field label="00919 年波動" suffix="%" value={p.vol919} onChange={(v) => set({ vol919: v })} min={1} max={60} step={1} />
-          </Wrap>
-          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", margin: "10px 0 4px", alignItems: "center" }}>
-            <span>模擬方式：</span>
-            {[["boot", "歷史抽樣（保留大跌）"], ["normal", "常態分布"]].map(([v, t]) => (
-              <label key={v}><input type="radio" name="method" checked={p.method === v} onChange={() => set({ method: v })} /> {t}</label>
-            ))}
-            <button type="button" className="btn sm" onClick={() => setSeed((x) => x + 1)}><RotateCcw size={14} />重新抽樣</button>
-          </div>
-          <div className="dim">歷史抽樣：把 0050 過去每 12 個月的漲跌節奏隨機拼起來，再調成你設定的年化報酬與波動，會保留 2008、2020 那種大跌。常態分布：沒有歷史上大跌會連著發生的特性，但還是可能出現大幅虧損。共模擬 {PATHS.toLocaleString("zh-TW")} 條路徑；00919 與其他 ETF 的相關度設為 0.7。結果不會因為改數字而亂跳，想換一批隨機路徑就按「重新抽樣」。</div>
-        </Card>
-      )}
-
-      <div className="grid two" style={{ marginTop: 12 }}>
-        <Card title="00919 配息與交易成本" icon={SlidersHorizontal}>
-          <Wrap>
-            <Field label="00919 每年配息率" suffix="%／年，配息佔市值" value={p.yield919} onChange={(v) => set({ yield919: v })} max={20} step={0.1} hint={isFuture ? "每年 3、6、9、12 月各領 1/4；配息從總報酬裡面拿出來，不是額外多賺" : "每年 3、6、9、12 月各配 1/4，從市值扣除（總報酬與 0050 相同）"} />
-          </Wrap>
-          <label style={{ display: "block", marginTop: 8 }}>
-            <input type="checkbox" checked={p.divDeposit} onChange={(e) => set({ divDeposit: e.target.checked })} /> 配息存入扣款戶（預設不勾＝配息扣健保費後再投入 00919，含買進成本）
-          </label>
-          <div className="dim" style={{ marginTop: 4 }}>單筆配息 ≥ 20,000 元會扣二代健保 2.11%；所得稅依個人級距而定，這裡沒有計入。</div>
-          <details style={{ marginTop: 8 }}>
-            <summary>進階：交易成本</summary>
-            <Wrap>
-              <Field label="手續費率" suffix="%" value={p.feePct} onChange={(v) => set({ feePct: v })} max={0.5} step={0.0025} />
-              <Field label="手續費折扣" suffix="倍" value={p.discount} onChange={(v) => set({ discount: v })} max={1} step={0.05} />
-              <Field label="滑價" suffix="%" value={p.slipPct} onChange={(v) => set({ slipPct: v })} max={1} step={0.01} />
-              <Field label="證交稅（賣出）" suffix="%" value={p.taxPct} onChange={(v) => set({ taxPct: v })} max={1} step={0.01} />
-            </Wrap>
-          </details>
-        </Card>
-
-        <Card title="還款資金來源順序" icon={SlidersHorizontal}>
-          <div className="dim" style={{ marginBottom: 6 }}>由上而下依序動用；股票最多賣到持有為止，仍不夠就算「自掏腰包」。</div>
-          {p.order.map((k, i) => (
-            <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 0" }}>
-              <span className="num" style={{ width: 18 }}>{i + 1}</span>
-              <span style={{ flex: 1 }}>{SOURCE_LABELS[k]}</span>
-              <button type="button" className="btn sm" aria-label="上移" disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp size={14} /></button>
-              <button type="button" className="btn sm" aria-label="下移" disabled={i === p.order.length - 1} onClick={() => move(i, 1)}><ArrowDown size={14} /></button>
+          <p className="loan-note">合計 <b className="num">{money(amtSum)}</b> 元，貸款 <b className="num">{money(p.loan)}</b> 元。</p>
+          {amtMismatch && (
+            <div className="notice warn">
+              {amtSum > p.loan ? `合計比貸款多 ${money(amtSum - p.loan)} 元（視為另外投入的自有資金，結果沒有扣掉這筆本金）。` : `合計比貸款少 ${money(p.loan - amtSum)} 元（這部分貸款資金沒有被算進去）。`}
             </div>
-          ))}
-        </Card>
-      </div>
+          )}
+          <p className="loan-hint">{isFuture ? "009816、0050、006208 用同一組報酬假設（追蹤相近的台灣前 50 大指數）。" : "所有股票 ETF 都用 0050 含配息的歷史報酬代替（009816、006208 追蹤相近的台灣前 50 大指數）。"}</p>
+        </Group>
 
-      <Card title="進場方式與再平衡" icon={SlidersHorizontal} style={{ marginTop: 12 }}>
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 8 }}>
-          {[["lump", "一次投入"], ["dca", "分月平均投入"], ["dip", "跌深加碼"]].map(([v, t]) => (
-            <label key={v}><input type="radio" name="entry" checked={p.entry === v} onChange={() => set({ entry: v })} /> {t}</label>
-          ))}
-        </div>
-        {p.entry === "dca" && <Wrap><Field label="分幾個月投入" suffix="月" value={p.dcaN} onChange={(v) => set({ dcaN: v })} min={1} max={24} /></Wrap>}
-        {p.entry === "dip" && (
-          <Wrap>
-            <Field label="先投 1/3，從高點跌 X% 再投 1/3" suffix="%" value={p.dipX} onChange={(v) => set({ dipX: v })} max={50} />
-            <Field label="跌 Y% 再投最後 1/3" suffix="%" value={p.dipY} onChange={(v) => set({ dipY: v })} max={60} />
-            <Field label="最晚第 M 個月全部投入" suffix="月" value={p.dipM} onChange={(v) => set({ dipM: v })} max={36} />
-          </Wrap>
+        {isFuture && (
+          <Group title="3. 未來每年報酬" summary={`${p.scen === "custom" ? "自訂" : SCENARIOS[p.scen][0]}：${p.retMkt}%／${p.ret919}%、起算 ${p.origin}`}>
+            <div className="loan-row-label">快速選擇</div>
+            <Choice name="scen" value={p.scen} options={[...Object.entries(SCENARIOS).map(([v, a]) => [v, `${a[0]}（${a[1]}%／${a[2]}%）`]), ["custom", "自訂"]]}
+              onChange={(v) => set(SCENARIOS[v] ? { scen: v, retMkt: SCENARIOS[v][1], ret919: SCENARIOS[v][2] } : { scen: v })} />
+            <Wrap>
+              <div className="loan-field">
+                <label htmlFor="loan-origin" className="loan-field-label">預估起算月份</label>
+                <div className="loan-field-row"><input id="loan-origin" className="input" type="month" value={p.origin} onChange={(e) => e.target.value && set({ origin: e.target.value })} /></div>
+                <span className="loan-hint">從這個月起算；之後資料庫有了這些月份，會自動補上實際走勢</span>
+              </div>
+              <Field label="009816／0050／006208 每年平均成長" suffix="%" value={p.retMkt} onChange={(v) => set({ retMkt: v, scen: "custom" })} min={-20} max={30} step={0.5} hint="含配息的總報酬，每年成長幾 %（一般情況）。例：8 代表 10 年後約變 2.16 倍" />
+              <Field label="00919 每年平均成長" suffix="%" value={p.ret919} onChange={(v) => set({ ret919: v, scen: "custom" })} min={-20} max={30} step={0.5} hint="含配息的總報酬；下面的配息率是從這裡面領出來的" />
+              <Field label="009816／0050／006208 每年漲跌幅度" suffix="%" value={p.volMkt} onChange={(v) => set({ volMkt: v })} min={1} max={60} step={1} hint="數字越大，每年漲跌越劇烈" />
+              <Field label="00919 每年漲跌幅度" suffix="%" value={p.vol919} onChange={(v) => set({ vol919: v })} min={1} max={60} step={1} />
+            </Wrap>
+            <div className="loan-row-label">模擬方式</div>
+            <div className="loan-inline">
+              <Choice name="method" value={p.method} options={[["boot", "歷史抽樣（保留大跌）"], ["normal", "常態分布"]]} onChange={(v) => set({ method: v })} />
+              <button type="button" className="btn sm" onClick={() => setSeed((x) => x + 1)}><RotateCcw size={14} />換一批隨機路徑</button>
+            </div>
+            <p className="loan-hint">歷史抽樣：把 0050 過去每 12 個月的漲跌節奏隨機拼起來，再調成你設定的成長與漲跌幅度，會保留 2008、2020 那種大跌。常態分布：沒有「大跌連續發生」的特性，但仍可能出現大幅虧損。共模擬 {PATHS.toLocaleString("zh-TW")} 條路徑；00919 與其他 ETF 的連動程度設為 0.7。改數字結果不會亂跳，想看另一批隨機結果再按按鈕。</p>
+          </Group>
         )}
-        <div className="dim" style={{ margin: "6px 0" }}>還沒投入的錢放在「其他現金」賺現金利率，必要時也會拿來還款。投入金額 = 上面各 ETF 欄位的金額。</div>
-        <label><input type="checkbox" checked={p.rebalance} onChange={(e) => set({ rebalance: e.target.checked })} /> 每季再平衡到目標股票比例</label>
-        <div className="dim">再平衡從上面輸入的金額開始，第一次調整在第 3 個月。</div>
-        {p.rebalance && <Wrap><Field label="目標股票比例" suffix="%" value={p.rebTarget} onChange={(v) => set({ rebTarget: v })} max={100} /></Wrap>}
-      </Card>
+
+        <Group title={`${isFuture ? "4" : "3"}. 00919 配息與交易成本`} summary={`配息率 ${p.yield919}%／年`}>
+          <Wrap>
+            <Field label="00919 每年配息率" suffix="%／年，佔市值" value={p.yield919} onChange={(v) => set({ yield919: v })} max={20} step={0.1} hint={isFuture ? "每年 3、6、9、12 月各領 1/4；配息從總報酬裡面拿出來，不是額外多賺" : "每年 3、6、9、12 月各配 1/4，從市值扣除（總報酬與 0050 相同）"} />
+          </Wrap>
+          <label className="loan-check">
+            <input type="checkbox" checked={p.divDeposit} onChange={(e) => set({ divDeposit: e.target.checked })} />
+            <span>配息存入扣款戶<span className="loan-hint">不勾（預設）＝配息扣健保費後再買進 00919，含買進成本</span></span>
+          </label>
+          <p className="loan-hint">單筆配息 ≥ 20,000 元會扣二代健保 2.11%；所得稅依個人級距而定，這裡沒有計入。</p>
+          <div className="loan-row-label">交易成本（一般不用改）</div>
+          <Wrap>
+            <Field label="手續費率" suffix="%" value={p.feePct} onChange={(v) => set({ feePct: v })} max={0.5} step={0.0025} />
+            <Field label="手續費折扣" suffix="倍，0.6＝6 折" value={p.discount} onChange={(v) => set({ discount: v })} max={1} step={0.05} />
+            <Field label="買賣價差損失" suffix="%" value={p.slipPct} onChange={(v) => set({ slipPct: v })} max={1} step={0.01} hint="實際成交價和預期價的差距" />
+            <Field label="證交稅（賣出時）" suffix="%" value={p.taxPct} onChange={(v) => set({ taxPct: v })} max={1} step={0.01} />
+          </Wrap>
+        </Group>
+
+        <Group title={`${isFuture ? "5" : "4"}. 每月還款的錢從哪裡拿`} summary={`第一順位：${SOURCE_LABELS[p.order[0]]}`}>
+          <p className="loan-hint">由上而下依序動用；股票最多賣到持有為止，仍不夠就算「自掏腰包」。</p>
+          <ol className="loan-order">
+            {p.order.map((k, i) => (
+              <li key={k}>
+                <span className="num loan-order-n">{i + 1}</span>
+                <span className="loan-order-name">{SOURCE_LABELS[k]}</span>
+                <button type="button" className="btn sm" aria-label={`${SOURCE_LABELS[k]} 上移`} disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp size={14} /></button>
+                <button type="button" className="btn sm" aria-label={`${SOURCE_LABELS[k]} 下移`} disabled={i === p.order.length - 1} onClick={() => move(i, 1)}><ArrowDown size={14} /></button>
+              </li>
+            ))}
+          </ol>
+        </Group>
+
+        <Group title={`${isFuture ? "6" : "5"}. 怎麼把錢投進去`} summary={`${{ lump: "一次投入", dca: "分月平均投入", dip: "跌深加碼" }[p.entry]}${p.rebalance ? "・每季調整比例" : ""}`}>
+          <Choice name="entry" value={p.entry} options={[["lump", "一次投入"], ["dca", "分月平均投入"], ["dip", "跌深加碼"]]} onChange={(v) => set({ entry: v })} />
+          {p.entry === "dca" && <Wrap><Field label="分幾個月投入" suffix="月" value={p.dcaN} onChange={(v) => set({ dcaN: v })} min={1} max={24} /></Wrap>}
+          {p.entry === "dip" && (
+            <Wrap>
+              <Field label="先投 1/3，從高點跌幾 % 再投第二個 1/3" suffix="%" value={p.dipX} onChange={(v) => set({ dipX: v })} max={50} />
+              <Field label="跌幾 % 再投最後 1/3" suffix="%" value={p.dipY} onChange={(v) => set({ dipY: v })} max={60} />
+              <Field label="最晚第幾個月全部投入" suffix="月" value={p.dipM} onChange={(v) => set({ dipM: v })} max={36} />
+            </Wrap>
+          )}
+          <p className="loan-hint">還沒投入的錢放在「其他現金」賺存款利息，必要時也會拿來還款。投入金額 = 上面各 ETF 欄位的金額。</p>
+          <label className="loan-check">
+            <input type="checkbox" checked={p.rebalance} onChange={(e) => set({ rebalance: e.target.checked })} />
+            <span>每季把股票比例調回目標值<span className="loan-hint">從第 3 個月開始，每季賣高買低一次，回到你設定的股票佔比</span></span>
+          </label>
+          {p.rebalance && <Wrap><Field label="目標股票比例" suffix="%" value={p.rebTarget} onChange={(v) => set({ rebTarget: v })} max={100} /></Wrap>}
+        </Group>
+
+        {!isFuture && (
+          <Group title="5. 歷史資料起點" summary={`從 ${p.firstMonth} 起`}>
+            <div className="loan-field">
+              <label htmlFor="loan-first" className="loan-field-label">歷史資料從哪個月開始算</label>
+              <select id="loan-first" className="input" value={p.firstMonth} onChange={(e) => set({ firstMonth: e.target.value })}>
+                {months.slice(0, months.length - n).map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <p className="loan-hint">資料 {months[0]}～{months[months.length - 1]}；共 {results.length} 個完整 {n} 個月的進場月份。預設從 2004-01 起（和先前研究一致）。</p>
+          </Group>
+        )}
+
+        <div className="loan-assume-foot">
+          <button type="button" className="btn sm" onClick={() => setP({ ...DEFAULTS, origin: p.origin })}><RotateCcw size={14} />全部回復預設值</button>
+        </div>
+      </div>
+    </details>
+  );
+
+  return (
+    <div className="page loan-page">
+      <header className="loan-head">
+        <h2><Landmark size={22} aria-hidden="true" />借貸試算</h2>
+        <p className="loan-lead">如果借一筆錢去買 ETF、每月還款，最後大概能賺多少、會不會不夠還？輸入只存在這台瀏覽器，不會送出。</p>
+      </header>
+
+      <div className="loan-tabs" role="group" aria-label="試算方式">
+        {[["future", "未來預估", "模擬 2,000 種可能的未來"], ["hist", "歷史驗證", "套用過去真實的漲跌"]].map(([v, t, d]) => (
+          <button key={v} type="button" className={`loan-tab${p.tab === v ? " on" : ""}`} aria-pressed={p.tab === v} onClick={() => set({ tab: v })}>
+            <span className="loan-tab-t">{t}</span><span className="loan-tab-d">{d}</span>
+          </button>
+        ))}
+      </div>
 
       {isFuture && job.err && (
-        <div className="notice warn" style={{ marginTop: 12 }}>
+        <div className="notice warn loan-gap">
           計算失敗。<button type="button" className="btn sm" style={{ marginLeft: 8 }} onClick={() => { noWorker.current = false; setRetry((x) => x + 1); }}>重試</button>
         </div>
       )}
-      {isFuture && !job.err && job.fallback && <div className="dim" style={{ marginTop: 12 }}>瀏覽器不支援背景計算，改用一般計算，可能稍慢。<button type="button" className="btn sm" style={{ marginLeft: 8 }} onClick={() => { noWorker.current = false; setRetry((x) => x + 1); }}>重試背景計算</button></div>}
-      {isFuture && (!mc ? (!job.err && <div className="dim" style={{ marginTop: 12 }}>計算中…</div>) : (
-        <div style={{ opacity: pending ? 0.5 : 1 }}>
-          {pending && <div className="notice" style={{ marginTop: 12 }}>計算中…（下面是上一次的結果）</div>}
-          <Card title={`未來預估：${mc.years[0].year}～${mc.years[mc.years.length - 1].year} 年（從 ${dp.origin} 開始，共 ${n} 個月）`} icon={LineChart} style={{ marginTop: 12 }}>
-            <div className="kpis">
-              <Kpi label="貸款還清時的淨資產 中位數" value={signedMoney(mc.head.net[1])} sub="一半的情況比這好、一半比這差" />
-              <Kpi label="悲觀 10%" value={signedMoney(mc.head.net[0])} sub="只有 10% 的情況比這更差" />
-              <Kpi label="樂觀 90%" value={signedMoney(mc.head.net[2])} sub="只有 10% 的情況比這更好" />
-              <Kpi label="需要自掏腰包的機率" value={`${(mc.head.needP * 100).toFixed(1)}%`} sub={mc.head.needP > 0 ? `需要時：中位數 ${money(mc.head.needMed)} 元、最多 ${money(mc.head.needMax)} 元` : "模擬中沒有出現"} />
-              <Kpi label="累計可領配息（扣健保費後）中位數" value={money(mc.head.cumDiv)} sub={`${n} 個月內 00919 配息合計`} />
-              <Kpi label="扣款戶用完的月份 中位數" value={mc.head.deductShare > 0 ? `第 ${Math.round(mc.head.deductMed)} 個月` : "不會用完"} sub={mc.head.deductShare > 0 ? `${(mc.head.deductShare * 100).toFixed(0)}% 的情況會用完（還款先從扣款戶扣）` : undefined} />
+      {isFuture && !job.err && job.fallback && <div className="dim loan-gap">瀏覽器不支援背景計算，改用一般計算，可能稍慢。<button type="button" className="btn sm" style={{ marginLeft: 8 }} onClick={() => { noWorker.current = false; setRetry((x) => x + 1); }}>重試背景計算</button></div>}
+
+      {/* ===== 未來預估 ===== */}
+      {isFuture && (!mc ? (<>{!job.err && <div className="loan-hero loan-pending" role="status">計算中…</div>}{assumptions}</>) : (
+        <div className={pending ? "loan-stale" : ""}>
+          {pending && <div className="notice loan-gap" role="status">重新計算中…（下面是上一次的結果）</div>}
+
+          <section className={`loan-hero ${needTone(mc.head.needP)}`} aria-labelledby="loan-hero-h">
+            <h3 id="loan-hero-h" className="loan-hero-q">先看結論：{sn} 個月後，貸款還清時</h3>
+            <p className="loan-hero-a">
+              最可能{mc.head.net[1] >= 0 ? "淨賺" : "淨虧"}約 <b className="num">{money(Math.abs(mc.head.net[1]))}</b> 元；
+              {mc.head.needP > 0
+                ? <>有 <b className="num">{(mc.head.needP * 100).toFixed(1)}%</b> 的機率中途資金不夠、得自己掏錢補。</>
+                : <>模擬中沒有出現資金不夠、需要自己掏錢補的情況。</>}
+            </p>
+            <div className="loan-stats">
+              <Stat label="最可能的結果" value={signedMoney(mc.head.net[1])} sentence="中位數：模擬的未來裡，一半比這好、一半比這差（單位：元）" />
+              <Stat tone={needTone(mc.head.needP)} label={`要自掏腰包的機率（${needWord(mc.head.needP)}）`} value={`${(mc.head.needP * 100).toFixed(1)}%`}
+                sentence={mc.head.needP > 0 ? `若發生：通常補 ${money(mc.head.needMed)} 元、最多 ${money(mc.head.needMax)} 元` : "每月還款的資金一直夠用"} />
+              <Stat label="運氣不好時（較差 10%）" value={signedMoney(mc.head.net[0])} sentence="10 次裡有 1 次會比這更差（單位：元）" />
             </div>
-            <div style={{ marginTop: 12 }}><FanChart fan={mc.fan} lines={shown} actual={sc?.actual} /></div>
+            <div className="loan-minis">
+              <Mini label="運氣好時（較好 10%）" value={signedMoney(mc.head.net[2])} sentence="10 次裡有 1 次會比這更好" />
+              <Mini label="00919 累計可領配息" value={money(mc.head.cumDiv)} sentence={`${sn} 個月內合計，已扣健保費（中位數）`} />
+              <Mini label="扣款戶撐到第幾個月" value={mc.head.deductShare > 0 ? `第 ${Math.round(mc.head.deductMed)} 個月` : "不會用完"} sentence={mc.head.deductShare > 0 ? `${(mc.head.deductShare * 100).toFixed(0)}% 的情況會用完（還款先從扣款戶扣）` : "還款期間扣款戶都有錢"} />
+            </div>
+            <p className="loan-fine">「淨資產」＝ 股票與現金總額 − 還沒還的貸款，再扣掉自掏腰包與薪水支付。這是依你的假設算出的可能範圍，不是預測。</p>
+          </section>
+
+          {assumptions}
+
+          <Card title={`未來淨資產走勢：${mc.years[0].year}～${mc.years[mc.years.length - 1].year} 年（從 ${sdp.origin} 起，共 ${sn} 個月）`} icon={LineChart} className="loan-card">
+            <Legend items={[
+              ["line", "#2563eb", "模擬的中間值（一半情況比這好）"],
+              ["band", "#2563eb", "較差 10% 到較好 10% 的範圍"],
+              ["dash", "#dc2626", "還沒還的貸款"],
+              ...(lines.length ? [["thin", "currentColor", "歷史劇本（實線＝歷史真實走勢，虛線＝之後用基準報酬接續）"]] : []),
+              ...(sc?.actual && sc.actual.net.length > 1 ? [["thick", "currentColor", "實際走勢"]] : []),
+            ]} />
+            <FanChart fan={mc.fan} lines={shown} actual={sc?.actual} />
+            <p className="loan-hint">
+              {sc?.actual && sc.actual.histMonths > 0 ? `實際走勢已有 ${sc.actual.histMonths} 個月（黑粗線）。` : `實際走勢：從 ${sdp.origin} 起每月自動加上，資料更新後這裡會出現黑粗線。`}
+              歷史劇本線 = 把過去那段真實漲跌，從 {sdp.origin} 起套在你的方案上（基準 {sdp.retMkt}%／年）。
+            </p>
+
             {sc && (
-              <>
-                <div style={{ marginTop: 8, fontSize: 13 }}>
+              <Fold title={`比較過去 ${allLines.length} 種真實走法`} hint={`目前圖上顯示 ${lines.length} 條；點開可挑選、排序`}>
+                <div className="loan-toolbar">
+                  <label className="loan-toolbar-item">排序
+                    <select className="input" value={scenSort} onChange={(e) => setScenSort(e.target.value)}>
+                      <option value="def">預設分組</option>
+                      <option value="hi">到期淨資產：高到低</option>
+                      <option value="lo">到期淨資產：低到高</option>
+                    </select>
+                  </label>
+                  <button type="button" className="btn sm" onClick={() => setScenAll(true, allLines.map((l) => l.id))}>全部顯示</button>
+                  <button type="button" className="btn sm" onClick={() => setScenAll(false, allLines.map((l) => l.id))}>全部隱藏</button>
                   {SCEN_GROUPS.map(([g, gt]) => {
-                    const items = allLines.filter((l) => l.group === g);
-                    if (g === "custom" && !items.length) return null;
-                    const setAll = (on) => setScenOn((m) => ({ ...m, ...Object.fromEntries(items.map((l) => [l.id, on])) }));
-                    return (
-                      <div key={g} style={{ margin: "6px 0" }}>
-                        <b>{gt}</b>{" "}
-                        <button type="button" className="btn sm" onClick={() => setAll(true)}>全選</button>{" "}
-                        <button type="button" className="btn sm" onClick={() => setAll(false)}>全不選</button>
-                        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 4 }}>
-                          {items.map((l) => (
-                            <label key={l.id} style={{ color: l.color }}>
-                              <input type="checkbox" checked={!!scenOn[l.id]} onChange={(e) => setScenOn((m) => ({ ...m, [l.id]: e.target.checked }))} /> {l.name}
-                              <span className="dim">（歷史 {l.histMonths} 個月、年化 {(l.cagr * 100).toFixed(1)}%、最大跌幅 {(l.maxDD * 100).toFixed(0)}%）</span>
-                              {g === "custom" && <button type="button" className="btn sm" style={{ marginLeft: 4 }} onClick={() => { setCustom((a) => a.filter((x) => x.id !== l.id)); }}>移除</button>}
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    );
+                    const ids = allLines.filter((l) => l.group === g).map((l) => l.id);
+                    if (!ids.length) return null;
+                    const allOn = ids.every((id) => scenOn[id]);
+                    return <button key={g} type="button" className="btn sm" aria-pressed={allOn} onClick={() => setScenAll(!allOn, ids)}>{allOn ? "隱藏" : "顯示"}「{gt}」</button>;
                   })}
-                  <div style={{ marginTop: 8 }}>
-                    <label>自選任何月份當劇本：{" "}
-                      <select className="input" style={{ width: "auto" }} value={pick} onChange={(e) => setPick(e.target.value)}>
-                        <option value="">選一個月份…</option>
-                        {customOpts.map((o) => <option key={o.v} value={o.v}>{o.t}</option>)}
-                      </select>
-                    </label>{" "}
-                    <button type="button" className="btn sm" onClick={addCustom} disabled={!pick}>加入</button>
-                  </div>
-                  <div style={{ marginTop: 6 }}><b>黑粗線</b>：實際走勢（* = 加權指數加每年 3% 配息估算，不是 0050）</div>
                 </div>
-                <div className="dim" style={{ marginTop: 4 }}>
-                  歷史劇本線 = 把過去那段 0050 的真實漲跌，從 {dp.origin} 起套在你的方案上；虛線是歷史用完之後「用基準報酬接續」（目前 {p.retMkt}%／年）。
-                  {" "}{sc.actual && sc.actual.histMonths > 0 ? `實際走勢已有 ${sc.actual.histMonths} 個月。` : `實際走勢：從 ${dp.origin} 起每月自動加上實際走勢（資料更新後這裡就會出現黑線）。`}
+                <ul className="loan-scen">
+                  {sortedLines.map((l) => (
+                    <li key={l.id} className={scenOn[l.id] ? "on" : ""}>
+                      <label>
+                        <input type="checkbox" checked={!!scenOn[l.id]} onChange={(e) => setScenOn((m) => ({ ...m, [l.id]: e.target.checked }))} />
+                        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill={l.color} /></svg>
+                        <span className="loan-scen-name">{l.name}<span className="loan-scen-tag">{groupName[l.group]}</span></span>
+                      </label>
+                      <dl className="loan-scen-nums">
+                        <div><dt>到期淨資產</dt><dd className="num">{signedMoney(l.final)}</dd></div>
+                        <div><dt>每年平均成長</dt><dd className="num">{(l.cagr * 100).toFixed(1)}%</dd></div>
+                        <div><dt>最深跌幅</dt><dd className="num">{(l.maxDD * 100).toFixed(0)}%</dd></div>
+                        <div><dt>自掏腰包</dt><dd>{l.needs ? `要，${money(l.short)}` : "不用"}</dd></div>
+                      </dl>
+                      {l.group === "custom" && <button type="button" className="btn sm" onClick={() => setCustom((a) => a.filter((x) => x.id !== l.id))}>移除</button>}
+                    </li>
+                  ))}
+                </ul>
+                <div className="loan-toolbar">
+                  <label className="loan-toolbar-item">自選任何月份當起點
+                    <select className="input" value={pick} onChange={(e) => setPick(e.target.value)}>
+                      <option value="">選一個月份…</option>
+                      {customOpts.map((o) => <option key={o.v} value={o.v}>{o.t}</option>)}
+                    </select>
+                  </label>
+                  <button type="button" className="btn sm" onClick={addCustom} disabled={!pick}>加入</button>
                 </div>
-              </>
+                <p className="loan-hint">「年化」在這裡指每年平均成長率；有「*」的是用加權指數（不含配息）每年加 3% 估算，只是近似。現在 0050 剛好在歷史高點附近，所以把過去空頭、溫和、多頭的走法接在現在讓你對照。</p>
+              </Fold>
             )}
           </Card>
+
           {sc && lines.length > 0 && (
-            <Card title="歷史劇本比較：如果接下來走得像過去那一段" icon={LineChart} style={{ marginTop: 12 }}>
-              <div className="dim" style={{ marginBottom: 6 }}>
-                現在 0050 剛好在歷史高點附近，這裡把過去各種走法（空頭、溫和、多頭）接在現在讓你對照；表格列出上面勾選的劇本。有「*」的是用加權指數（不含配息），每年加 3% 配息估算總報酬，只是近似。00919 和其他 ETF 走同一條路徑，不另外加隨機波動。金額單位：元。
-              </div>
-              <div className="table-wrap">
-                <table className="table">
-                  <thead><tr><th>劇本</th><th>歷史實際月數</th><th>年化／最大跌幅</th><th>要自掏腰包嗎</th>{mc.years.map((y) => <th key={y.year}>{y.year} 年底淨資產</th>)}</tr></thead>
-                  <tbody>
-                    {lines.map((l) => (
-                      <tr key={l.id}>
-                        <td style={{ color: l.color }}>{l.name}</td>
-                        <td className="num">{l.histMonths}／{n}{l.histMonths < n ? "（之後用基準報酬接續）" : ""}</td>
-                        <td className="num">{(l.cagr * 100).toFixed(1)}%／{(l.maxDD * 100).toFixed(0)}%</td>
-                        <td>{l.needs ? `要，共 ${money(l.short)}` : "不用"}</td>
-                        {l.yearNet.map((v, i) => <td key={i} className="num">{signedMoney(v)}</td>)}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="table-wrap" style={{ marginTop: 10 }}>
-                <table className="table">
-                  <thead><tr><th>劇本</th>{mc.years.map((y) => <th key={y.year}>{y.year} 年 00919 可領配息</th>)}</tr></thead>
-                  <tbody>
-                    {lines.map((l) => (
-                      <tr key={l.id}><td style={{ color: l.color }}>{l.name}</td>{l.yearDiv.map((v, i) => <td key={i} className="num">{money(v)}</td>)}</tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
-          {sumry && sumry.total > 0 && (
-            <Card title="如果每個過去的月份都當成今天進場" icon={LineChart} style={{ marginTop: 12 }}>
-              <div className="kpis">
-                {[["淨資產 < 0（虧損）", 0], ["0 ～ 100 萬", 1], ["100 萬 ～ 300 萬", 2], ["> 300 萬", 3]].map(([t, i]) => (
-                  <Kpi key={t} label={t} value={`${((sumry.b[i] / sumry.total) * 100).toFixed(0)}%`} sub={`${sumry.b[i]} / ${sumry.total} 個月份`} />
-                ))}
-              </div>
-              <div className="dim">用你目前的設定，把 0050 歷史上每一個月份都當成進場點、跑滿 {n} 個月的結果。相鄰月份的走勢高度重疊，不是獨立樣本；只是讓你知道過去各種走法大致落在哪一段。</div>
-            </Card>
-          )}
-          <Card title="驗證：存下今天的預估，之後對照實際" icon={LineChart} style={{ marginTop: 12 }}>
-            <div className="dim" style={{ marginBottom: 6 }}>把你現在的設定和上面的預估範圍、歷史劇本結果存在這台瀏覽器。之後資料更新、出現實際走勢，就能看實際有沒有落在當時預估的範圍裡。</div>
-            <button type="button" className="btn primary sm" onClick={saveSnap} disabled={!canSave}>儲存今天的預估</button>
-            {snaps.length > 0 && (
-              <div className="table-wrap" style={{ marginTop: 8 }}>
-                <table className="table">
-                  <thead><tr><th>儲存日期</th><th>當時設定</th><th>當時預估到期淨資產（悲觀／中位／樂觀）</th><th>實際走勢對照</th><th /></tr></thead>
-                  <tbody>
-                    {snaps.map((sn, i) => {
-                      const ac = snapActual[i];
-                      const ak = ac && ac.histMonths > 0 ? Math.min(ac.histMonths, sn.fan.p50.length - 1) : 0;
-                      const act = ak > 0 ? ac.net[ak] : null;
-                      const sp = sn.spec;
-                      return (
-                        <tr key={`${sn.date}-${i}`}>
-                          <td>{sn.date}</td>
-                          <td>起算 {sp.origin}、貸款 {money(sp.loan ?? 0)}、{sp.n} 個月、年化報酬 {sp.retMkt}%／{sp.ret919}%、{sp.method === "normal" ? "常態分布" : "歷史抽樣"}</td>
-                          <td className="num">{signedMoney(sn.head?.net?.[0] ?? 0)}／{signedMoney(sn.head?.net?.[1] ?? 0)}／{signedMoney(sn.head?.net?.[2] ?? 0)}</td>
-                          <td>{act == null ? "還沒有實際資料" : `第 ${ak} 個月：實際（用當時的設定算）${signedMoney(act)}；當時預估 ${signedMoney(sn.fan.p10[ak])}～${signedMoney(sn.fan.p90[ak])}，中位 ${signedMoney(sn.fan.p50[ak])}`}</td>
-                          <td><button type="button" className="btn sm" onClick={() => setSnaps((a) => a.filter((_, j) => j !== i))}>刪除</button></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-          <Card title="每年的樣子（每年底）" icon={LineChart} style={{ marginTop: 12 }}>
-            <div className="dim" style={{ marginBottom: 6 }}>中位數 = 一半的情況比這好；悲觀 = 較差 10% 的門檻；樂觀 = 較好 10% 的門檻。金額單位：元。</div>
-            <div className="table-wrap">
-              <table className="table">
-                <thead><tr>
-                  <th>年度</th><th>00919 每年可領配息（中位數）</th><th>配息範圍（悲觀～樂觀）</th><th>二代健保費</th><th>每月還款</th><th>剩餘貸款</th>
-                  <th>總資產 中位數</th><th>總資產 悲觀</th><th>總資產 樂觀</th><th>淨資產 中位數</th><th>淨資產 悲觀</th><th>淨資產 樂觀</th><th>賣股票還款的金額（中位數）</th>
-                </tr></thead>
+            <Fold title="各歷史劇本：每年年底淨資產與配息" hint="表格，點開查看">
+              <table className="loan-table stack">
+                <caption>淨資產（元）</caption>
+                <thead><tr><th>劇本</th><th>要自掏腰包嗎</th>{mc.years.map((y) => <th key={y.year}>{y.year} 年底</th>)}</tr></thead>
                 <tbody>
-                  {mc.years.map((r) => (
-                    <tr key={r.year}>
-                      <td>{r.year}{r.months < 12 ? `（${r.months} 個月）` : ""}</td>
-                      <td className="num">{money(r.divNet[1])}</td><td className="num">{money(r.divNet[0])}～{money(r.divNet[2])}</td>
-                      <td className="num">{money(r.nhi)}</td><td className="num">{money(mc.pay)}</td><td className="num">{money(r.bal)}</td>
-                      <td className="num">{money(r.pot[1])}</td><td className="num">{money(r.pot[0])}</td><td className="num">{money(r.pot[2])}</td>
-                      <td className="num">{signedMoney(r.net[1])}</td><td className="num">{signedMoney(r.net[0])}</td><td className="num">{signedMoney(r.net[2])}</td>
-                      <td className="num">{money(r.sold)}</td>
+                  {lines.map((l) => (
+                    <tr key={l.id}>
+                      <th scope="row" style={{ color: l.color }}>{l.name}</th>
+                      <td data-label="要自掏腰包嗎">{l.needs ? `要，共 ${money(l.short)}` : "不用"}</td>
+                      {l.yearNet.map((v, i) => <td key={i} className="num" data-label={`${mc.years[i].year} 年底`}>{signedMoney(v)}</td>)}
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-          </Card>
+              <table className="loan-table stack">
+                <caption>00919 每年可領配息（元）</caption>
+                <thead><tr><th>劇本</th>{mc.years.map((y) => <th key={y.year}>{y.year} 年</th>)}</tr></thead>
+                <tbody>
+                  {lines.map((l) => (
+                    <tr key={l.id}><th scope="row" style={{ color: l.color }}>{l.name}</th>{l.yearDiv.map((v, i) => <td key={i} className="num" data-label={`${mc.years[i].year} 年`}>{money(v)}</td>)}</tr>
+                  ))}
+                </tbody>
+              </table>
+            </Fold>
+          )}
+
+          <Fold title="每年的樣子" hint="每年年底的配息、貸款、資產（表格）">
+            <p className="loan-hint">「中位數」＝ 一半的情況比這好；「悲觀」＝ 較差 10% 的門檻；「樂觀」＝ 較好 10% 的門檻。金額單位：元。</p>
+            <table className="loan-table stack">
+              <thead><tr>
+                <th>年度</th><th>00919 配息（中位數）</th><th>配息範圍（悲觀～樂觀）</th><th>二代健保費</th><th>每月還款</th><th>剩餘貸款</th>
+                <th>總資產 中位數</th><th>總資產 悲觀</th><th>總資產 樂觀</th><th>淨資產 中位數</th><th>淨資產 悲觀</th><th>淨資產 樂觀</th><th>賣股票還款（中位數）</th>
+              </tr></thead>
+              <tbody>
+                {mc.years.map((r) => (
+                  <tr key={r.year}>
+                    <th scope="row">{r.year}{r.months < 12 ? `（${r.months} 個月）` : ""}</th>
+                    <td className="num" data-label="00919 配息（中位數）">{money(r.divNet[1])}</td><td className="num" data-label="配息範圍">{money(r.divNet[0])}～{money(r.divNet[2])}</td>
+                    <td className="num" data-label="二代健保費">{money(r.nhi)}</td><td className="num" data-label="每月還款">{money(mc.pay)}</td><td className="num" data-label="剩餘貸款">{money(r.bal)}</td>
+                    <td className="num" data-label="總資產 中位數">{money(r.pot[1])}</td><td className="num" data-label="總資產 悲觀">{money(r.pot[0])}</td><td className="num" data-label="總資產 樂觀">{money(r.pot[2])}</td>
+                    <td className="num" data-label="淨資產 中位數">{signedMoney(r.net[1])}</td><td className="num" data-label="淨資產 悲觀">{signedMoney(r.net[0])}</td><td className="num" data-label="淨資產 樂觀">{signedMoney(r.net[2])}</td>
+                    <td className="num" data-label="賣股票還款">{money(r.sold)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Fold>
+
+          {sumry && sumry.total > 0 && (
+            <Fold title="如果過去每個月都當成今天進場" hint="用你現在的設定回頭看，結果落在哪一段">
+              <div className="loan-minis four">
+                {[["虧損（淨資產 < 0）", 0], ["0 ～ 100 萬", 1], ["100 萬 ～ 300 萬", 2], ["超過 300 萬", 3]].map(([t, i]) => (
+                  <Mini key={t} label={t} value={`${((sumry.b[i] / sumry.total) * 100).toFixed(0)}%`} sentence={`${sumry.b[i]} / ${sumry.total} 個月份`} />
+                ))}
+              </div>
+              <p className="loan-hint">把 0050 歷史上每一個月份都當成進場點、跑滿 {sn} 個月。相鄰月份的走勢高度重疊，不是獨立樣本；只是讓你知道過去各種走法大致落在哪一段。</p>
+            </Fold>
+          )}
+
+          <Fold title="存檔對照：之後檢查預估準不準" hint={snaps.length ? `已存 ${snaps.length} 筆` : "把今天的預估存起來"}>
+            <p className="loan-hint">把你現在的設定、預估範圍和歷史劇本結果存在這台瀏覽器。之後出現實際走勢，就能看實際有沒有落在當時預估的範圍裡。</p>
+            <button type="button" className="btn primary sm" onClick={saveSnap} disabled={!canSave}>儲存今天的預估</button>
+            {snaps.length > 0 && (
+              <ul className="loan-snaps">
+                {snaps.map((sn, i) => {
+                  const ac = snapActual[i];
+                  const ak = ac && ac.histMonths > 0 ? Math.min(ac.histMonths, sn.fan.p50.length - 1) : 0;
+                  const act = ak > 0 ? ac.net[ak] : null;
+                  const sp = sn.spec;
+                  return (
+                    <li key={`${sn.date}-${i}`}>
+                      <div className="loan-snap-head"><b>{sn.date}</b><button type="button" className="btn sm" onClick={() => setSnaps((a) => a.filter((_, j) => j !== i))}>刪除</button></div>
+                      <div className="loan-hint">起算 {sp.origin}、貸款 {money(sp.loan ?? 0)}、{sp.n} 個月、年成長 {sp.retMkt}%／{sp.ret919}%、{sp.method === "normal" ? "常態分布" : "歷史抽樣"}</div>
+                      <div>當時預估到期淨資產：較差 10% <b className="num">{signedMoney(sn.head?.net?.[0] ?? 0)}</b>／中間值 <b className="num">{signedMoney(sn.head?.net?.[1] ?? 0)}</b>／較好 10% <b className="num">{signedMoney(sn.head?.net?.[2] ?? 0)}</b></div>
+                      <div>{act == null ? "實際走勢：還沒有實際資料" : `實際走勢（第 ${ak} 個月，用當時設定算）：${signedMoney(act)}；當時預估 ${signedMoney(sn.fan.p10[ak])}～${signedMoney(sn.fan.p90[ak])}，中間值 ${signedMoney(sn.fan.p50[ak])}`}</div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Fold>
         </div>
       ))}
-      {!isFuture && (
-        <details style={{ marginTop: 12 }}>
-          <summary>進階：歷史資料從哪一年開始算</summary>
-          <label>歷史資料從哪一年開始算（進階）<br />
-            <select className="input" value={p.firstMonth} onChange={(e) => set({ firstMonth: e.target.value })}>
-              {months.slice(0, months.length - n).map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </label>
-          <div className="dim" style={{ marginTop: 4 }}>資料 {months[0]}～{months[months.length - 1]}；共 {results.length} 個完整 {n} 個月的進場月份。預設從 2004-01 起（和先前研究一致）。</div>
-        </details>
-      )}
 
-      {!isFuture && (results.length === 0 ? <div className="notice warn" style={{ marginTop: 12 }}>沒有足夠長的歷史可以跑這個期數／進場月份。</div> : (
+      {/* ===== 歷史驗證 ===== */}
+      {!isFuture && (results.length === 0 ? (
         <>
-          <Card title={`每個月份進場的結果（${results.length} 個）`} icon={LineChart} style={{ marginTop: 12 }}>
-            <div className="kpis">
-              <Kpi label="最終淨值 中位數" value={money(quantile(finals, 0.5))} sub="還清貸款後所有資產，扣自掏腰包與薪水" />
-              <Kpi label="p10（較差 10%）" value={signedMoney(quantile(finals, 0.1))} />
-              <Kpi label="p90（較好 10%）" value={money(quantile(finals, 0.9))} />
-              <Kpi label="最差" value={signedMoney(finals[0])} sub={`${worst.month} 起`} />
-              <Kpi label="最好" value={money(finals[finals.length - 1])} sub={`${best.month} 起`} />
-              <Kpi label={`第 ${n} 期前需自掏腰包`} value={`${ruinN} / ${results.length}`} sub={`${pct(ruinN, results.length)}；含最後一期共 ${anyN} 個`} />
-              <Kpi label="自掏腰包最多" value={money(maxShort)} />
-              <Kpi label="途中最低淨值" value={signedMoney(lowNetRes.lowNet)} sub={`資金池減剩餘貸款；${lowNetRes.month} 起、第 ${lowNetRes.lowNetK} 個月`} />
+          <div className="notice warn loan-gap">沒有足夠長的歷史可以跑這個期數／進場月份。</div>
+          {assumptions}
+        </>
+      ) : (
+        <>
+          <section className={`loan-hero ${needTone(histNeedPr)}`} aria-labelledby="loan-hero-h">
+            <h3 id="loan-hero-h" className="loan-hero-q">先看結論：過去 {results.length} 個月份進場，各跑滿 {n} 個月</h3>
+            <p className="loan-hero-a">
+              中間水準最後{quantile(finals, 0.5) >= 0 ? "淨賺" : "淨虧"}約 <b className="num">{money(Math.abs(quantile(finals, 0.5)))}</b> 元；
+              {ruinN > 0 ? <>其中 <b className="num">{ruinN}</b> 個月份（{pct(ruinN, results.length)}）途中資金不夠、得自掏腰包。</> : <>沒有任何月份出現資金不夠、得自掏腰包的情況。</>}
+            </p>
+            <div className="loan-stats">
+              <Stat label="中間水準的結果" value={signedMoney(quantile(finals, 0.5))} sentence="中位數：一半進場月份比這好、一半比這差（單位：元）" />
+              <Stat tone={needTone(histNeedPr)} label={`途中要自掏腰包的比例（${needWord(histNeedPr)}）`} value={pct(ruinN, results.length)} sentence={`${ruinN} / ${results.length} 個進場月份；含最後一期共 ${anyN} 個`} />
+              <Stat label="最倒楣的進場時間" value={signedMoney(finals[0])} sentence={`${worst.month} 進場；自掏腰包最多 ${money(maxShort)} 元`} />
             </div>
-            <div style={{ marginTop: 12 }}><ResultBars results={results} selIdx={selIdx} onPick={(m) => set({ sel: m })} /></div>
-            <div className="dim">每根柱子 = 一個進場月份的最終淨值（藍：正常、紅：途中需自掏腰包、橘：期末為負）；點柱子可切換下面的詳細走勢。</div>
+            <div className="loan-minis">
+              <Mini label="運氣不好時（較差 10%）" value={signedMoney(quantile(finals, 0.1))} sentence="10 個月份裡有 1 個比這更差" />
+              <Mini label="運氣好時（較好 10%）" value={signedMoney(quantile(finals, 0.9))} sentence="10 個月份裡有 1 個比這更好" />
+              <Mini label="最幸運的進場時間" value={signedMoney(finals[finals.length - 1])} sentence={`${best.month} 進場`} />
+            </div>
+            <p className="loan-fine">「最終淨值」＝ 還清貸款後所有資產，已扣自掏腰包與薪水。途中最低淨值 {signedMoney(lowNetRes.lowNet)} 元（{lowNetRes.month} 進場、第 {lowNetRes.lowNetK} 個月，＝資金池減剩餘貸款）。歷史不代表未來。</p>
+          </section>
+
+          {assumptions}
+
+          <Card title="每個月份進場的最終淨值" icon={LineChart} className="loan-card">
+            <Legend items={[["bar", "#2563eb", "正常（最終為正）"], ["hatch", "#dc2626", "斜線：途中需自掏腰包"], ["bar", "#f59e0b", "期末淨值為負"]]} />
+            <ResultBars results={results} selIdx={selIdx} onPick={(m) => set({ sel: m })} />
+            <p className="loan-hint">每根柱子 = 一個進場月份；點柱子可切換下面的詳細走勢。</p>
           </Card>
 
           {detail && (
-            <Card title="看某一個月份進場的詳細走勢" icon={LineChart} style={{ marginTop: 12 }}>
-              <label>進場月份
-                <select className="input" style={{ width: "auto" }} value={selMonth} onChange={(e) => set({ sel: e.target.value })}>
-                  {results.map((r) => <option key={r.month} value={r.month}>{r.month}</option>)}
-                </select>
-              </label>
-              <div className="dim" style={{ margin: "6px 0 0" }}>上面的統計用了每一個月份當進場點；這裡挑其中一個月份看它每年的變化。</div>
-              <div className="dim" style={{ margin: "6px 0" }}>預設顯示最差的月份。最終淨值 <b className="num">{signedMoney(selRes.final)}</b> 元；累計配息 {money(detail.cumDiv)}、健保補充保費 {money(detail.cumNhi)}、薪水支付 {money(detail.salaryPaid)}、自掏腰包 {money(detail.short)}。</div>
+            <Card title="看某一個月份進場的詳細走勢" icon={LineChart} className="loan-card">
+              <div className="loan-toolbar">
+                <label className="loan-toolbar-item">進場月份
+                  <select className="input" value={selMonth} onChange={(e) => set({ sel: e.target.value })}>
+                    {results.map((r) => <option key={r.month} value={r.month}>{r.month}</option>)}
+                  </select>
+                </label>
+              </div>
+              <p className="loan-note">預設顯示最差的月份。最終淨值 <b className="num">{signedMoney(selRes.final)}</b> 元；累計配息 {money(detail.cumDiv)}、健保補充保費 {money(detail.cumNhi)}、薪水支付 {money(detail.salaryPaid)}、自掏腰包 {money(detail.short)}（單位：元）。</p>
+              <Legend items={[["line", "#2563eb", "資金池（股票＋現金）"], ["dash", "#dc2626", "還沒還的貸款"]]} />
               <PotChart series={detail.series} />
-              <div className="table-wrap" style={{ marginTop: 8 }}>
-                <table className="table">
+              <Fold title="逐月明細" hint="表格">
+                <table className="loan-table stack">
                   <thead><tr><th>期末</th><th>股票市值</th><th>現金</th><th>累計配息</th><th>累計健保費</th><th>累計自掏腰包</th><th>剩餘貸款</th></tr></thead>
                   <tbody>
                     {detail.rows.map((r) => (
                       <tr key={r.k}>
-                        <td>第 {r.k} 月（{r.label}）</td>
-                        <td className="num">{money(r.sv)}</td><td className="num">{money(r.cash)}</td>
-                        <td className="num">{money(r.cumDiv)}</td><td className="num">{money(r.cumNhi)}</td>
-                        <td className="num">{money(r.short)}</td><td className="num">{money(r.bal)}</td>
+                        <th scope="row">第 {r.k} 月（{r.label}）</th>
+                        <td className="num" data-label="股票市值">{money(r.sv)}</td><td className="num" data-label="現金">{money(r.cash)}</td>
+                        <td className="num" data-label="累計配息">{money(r.cumDiv)}</td><td className="num" data-label="累計健保費">{money(r.cumNhi)}</td>
+                        <td className="num" data-label="累計自掏腰包">{money(r.short)}</td><td className="num" data-label="剩餘貸款">{money(r.bal)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </Fold>
             </Card>
           )}
         </>
       ))}
 
-      <Card title="注意事項" icon={RotateCcw} style={{ marginTop: 12 }}>
-        <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
+      <Fold title="注意事項" hint="看完再決定">
+        <ul className="loan-notes">
           {isFuture ? (
             <>
               <li>這是根據你設定的報酬假設算出來的可能範圍，不是預測；報酬假設一改，結果就跟著變。</li>
               <li>009816、00919 上市時間短，沒有足夠歷史，所以用 0050 過去的漲跌節奏來模擬。</li>
-              <li>「淨資產」= 總資產 − 剩餘貸款，再扣掉累計自掏腰包與薪水支付；單筆配息未達 20,000 元不扣二代健保。</li>
+              <li>單筆配息未達 20,000 元不扣二代健保。</li>
             </>
           ) : (
             <>
@@ -682,8 +830,7 @@ export default function LoanSimPage() {
           <li>所得稅依級距而定，這裡只算二代健保；期末資產以市價計、不再扣賣出成本。</li>
           <li>非投資建議。借錢投資有本金損失與還款壓力的風險。</li>
         </ul>
-        <button type="button" className="btn sm" style={{ marginTop: 8 }} onClick={() => setP({ ...DEFAULTS, origin: p.origin })}><RotateCcw size={14} />回復預設值</button>
-      </Card>
+      </Fold>
     </div>
   );
 }
