@@ -36,6 +36,7 @@ create table if not exists public.us_prices (
   updated_at timestamptz not null default now(),
   primary key (ticker, date)
 );
+alter table public.us_prices add column if not exists source text not null default 'yahoo';  -- bot = 臺灣銀行牌告即期買入
 alter table public.us_prices enable row level security;
 revoke all on table public.us_prices from anon;
 grant select on table public.us_prices to authenticated;
