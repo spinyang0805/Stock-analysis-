@@ -21,7 +21,7 @@
     "BH": "0050 buy and hold (reference)"
    }
   },
-  "generated_at": "2026-10-20 15:40"
+  "generated_at": "2026-10-21 15:57"
  },
  "corporate_actions": [],
  "lines": {
@@ -30,73 +30,123 @@
     [
      "2026-10-20",
      1.0
+    ],
+    [
+     "2026-10-21",
+     0.99609
     ]
    ],
-   "weight": 0.0,
-   "decision_log": [],
-   "pending_weight": 0.5,
-   "max_drawdown": 0.0,
+   "weight": 0.4985,
+   "decision_log": [
+    {
+     "decided": "2026-10-20",
+     "filled": "2026-10-21",
+     "target_weight": 0.5
+    }
+   ],
+   "pending_weight": null,
+   "max_drawdown": -0.0039,
    "cagr": null,
-   "total_return": 0.0
+   "total_return": -0.0039
   },
   "C1": {
    "nav": [
     [
      "2026-10-20",
      1.0
+    ],
+    [
+     "2026-10-21",
+     0.99609
     ]
    ],
-   "weight": 0.0,
-   "decision_log": [],
-   "pending_weight": 0.5,
-   "max_drawdown": 0.0,
+   "weight": 0.4985,
+   "decision_log": [
+    {
+     "decided": "2026-10-20",
+     "filled": "2026-10-21",
+     "target_weight": 0.5
+    }
+   ],
+   "pending_weight": null,
+   "max_drawdown": -0.0039,
    "cagr": null,
-   "total_return": 0.0
+   "total_return": -0.0039
   },
   "C8": {
    "nav": [
     [
      "2026-10-20",
      1.0
+    ],
+    [
+     "2026-10-21",
+     0.99218
     ]
    ],
-   "weight": 0.0,
-   "decision_log": [],
-   "pending_weight": 1.0,
-   "max_drawdown": 0.0,
+   "weight": 1.0,
+   "decision_log": [
+    {
+     "decided": "2026-10-20",
+     "filled": "2026-10-21",
+     "target_weight": 1.0
+    }
+   ],
+   "pending_weight": null,
+   "max_drawdown": -0.0078,
    "cagr": null,
-   "total_return": 0.0
+   "total_return": -0.0078
   },
   "VT15": {
    "nav": [
     [
      "2026-10-20",
      1.0
+    ],
+    [
+     "2026-10-21",
+     0.99617
     ]
    ],
-   "weight": 0.0,
-   "decision_log": [],
-   "pending_weight": 0.49,
-   "max_drawdown": 0.0,
+   "weight": 0.4885,
+   "decision_log": [
+    {
+     "decided": "2026-10-20",
+     "filled": "2026-10-21",
+     "target_weight": 0.49
+    }
+   ],
+   "pending_weight": null,
+   "max_drawdown": -0.0038,
    "cagr": null,
-   "total_return": 0.0
+   "total_return": -0.0038
   },
   "BH": {
    "nav": [
     [
      "2026-10-20",
      1.0
+    ],
+    [
+     "2026-10-21",
+     0.99218
     ]
    ],
-   "weight": 0.0,
-   "decision_log": [],
-   "pending_weight": 1.0,
-   "max_drawdown": 0.0,
+   "weight": 1.0,
+   "decision_log": [
+    {
+     "decided": "2026-10-20",
+     "filled": "2026-10-21",
+     "target_weight": 1.0
+    }
+   ],
+   "pending_weight": null,
+   "max_drawdown": -0.0078,
    "cagr": null,
-   "total_return": 0.0
+   "total_return": -0.0078
   }
  },
- "updated": "20261020",
- "sessions": 0,
+ "updated": "20261021",
+ "sessions": 1,
  "next_c10_decision": "2026-12-31"
 }
