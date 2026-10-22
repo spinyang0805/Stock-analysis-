@@ -344,3 +344,27 @@ test("股票分割：成本不變、不計損益、不算股利", () => {
   assert.equal(sideLabel(split), "股票分割");
   assert.equal(isDividendTx(tx("2025-06-13", "stock_dividend", 40, 0)), true);
 });
+
+import { compareMine, lateBuyLight, myReturn } from "../src/lib/comboMarks.js";
+test("組合拳晚買燈號：只有跌超過 5% 亮紅燈（含邊界）", () => {
+  assert.equal(lateBuyLight(100, 100).key, "ok");
+  assert.equal(lateBuyLight(120, 100).key, "ok");
+  assert.equal(lateBuyLight(95, 100).key, "ok");
+  assert.equal(lateBuyLight(94.9, 100).key, "red_lo");
+  assert.equal(lateBuyLight(NaN, 100), null);
+  assert.equal(lateBuyLight(100, null), null);
+});
+
+test("我有買：自己的報酬與紙上對照", () => {
+  assert.ok(Math.abs(myReturn({ buy_price: 100, sell_price: null }, 110) - 0.1) < 1e-12);
+  assert.ok(Math.abs(myReturn({ buy_price: 100, sell_price: 90 }, 120) + 0.1) < 1e-12);
+  const p1 = { stock_id: "1", signal_date: "20261020", entry_price: 100 };
+  const p2 = { stock_id: "2", signal_date: "20261020", entry_price: 50 };
+  const marks = { "1|20261020": { buy_price: 105, sell_price: null } };
+  const s = compareMine(marks, [{ p: p1, price: 110, paper: 0.1 }, { p: p2, price: 60, paper: 0.2 }]);
+  assert.equal(s.n, 1);
+  assert.ok(Math.abs(s.mine - (110 / 105 - 1)) < 1e-12);
+  assert.equal(s.paper, 0.1);
+  assert.ok(Math.abs(s.gap - 0.05) < 1e-12);
+  assert.equal(compareMine({}, [{ p: p1, price: 1, paper: 0 }]), null);
+});

@@ -80,3 +80,19 @@
   .combo-list { grid-template-columns: 1fr; }
   .combo-today li { font-size: 15px; }
 }
+
+/* 我有買：自己的買賣價與盤中燈號 */
+.combo-mark { border-top: 1px solid var(--border); padding-top: var(--space-2); display: grid; gap: var(--space-2); font-size: 13px; }
+.combo-mark.is-mine { background: rgba(34,197,94,.06); margin: 0 calc(-1 * var(--space-2)); padding: var(--space-2); border-radius: var(--radius-sm); }
+.combo-mark-top, .combo-late { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.combo-markbtn, .combo-markform-btns button { min-height: 36px; padding: 4px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--card-2); color: var(--fg); font-size: 13px; cursor: pointer; justify-self: start; }
+.combo-markform-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.combo-markform-btns .is-primary { border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 700; }
+.combo-markform { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.combo-markform label { display: grid; gap: 4px; font-size: 12px; color: var(--fg-3); min-width: 0; }
+.combo-markform input { min-height: 36px; padding: 4px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--card-2); color: var(--fg); font-size: 15px; min-width: 0; }
+.combo-markform .combo-markform-btns, .combo-markform .combo-err { grid-column: 1 / -1; }
+.combo-err { color: var(--combo-red); }
+.combo-mine { margin-top: var(--space-4); padding: var(--space-4); border-left: 4px solid var(--combo-green); }
+.combo-mine h2 { margin: 0 0 var(--space-3); font-size: 17px; color: var(--fg); }
+.combo-mine p { margin: var(--space-3) 0 0; font-size: 13px; line-height: 1.6; }

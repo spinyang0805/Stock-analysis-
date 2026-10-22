@@ -1,6 +1,6 @@
 // 組合拳訊號：買進候選 → 持有 → 賣出確認 → 移除（紙上追蹤，每個交易日 19:00 更新）
 // 資料：public/data/combo_signals.json（backend/tuning/combo_daily.py）
-import React, { useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { History, LogOut, Sparkles, Wallet } from "lucide-react";
 import { Empty } from "../components/ui.jsx";
 import { useSort } from "../components/SortableTh.jsx";
@@ -8,6 +8,8 @@ import { fetchStaticJson } from "../lib/data.js";
 import { fetchQuotes } from "../lib/market.js";
 import { signed, trendColor } from "../lib/format.js";
 import { navigate } from "../lib/router.js";
+import { useApp } from "../lib/appState.jsx";
+import { MY_STOP, compareMine, lateBuyLight, loadMarks, markKey, myReturn, removeMark, saveMark } from "../lib/comboMarks.js";
 import "./ComboPage.css";
 
 // 狀態標籤：圓點＋文字（綠 = 可買／已突破、黃 = 接近／等待、紅 = 賣出、灰 = 尚遠）
@@ -115,6 +117,10 @@ function Stat({ label, children, big, wide }) {
   );
 }
 
+// 即時價只在是正數時採用（報價 API 可能回 NaN），否則退回最近收盤
+const goodPx = (x) => (Number.isFinite(x) && x > 0 ? x : null);
+// 我的報酬用的價格：即時價 → 最近收盤 → 紙上賣價（卡片和上方對照共用，數字才一致）
+const markPx = (p, q) => goodPx(q?.[p.stock_id]?.price) ?? p.last_close ?? p.exit_price ?? null;
 const liveRet = (p, q) => (q?.[p.stock_id]?.price && p.entry_price ? q[p.stock_id].price / p.entry_price - 1 : p.ret);
 
 function BuyCard({ p, day }) {
@@ -129,6 +135,7 @@ function BuyCard({ p, day }) {
         <Stat label="怎麼做">{fmtDay(day)}開盤買進</Stat>
       </dl>
       <Why r={p.buy_reasons} title="為什麼可以買（看理由）" />
+      <MarkBox p={p} />
     </article>
   );
 }
@@ -175,6 +182,7 @@ function SellCard({ p, q, day }) {
         <Stat label="買價 / 現價"><span className="num">{p.entry_price ?? "–"}</span> / <LivePrice q={q[p.stock_id]} /></Stat>
       </dl>
       <Why r={p.sell_reasons} title="為什麼要賣（看理由）" />
+      <MarkBox p={p} price={q[p.stock_id]?.price} />
     </article>
   );
 }
@@ -211,11 +219,119 @@ function HoldingList({ rows, quotes }) {
                 <Stat label="買價 / 現價"><span className="num">{p.entry_price ?? "–"}</span>{quotes && <> / <LivePrice q={quotes[p.stock_id]} /></>}</Stat>
               </dl>
               <Why r={p.buy_reasons} title="當初為什麼買（看理由）" />
+              <MarkBox p={p} price={quotes?.[p.stock_id]?.price} late={!waiting} />
             </article>
           );
         })}
       </div>
     </>
+  );
+}
+
+// ── 我有買：使用者自己的實際買賣價（只有自己看得到），跟紙上追蹤並列 ──
+const MarkCtx = createContext(null);
+const todayTw = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Taipei" });
+const slashDate = (d) => (d ? d.replaceAll("-", "/") : "–");
+
+function MarkForm({ p, mark, price, onDone }) {
+  const ctx = useContext(MarkCtx);
+  const [f, setF] = useState(() => ({
+    buy_date: mark?.buy_date || todayTw(),
+    buy_price: String(mark?.buy_price ?? (Number.isFinite(price) ? price : p.entry_price ?? "")),
+    sell_date: mark?.sell_date || "",
+    sell_price: mark?.sell_price == null ? "" : String(mark.sell_price),
+  }));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const submit = async (e) => {
+    e.preventDefault();
+    const buy = Number(f.buy_price), sell = f.sell_price === "" ? null : Number(f.sell_price);
+    if (!(buy > 0)) return setErr("買入價要大於 0");
+    if ((sell == null) !== (f.sell_date === "")) return setErr("賣出日和賣出價要一起填（或都不填）");
+    if (sell != null && !(sell > 0)) return setErr("賣出價要大於 0");
+    if (f.sell_date && f.sell_date < f.buy_date) return setErr("賣出日不能早於買進日");
+    setBusy(true); setErr("");
+    try {
+      await ctx.save({ stock_id: p.stock_id, signal_date: p.signal_date, buy_date: f.buy_date, buy_price: buy, sell_date: f.sell_date || null, sell_price: sell });
+      onDone();
+    } catch (x) { setErr(x.message || "儲存失敗"); setBusy(false); }
+  };
+  return (
+    <form className="combo-markform" onSubmit={submit}>
+      <label>買進日<input type="date" value={f.buy_date} onChange={set("buy_date")} required /></label>
+      <label>買入價<input type="number" inputMode="decimal" step="0.01" min="0" value={f.buy_price} onChange={set("buy_price")} required /></label>
+      {mark && <>
+        <label>賣出日<input type="date" value={f.sell_date} onChange={set("sell_date")} /></label>
+        <label>賣出價<input type="number" inputMode="decimal" step="0.01" min="0" value={f.sell_price} onChange={set("sell_price")} /></label>
+      </>}
+      <div className="combo-markform-btns">
+        <button type="submit" className="is-primary" disabled={busy}>{busy ? "儲存中…" : "儲存"}</button>
+        <button type="button" onClick={onDone} disabled={busy}>取消</button>
+      </div>
+      {err && <div className="combo-err" role="alert">{err}</div>}
+    </form>
+  );
+}
+
+function MarkBox({ p, price, late = false }) {
+  const ctx = useContext(MarkCtx);
+  const [editing, setEditing] = useState(false);
+  if (!ctx) return null;
+  const mark = ctx.marks[markKey(p)];
+  const light = !mark && late ? lateBuyLight(price, p.entry_price) : null;
+  const lateRow = late && !mark && (
+    <div className="combo-late">
+      {light ? <><Chip color={light.color} label={`盤中：${light.label}`} />
+        <span className="dim">現價比紙上買價 <span className="num">{signed(light.r * 100, 1, "%")}</span>
+          {light.key === "red_lo" && p.support != null && (p.support ? "；季線和結構還在，但回測證據不足" : "；季線或結構已轉壞")}</span></>
+        : <span className="dim">沒有即時報價，無法判斷現在適不適合買。</span>}
+    </div>
+  );
+  if (!ctx.user) return <div className="combo-mark">{lateRow}<div className="dim">登入後可以標記「我有買」，用自己的買價追蹤。</div></div>;
+  if (editing) return <div className="combo-mark"><MarkForm p={p} mark={mark} price={price} onDone={() => setEditing(false)} /></div>;
+  if (!mark) {
+    return (
+      <div className="combo-mark">
+        {lateRow}
+        <button type="button" className="combo-markbtn" onClick={() => setEditing(true)}>我有買</button>
+      </div>
+    );
+  }
+  const sold = mark.sell_price != null;
+  const r = myReturn(mark, goodPx(price) ?? p.last_close ?? p.exit_price ?? null);
+  const remove = async () => { try { await ctx.remove(mark); } catch (x) { ctx.setError(x.message || "刪除失敗"); } };
+  return (
+    <div className="combo-mark is-mine">
+      <div className="combo-mark-top">
+        <Chip color="green" label={sold ? "我已賣出" : "我有買"} />
+        <span className="num">{slashDate(mark.buy_date)} 買 {mark.buy_price}{sold ? ` → ${slashDate(mark.sell_date)} 賣 ${mark.sell_price}` : ""}</span>
+      </div>
+      <dl className="combo-stats">
+        <Stat label={sold ? "我的報酬" : "我的報酬（即時）"}><Pct v={r} /></Stat>
+        {!sold && <Stat label="我的停損價"><span className="num">{(mark.buy_price * (1 - MY_STOP)).toFixed(2)}</span></Stat>}
+      </dl>
+      <div className="combo-markform-btns">
+        <button type="button" onClick={() => setEditing(true)}>{sold ? "修改" : "修改／記錄賣出"}</button>
+        <button type="button" onClick={remove}>取消標記</button>
+      </div>
+    </div>
+  );
+}
+
+function MineSummary({ s }) {
+  if (!s) return null;
+  return (
+    <section className="card combo-mine" aria-labelledby="combo-mine-h">
+      <h2 id="combo-mine-h">我的實際操作 vs 紙上追蹤（{s.n} 檔）</h2>
+      <dl className="combo-stats">
+        <Stat label="我的平均報酬" big><Pct v={s.mine} /></Stat>
+        <Stat label="同一批紙上平均報酬" big><Pct v={s.paper} /></Stat>
+        <Stat label="差距（我 − 紙上）"><Pct v={s.mine - s.paper} /></Stat>
+        <Stat label="我的買價比紙上買價">{s.gap == null ? <span className="dim">–</span> : <Pct v={s.gap} />}</Stat>
+      </dl>
+      <p className="dim">紙上報酬代表「推薦本身準不準」；差距多半來自進場時機和價格。我的報酬未扣手續費與稅，紙上已結案的有扣。</p>
+    </section>
   );
 }
 
@@ -234,12 +350,13 @@ function Section({ icon: Icon, title, count, hint, children }) {
 
 const Nothing = ({ children }) => <div className="combo-empty">{children}</div>;
 
-function ClosedItem({ p }) {
+function ClosedItem({ p, q, markable = false }) {
   return (
     <div className="combo-closed">
       <div className="combo-closed-top"><Name p={p} /><Pct v={p.ret} /></div>
       <div className="num">{fmtDate(p.entry_date)} 買 {p.entry_price} → {fmtDate(p.exit_date)} 賣 {p.exit_price}（持有 {p.days} 天，已扣成本）</div>
       <Why r={p.sell_reasons} title="賣出理由" />
+      {markable && <MarkBox p={p} price={q?.[p.stock_id]?.price} />}
     </div>
   );
 }
@@ -247,6 +364,27 @@ function ClosedItem({ p }) {
 export default function ComboPage() {
   const [data, setData] = useState(undefined);
   useEffect(() => { fetchStaticJson("/combo_signals.json").then(setData); }, []);
+  const { user } = useApp();
+  const [marks, setMarks] = useState({});
+  const [markErr, setMarkErr] = useState("");
+  // 換帳號／登出時先清空，並丟掉舊帳號還在路上的回應，避免顯示到別人的標記
+  const uid = user?.id || null;
+  const reqRef = useRef(0);
+  const reloadMarks = useCallback(async () => {
+    const req = ++reqRef.current;
+    if (!uid) { setMarks({}); return; }
+    try {
+      const m = await loadMarks();
+      if (req === reqRef.current) setMarks(m);
+    } catch (e) { if (req === reqRef.current) setMarkErr(e.message || "讀取標記失敗"); }
+  }, [uid]);
+  useEffect(() => { setMarks({}); setMarkErr(""); }, [uid]);
+  useEffect(() => { reloadMarks(); }, [reloadMarks]);
+  const markCtx = useMemo(() => ({
+    user: uid, marks, setError: setMarkErr,
+    save: async (m) => { await saveMark(m); setMarkErr(""); await reloadMarks(); },
+    remove: async (m) => { await removeMark(m); setMarkErr(""); await reloadMarks(); },
+  }), [uid, marks, reloadMarks]);
 
   const since = data?.live_since || "20261019";
   const mark = (p) => ({ ...p, replay: p.signal_date < since });
@@ -259,18 +397,28 @@ export default function ComboPage() {
   const sells = live.filter((p) => p.status === "sell_signal");
   const holding = live.filter((p) => p.status === "holding" || (p.status === "waiting" && !newIds.has(p.stock_id)));
   const allClosed = (data?.closed || []).filter((c) => c.status === "closed").map(mark);
-  const closed = allClosed.filter((c) => !c.replay).slice(0, 40);
+  const liveClosed = allClosed.filter((c) => !c.replay);
+  // 列最近 40 筆；有我標記的較舊結案也一直列出，才能記錄賣出或修改
+  const closed = liveClosed.filter((c, i) => i < 40 || marks[markKey(c)]);
   const replayClosed = allClosed.filter((c) => c.replay);
   const watch = data?.intraday_watch || [];
-  const rt = useLiveQuotes([...watch.map((w) => w.stock_id), ...sells.map((p) => p.stock_id), ...holding.map((p) => p.stock_id)]);
+  // 已結案但我還沒賣的標記也要即時價，我的報酬才不會停在紙上的賣價
+  const openMarkedClosed = liveClosed.filter((c) => marks[markKey(c)] && marks[markKey(c)].sell_price == null);
+  const rt = useLiveQuotes([...watch.map((w) => w.stock_id), ...sells.map((p) => p.stock_id), ...holding.map((p) => p.stock_id),
+    ...openMarkedClosed.map((c) => c.stock_id)]);
   const q = rt.quotes;
   const names = (arr) => arr.map((p) => `${p.name}`).join("、");
   const wins = closed.filter((c) => c.ret > 0).length;
+  const mine = compareMine(marks, [
+    ...live.map((p) => ({ p, price: markPx(p, q), paper: p.entry_price ? liveRet(p, q) : null })),
+    ...liveClosed.map((c) => ({ p: c, price: markPx(c, q), paper: c.ret })),
+  ]);
   const closeDay = fmtDay(data?.updated);
   const actDate = data?.next_trade_date || (data?.updated ? nextWeekday(data.updated) : null);
   const actDay = fmtDay(actDate);
 
   return (
+    <MarkCtx.Provider value={markCtx}>
     <div className="page combo-page">
       <div className="page-head">
         <div>
@@ -307,6 +455,9 @@ export default function ComboPage() {
                 </li>
               </ul>
             </section>
+
+            {markErr && <div className="notice err" role="alert">{markErr}</div>}
+            <MineSummary s={mine} />
 
             <Section icon={Sparkles} title="買進候選" count={fresh.length + watch.length}>
               <h3 className="combo-sub">{closeDay}收盤已確認 → {actDay}開盤買（{fresh.length} 檔）</h3>
@@ -346,7 +497,7 @@ export default function ComboPage() {
               </summary>
               <div className="combo-fold-body">
                 {!closed.length ? <Nothing>還沒有結案紀錄（上線後推薦過的股票賣出後會列在這裡）。</Nothing>
-                  : <div className="combo-closed-list">{closed.map((p) => <ClosedItem key={p.stock_id + p.signal_date} p={p} />)}</div>}
+                  : <div className="combo-closed-list">{closed.map((p) => <ClosedItem key={p.stock_id + p.signal_date} p={p} q={q} markable />)}</div>}
               </div>
             </details>
 
@@ -376,5 +527,6 @@ export default function ComboPage() {
           </>
         )}
     </div>
+    </MarkCtx.Provider>
   );
 }

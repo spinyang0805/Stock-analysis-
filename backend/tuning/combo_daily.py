@@ -283,6 +283,9 @@ def main(argv=None):
         if sid in det_by:
             g, det, _ = det_by[sid]
             p = evaluate(p, g, det, sell_by[sid], as_of)
+            # 結構仍在：季線多頭（同買進的環境條件）且近 10 天沒有結構破壞；網頁用來判斷跌超過 5% 還能不能買
+            lay = det["layers"]
+            p["support"] = bool(lay["env"][-1] and lay["n_struct"][-1] == 0) if str(g["date"].iloc[-1]) == as_of else None
         p["in_rank"] = sid in rank_ids
         if p["status"] in ("closed", "skipped"):
             closed.insert(0, {**p, "closed_on": as_of})
