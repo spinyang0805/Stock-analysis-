@@ -19,7 +19,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 
@@ -32,6 +32,22 @@ from tuning import research_combo as rc  # noqa: E402
 from tuning.data import log  # noqa: E402
 from tuning.evaluate import Costs  # noqa: E402
 from tuning.run_tuning import add_common_args, prepare  # noqa: E402
+
+
+def next_trade_date(as_of):
+    """as_of 之後的下一個交易日（避開假日）；查不到行事曆就退回下一個平日。"""
+    d = datetime.strptime(as_of, "%Y%m%d")
+    for _ in range(15):
+        d += timedelta(days=1)
+        s = d.strftime("%Y%m%d")
+        try:
+            import trading_calendar
+            if trading_calendar.is_trading_day(s):
+                return s
+        except Exception:
+            if d.weekday() < 5:
+                return s
+    return None
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 STATE = os.path.join(REPO, "public", "data", "combo_signals.json")
@@ -301,7 +317,7 @@ def main(argv=None):
     live_since = prev_live or (as_of if seed else LIVE_SINCE)
     for p in positions + closed:
         p["replayed"] = p["signal_date"] < live_since
-    state = {"updated": as_of, "live_since": live_since, "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "rule": "combo_strictB",
+    state = {"updated": as_of, "next_trade_date": next_trade_date(as_of), "live_since": live_since, "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "rule": "combo_strictB",
              "new_today": [p["stock_id"] for p in new], "positions": positions, "closed": closed[:KEEP_CLOSED],
              "rank_lights": lights, "summary": summary, "intraday_watch": watch}
     os.makedirs(os.path.dirname(a.state), exist_ok=True)

@@ -57,6 +57,15 @@ function LiveBanner({ live }) {
 }
 
 const fmtDate = (d) => (d ? `${d.slice(0, 4)}/${d.slice(4, 6)}/${d.slice(6)}` : "–");
+// 「今天／明天」看網頁的時間不同會搞混，一律寫實際日期＋星期，例如 10/22（四）
+const toDate = (d) => new Date(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6));
+const fmtDay = (d) => (d ? `${+d.slice(4, 6)}/${+d.slice(6)}（${"日一二三四五六"[toDate(d).getDay()]}）` : "–");
+// 後端沒給下個交易日時退回下一個平日（不知道假日）
+function nextWeekday(d) {
+  const t = toDate(d);
+  do t.setDate(t.getDate() + 1); while (t.getDay() === 0 || t.getDay() === 6);
+  return `${t.getFullYear()}${String(t.getMonth() + 1).padStart(2, "0")}${String(t.getDate()).padStart(2, "0")}`;
+}
 
 function Pct({ v }) {
   if (v == null) return <span className="dim">–</span>;
@@ -108,7 +117,7 @@ function Stat({ label, children, big, wide }) {
 
 const liveRet = (p, q) => (q?.[p.stock_id]?.price && p.entry_price ? q[p.stock_id].price / p.entry_price - 1 : p.ret);
 
-function BuyCard({ p }) {
+function BuyCard({ p, day }) {
   return (
     <article className="combo-item is-green">
       <div className="combo-item-top">
@@ -116,8 +125,8 @@ function BuyCard({ p }) {
         <Chip color="green" label="可買進" />
       </div>
       <dl className="combo-stats">
-        <Stat label="今日收盤" big><span className="num">{p.signal_close}</span></Stat>
-        <Stat label="怎麼做">明天開盤買進</Stat>
+        <Stat label={`${fmtDay(p.signal_date)}收盤`} big><span className="num">{p.signal_close}</span></Stat>
+        <Stat label="怎麼做">{fmtDay(day)}開盤買進</Stat>
       </dl>
       <Why r={p.buy_reasons} title="為什麼可以買（看理由）" />
     </article>
@@ -152,7 +161,7 @@ function WatchCard({ w, q, open }) {
   );
 }
 
-function SellCard({ p, q }) {
+function SellCard({ p, q, day }) {
   return (
     <article className="combo-item is-red">
       <div className="combo-item-top">
@@ -160,7 +169,7 @@ function SellCard({ p, q }) {
         <Chip color="red" label="該賣出" />
       </div>
       <dl className="combo-stats">
-        <Stat label="怎麼做">明天開盤賣出</Stat>
+        <Stat label="怎麼做">{fmtDay(day)}開盤賣出</Stat>
         <Stat label="目前報酬" big><Pct v={liveRet(p, q)} /></Stat>
         <Stat label="買進日"><span className="num">{fmtDate(p.entry_date)}</span></Stat>
         <Stat label="買價 / 現價"><span className="num">{p.entry_price ?? "–"}</span> / <LivePrice q={q[p.stock_id]} /></Stat>
@@ -257,6 +266,9 @@ export default function ComboPage() {
   const q = rt.quotes;
   const names = (arr) => arr.map((p) => `${p.name}`).join("、");
   const wins = closed.filter((c) => c.ret > 0).length;
+  const closeDay = fmtDay(data?.updated);
+  const actDate = data?.next_trade_date || (data?.updated ? nextWeekday(data.updated) : null);
+  const actDay = fmtDay(actDate);
 
   return (
     <div className="page combo-page">
@@ -274,15 +286,16 @@ export default function ComboPage() {
         ) : (
           <>
             <section className="card combo-today" aria-labelledby="combo-today-h">
-              <h2 id="combo-today-h">今天要做什麼</h2>
+              <h2 id="combo-today-h">{actDay}要做什麼</h2>
+              <p className="dim">依 {closeDay}收盤的資料，下一個交易日 {actDay}開盤照下面做（已避開國定假日；遇颱風等臨時休市，就順延到下一個開盤日）。</p>
               <ul>
                 <li>
                   <Chip color={sells.length ? "red" : "gray"} label="賣出" />
-                  <span>{sells.length ? <><b>明天開盤賣出 {sells.length} 檔</b>：{names(sells)}</> : "目前沒有要賣的股票。"}</span>
+                  <span>{sells.length ? <><b>{actDay}開盤賣出 {sells.length} 檔</b>：{names(sells)}</> : "目前沒有要賣的股票。"}</span>
                 </li>
                 <li>
                   <Chip color={fresh.length ? "green" : "gray"} label="買進" />
-                  <span>{fresh.length ? <><b>明天開盤可買進 {fresh.length} 檔</b>：{names(fresh)}</> : "今天沒有新的買進候選，不用動作。"}</span>
+                  <span>{fresh.length ? <><b>{actDay}開盤可買進 {fresh.length} 檔</b>：{names(fresh)}</> : `${closeDay}收盤沒有新的買進候選，不用動作。`}</span>
                 </li>
                 <li>
                   <Chip color={watch.length ? "yellow" : "gray"} label="觀察" />
@@ -296,12 +309,12 @@ export default function ComboPage() {
             </section>
 
             <Section icon={Sparkles} title="買進候選" count={fresh.length + watch.length}>
-              <h3 className="combo-sub">今天收盤確認，明天開盤買（{fresh.length} 檔）</h3>
-              {!fresh.length ? <Nothing>今天沒有股票通過全部條件。</Nothing>
-                : <div className="combo-list">{fresh.map((p) => <BuyCard key={p.stock_id} p={p} />)}</div>}
+              <h3 className="combo-sub">{closeDay}收盤已確認 → {actDay}開盤買（{fresh.length} 檔）</h3>
+              {!fresh.length ? <Nothing>{closeDay}收盤沒有股票通過全部條件。</Nothing>
+                : <div className="combo-list">{fresh.map((p) => <BuyCard key={p.stock_id} p={p} day={actDate} />)}</div>}
 
-              <h3 className="combo-sub">還差一點：盤中觀察（{watch.length} 檔）</h3>
-              {!watch.length ? <Nothing>今天沒有只差突破的股票。</Nothing> : (
+              <h3 className="combo-sub">還差一點：{actDay}盤中觀察（{watch.length} 檔）</h3>
+              {!watch.length ? <Nothing>沒有只差突破的股票。</Nothing> : (
                 <>
                   <p className="combo-section-hint">
                     現價站上「要站上的價位」就會亮綠燈，離價位 2% 以內亮黃燈。網頁先亮燈、手機提醒晚一點到是正常的（提醒還要求連續 2 分鐘站上、量有放大）。最後要收盤仍站穩才算買點。
@@ -312,9 +325,9 @@ export default function ComboPage() {
               )}
             </Section>
 
-            <Section icon={LogOut} title="賣出確認" count={sells.length} hint="這些已出現轉壞訊號，紙上追蹤明天開盤賣出，賣出後會自動從清單移除。">
+            <Section icon={LogOut} title="賣出確認" count={sells.length} hint={`這些已出現轉壞訊號，紙上追蹤 ${actDay}開盤賣出，賣出後會自動從清單移除。`}>
               {!sells.length ? <Nothing>目前沒有要賣的股票。</Nothing>
-                : <div className="combo-list">{sells.map((p) => <SellCard key={p.stock_id} p={p} q={q} />)}</div>}
+                : <div className="combo-list">{sells.map((p) => <SellCard key={p.stock_id} p={p} q={q} day={actDate} />)}</div>}
             </Section>
 
             <Section icon={Wallet} title="持有中" count={holding.length} hint="晨報推薦過、目前還在追蹤的股票，會一直列在這裡直到出現賣出確認。">
