@@ -1,12 +1,12 @@
 {
- "updated": "20261021",
+ "updated": "20261022",
+ "next_trade_date": "20261023",
  "live_since": "20261019",
- "generated_at": "2026-10-21 16:01",
+ "generated_at": "2026-10-22 15:58",
  "rule": "combo_strictB",
  "new_today": [
-  "2328",
-  "3673",
-  "5475"
+  "2465",
+  "2468"
  ],
  "positions": [
   {
@@ -35,11 +35,12 @@
    },
    "entry_date": "20260821",
    "entry_price": 24.75,
-   "last_close": 26.8,
-   "days": 41,
-   "ret": 0.0828,
+   "last_close": 27.95,
+   "days": 42,
+   "ret": 0.1293,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "1102",
@@ -69,11 +70,12 @@
    },
    "entry_date": "20260827",
    "entry_price": 35.2,
-   "last_close": 38.05,
-   "days": 37,
-   "ret": 0.081,
+   "last_close": 38.55,
+   "days": 38,
+   "ret": 0.0952,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "1216",
@@ -98,11 +100,12 @@
    },
    "entry_date": "20261014",
    "entry_price": 77.1,
-   "last_close": 78.5,
-   "days": 6,
-   "ret": 0.0182,
+   "last_close": 79.6,
+   "days": 7,
+   "ret": 0.0324,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "1301",
@@ -127,11 +130,12 @@
    },
    "entry_date": "20260828",
    "entry_price": 63.2,
-   "last_close": 77.0,
-   "days": 36,
-   "ret": 0.2184,
+   "last_close": 73.8,
+   "days": 37,
+   "ret": 0.1677,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "1303",
@@ -163,11 +167,12 @@
    },
    "entry_date": "20260828",
    "entry_price": 230.5,
-   "last_close": 320.5,
-   "days": 36,
-   "ret": 0.3905,
+   "last_close": 301.0,
+   "days": 37,
+   "ret": 0.3059,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "1312",
@@ -201,11 +206,12 @@
    },
    "entry_date": "20261013",
    "entry_price": 15.8,
-   "last_close": 15.35,
-   "days": 7,
-   "ret": -0.0285,
+   "last_close": 14.8,
+   "days": 8,
+   "ret": -0.0633,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "1314",
@@ -232,11 +238,12 @@
    },
    "entry_date": "20260918",
    "entry_price": 9.11,
-   "last_close": 8.75,
-   "days": 21,
-   "ret": -0.0395,
+   "last_close": 8.51,
+   "days": 22,
+   "ret": -0.0659,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "1319",
@@ -266,11 +273,12 @@
    },
    "entry_date": "20261014",
    "entry_price": 83.4,
-   "last_close": 81.1,
-   "days": 6,
-   "ret": -0.0276,
+   "last_close": 81.6,
+   "days": 7,
+   "ret": -0.0216,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "1326",
@@ -299,11 +307,12 @@
    },
    "entry_date": "20260828",
    "entry_price": 63.5,
-   "last_close": 76.2,
-   "days": 36,
-   "ret": 0.2,
+   "last_close": 73.0,
+   "days": 37,
+   "ret": 0.1496,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "1504",
@@ -330,11 +339,12 @@
    },
    "entry_date": "20261012",
    "entry_price": 71.2,
-   "last_close": 70.6,
-   "days": 8,
-   "ret": -0.0084,
+   "last_close": 69.7,
+   "days": 9,
+   "ret": -0.0211,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "1560",
@@ -371,11 +381,12 @@
    },
    "entry_date": "20260914",
    "entry_price": 775.0,
-   "last_close": 877.0,
-   "days": 25,
-   "ret": 0.1316,
+   "last_close": 846.0,
+   "days": 26,
+   "ret": 0.0916,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "1569",
@@ -401,17 +412,18 @@
    },
    "entry_date": "20260923",
    "entry_price": 64.2,
-   "last_close": 87.6,
-   "days": 18,
-   "ret": 0.3645,
+   "last_close": 86.2,
+   "days": 19,
+   "ret": 0.3427,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "1597",
    "name": "直得",
    "signal_date": "20261015",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 144.5,
    "buy_reasons": {
     "突破": [
@@ -434,11 +446,25 @@
    },
    "entry_date": "20261016",
    "entry_price": 144.5,
-   "last_close": 142.0,
-   "days": 4,
-   "ret": -0.0173,
+   "last_close": 135.0,
+   "days": 5,
+   "ret": -0.0657,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "sell_reasons": {
+    "結構破壞": [
+     "頭頭低確認",
+     "跌破上升趨勢線"
+    ],
+    "資金流出": [
+     "OBV 20/60 死亡交叉"
+    ],
+    "籌碼賣出": [
+     "外資連 5 日賣超"
+    ]
+   },
+   "sell_signal_date": "20261022",
+   "support": false
   },
   {
    "stock_id": "1605",
@@ -466,11 +492,12 @@
    },
    "entry_date": "20261007",
    "entry_price": 38.75,
-   "last_close": 37.3,
-   "days": 10,
-   "ret": -0.0374,
+   "last_close": 37.0,
+   "days": 11,
+   "ret": -0.0452,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "1608",
@@ -496,17 +523,18 @@
    },
    "entry_date": "20261008",
    "entry_price": 36.8,
-   "last_close": 35.85,
-   "days": 9,
-   "ret": -0.0258,
+   "last_close": 35.5,
+   "days": 10,
+   "ret": -0.0353,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "1708",
    "name": "東鹼",
    "signal_date": "20260930",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 53.8,
    "buy_reasons": {
     "突破": [
@@ -530,11 +558,18 @@
    },
    "entry_date": "20261001",
    "entry_price": 53.8,
-   "last_close": 51.3,
-   "days": 14,
-   "ret": -0.0465,
+   "last_close": 49.95,
+   "days": 15,
+   "ret": -0.0716,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "sell_reasons": {
+    "第四階段": [
+     "收盤跌破下彎的季線"
+    ]
+   },
+   "sell_signal_date": "20261022",
+   "support": false
   },
   {
    "stock_id": "1709",
@@ -567,11 +602,12 @@
    },
    "entry_date": "20260825",
    "entry_price": 34.4,
-   "last_close": 56.0,
-   "days": 39,
-   "ret": 0.677,
+   "last_close": 55.3,
+   "days": 40,
+   "ret": 0.6561,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "1710",
@@ -598,11 +634,12 @@
    },
    "entry_date": "20260826",
    "entry_price": 15.85,
-   "last_close": 17.7,
-   "days": 38,
-   "ret": 0.1167,
+   "last_close": 17.05,
+   "days": 39,
+   "ret": 0.0757,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "1727",
@@ -634,11 +671,12 @@
    },
    "entry_date": "20260918",
    "entry_price": 105.0,
-   "last_close": 99.1,
-   "days": 21,
-   "ret": -0.0358,
+   "last_close": 93.2,
+   "days": 22,
+   "ret": -0.0932,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "1815",
@@ -662,11 +700,12 @@
    },
    "entry_date": "20261006",
    "entry_price": 129.0,
-   "last_close": 147.0,
-   "days": 11,
-   "ret": 0.1395,
+   "last_close": 139.0,
+   "days": 12,
+   "ret": 0.0775,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2002",
@@ -691,11 +730,12 @@
    },
    "entry_date": "20261001",
    "entry_price": 19.2,
-   "last_close": 19.6,
-   "days": 14,
-   "ret": 0.0208,
+   "last_close": 19.55,
+   "days": 15,
+   "ret": 0.0182,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2006",
@@ -719,11 +759,12 @@
    },
    "entry_date": "20260918",
    "entry_price": 83.0,
-   "last_close": 93.3,
-   "days": 21,
-   "ret": 0.1241,
+   "last_close": 93.2,
+   "days": 22,
+   "ret": 0.1229,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2009",
@@ -753,11 +794,12 @@
    },
    "entry_date": "20260826",
    "entry_price": 41.4,
-   "last_close": 39.0,
-   "days": 38,
-   "ret": -0.058,
+   "last_close": 38.5,
+   "days": 39,
+   "ret": -0.07,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2027",
@@ -782,11 +824,12 @@
    },
    "entry_date": "20261015",
    "entry_price": 49.85,
-   "last_close": 49.9,
-   "days": 5,
-   "ret": 0.001,
+   "last_close": 50.6,
+   "days": 6,
+   "ret": 0.015,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2030",
@@ -818,11 +861,12 @@
    },
    "entry_date": "20260824",
    "entry_price": 22.55,
-   "last_close": 28.9,
-   "days": 40,
-   "ret": 0.2816,
+   "last_close": 29.3,
+   "days": 41,
+   "ret": 0.2993,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2201",
@@ -849,11 +893,12 @@
    },
    "entry_date": "20260824",
    "entry_price": 29.3,
-   "last_close": 28.85,
-   "days": 40,
-   "ret": 0.004,
+   "last_close": 29.15,
+   "days": 41,
+   "ret": 0.0144,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2207",
@@ -883,11 +928,12 @@
    },
    "entry_date": "20260907",
    "entry_price": 548.0,
-   "last_close": 526.0,
-   "days": 30,
-   "ret": -0.0401,
+   "last_close": 530.0,
+   "days": 31,
+   "ret": -0.0328,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2221",
@@ -914,11 +960,12 @@
    },
    "entry_date": "20260902",
    "entry_price": 78.5,
-   "last_close": 134.0,
-   "days": 33,
-   "ret": 0.707,
+   "last_close": 129.0,
+   "days": 34,
+   "ret": 0.6433,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2254",
@@ -940,11 +987,12 @@
    },
    "entry_date": "20260915",
    "entry_price": 70.9,
-   "last_close": 94.9,
-   "days": 24,
-   "ret": 0.3385,
+   "last_close": 97.9,
+   "days": 25,
+   "ret": 0.3808,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2305",
@@ -974,11 +1022,12 @@
    },
    "entry_date": "20260908",
    "entry_price": 33.95,
-   "last_close": 56.3,
-   "days": 29,
-   "ret": 0.6583,
+   "last_close": 53.2,
+   "days": 30,
+   "ret": 0.567,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2330",
@@ -1006,17 +1055,18 @@
    },
    "entry_date": "20260909",
    "entry_price": 2480.0,
-   "last_close": 2420.0,
-   "days": 28,
-   "ret": -0.0213,
+   "last_close": 2385.0,
+   "days": 29,
+   "ret": -0.0355,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2340",
    "name": "台亞",
    "signal_date": "20261012",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 51.4,
    "buy_reasons": {
     "突破": [
@@ -1045,11 +1095,22 @@
    },
    "entry_date": "20261013",
    "entry_price": 51.4,
-   "last_close": 48.75,
-   "days": 7,
-   "ret": -0.0516,
+   "last_close": 45.5,
+   "days": 8,
+   "ret": -0.1148,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "籌碼賣出": [
+     "借券賣出 5 日大增",
+     "高檔融資 5 日增幅 > 自身 P90"
+    ]
+   },
+   "sell_signal_date": "20261022",
+   "support": true
   },
   {
    "stock_id": "2347",
@@ -1075,11 +1136,12 @@
    },
    "entry_date": "20260924",
    "entry_price": 93.7,
-   "last_close": 99.7,
-   "days": 17,
-   "ret": 0.064,
+   "last_close": 99.3,
+   "days": 18,
+   "ret": 0.0598,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2354",
@@ -1112,11 +1174,12 @@
    },
    "entry_date": "20260902",
    "entry_price": 65.4,
-   "last_close": 63.4,
-   "days": 33,
-   "ret": -0.0306,
+   "last_close": 62.0,
+   "days": 34,
+   "ret": -0.052,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2371",
@@ -1149,11 +1212,12 @@
    },
    "entry_date": "20261001",
    "entry_price": 31.0,
-   "last_close": 28.35,
-   "days": 14,
-   "ret": -0.0855,
+   "last_close": 28.3,
+   "days": 15,
+   "ret": -0.0871,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2376",
@@ -1185,11 +1249,12 @@
    },
    "entry_date": "20260922",
    "entry_price": 373.0,
-   "last_close": 358.5,
-   "days": 19,
-   "ret": -0.0389,
+   "last_close": 349.0,
+   "days": 20,
+   "ret": -0.0643,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2377",
@@ -1216,11 +1281,12 @@
    },
    "entry_date": "20261015",
    "entry_price": 156.0,
-   "last_close": 165.0,
-   "days": 5,
-   "ret": 0.0577,
+   "last_close": 163.0,
+   "days": 6,
+   "ret": 0.0449,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2379",
@@ -1251,11 +1317,12 @@
    },
    "entry_date": "20260924",
    "entry_price": 745.0,
-   "last_close": 792.0,
-   "days": 17,
-   "ret": 0.0631,
+   "last_close": 772.0,
+   "days": 18,
+   "ret": 0.0362,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2393",
@@ -1280,11 +1347,12 @@
    },
    "entry_date": "20260827",
    "entry_price": 66.5,
-   "last_close": 67.9,
-   "days": 37,
-   "ret": 0.0211,
+   "last_close": 67.8,
+   "days": 38,
+   "ret": 0.0195,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2395",
@@ -1317,11 +1385,12 @@
    },
    "entry_date": "20260902",
    "entry_price": 705.0,
-   "last_close": 683.0,
-   "days": 33,
-   "ret": -0.0312,
+   "last_close": 670.0,
+   "days": 34,
+   "ret": -0.0496,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2409",
@@ -1346,11 +1415,12 @@
    },
    "entry_date": "20260908",
    "entry_price": 28.8,
-   "last_close": 37.25,
-   "days": 29,
-   "ret": 0.2934,
+   "last_close": 35.4,
+   "days": 30,
+   "ret": 0.2292,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2412",
@@ -1372,11 +1442,12 @@
    },
    "entry_date": "20260903",
    "entry_price": 137.5,
-   "last_close": 154.0,
-   "days": 32,
-   "ret": 0.12,
+   "last_close": 158.0,
+   "days": 33,
+   "ret": 0.1491,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2426",
@@ -1407,11 +1478,12 @@
    },
    "entry_date": "20260831",
    "entry_price": 95.1,
-   "last_close": 91.9,
-   "days": 35,
-   "ret": -0.0336,
+   "last_close": 86.7,
+   "days": 36,
+   "ret": -0.0883,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2455",
@@ -1449,11 +1521,12 @@
    },
    "entry_date": "20260901",
    "entry_price": 490.0,
-   "last_close": 490.5,
-   "days": 34,
-   "ret": 0.001,
+   "last_close": 467.0,
+   "days": 35,
+   "ret": -0.0469,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2466",
@@ -1478,11 +1551,12 @@
    },
    "entry_date": "20260824",
    "entry_price": 104.5,
-   "last_close": 248.5,
-   "days": 40,
-   "ret": 1.378,
+   "last_close": 261.0,
+   "days": 41,
+   "ret": 1.4976,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2484",
@@ -1513,11 +1587,12 @@
    },
    "entry_date": "20260930",
    "entry_price": 77.5,
-   "last_close": 82.4,
-   "days": 15,
-   "ret": 0.0632,
+   "last_close": 76.7,
+   "days": 16,
+   "ret": -0.0103,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2603",
@@ -1550,11 +1625,12 @@
    },
    "entry_date": "20261013",
    "entry_price": 253.5,
-   "last_close": 257.5,
-   "days": 7,
-   "ret": 0.0158,
+   "last_close": 260.0,
+   "days": 8,
+   "ret": 0.0256,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2605",
@@ -1584,11 +1660,12 @@
    },
    "entry_date": "20260904",
    "entry_price": 36.0,
-   "last_close": 35.5,
-   "days": 31,
-   "ret": -0.0139,
+   "last_close": 35.3,
+   "days": 32,
+   "ret": -0.0194,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2606",
@@ -1616,11 +1693,12 @@
    },
    "entry_date": "20260904",
    "entry_price": 79.0,
-   "last_close": 72.7,
-   "days": 31,
-   "ret": -0.0797,
+   "last_close": 72.8,
+   "days": 32,
+   "ret": -0.0785,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2609",
@@ -1653,11 +1731,12 @@
    },
    "entry_date": "20261013",
    "entry_price": 63.0,
-   "last_close": 62.1,
-   "days": 7,
-   "ret": -0.0143,
+   "last_close": 61.9,
+   "days": 8,
+   "ret": -0.0175,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2615",
@@ -1697,11 +1776,12 @@
    },
    "entry_date": "20260821",
    "entry_price": 113.0,
-   "last_close": 116.5,
-   "days": 41,
-   "ret": 0.031,
+   "last_close": 119.5,
+   "days": 42,
+   "ret": 0.0575,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2618",
@@ -1731,11 +1811,12 @@
    },
    "entry_date": "20260827",
    "entry_price": 43.5,
-   "last_close": 42.05,
-   "days": 37,
-   "ret": -0.0333,
+   "last_close": 42.2,
+   "days": 38,
+   "ret": -0.0299,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2637",
@@ -1767,10 +1848,11 @@
    "entry_date": "20260820",
    "entry_price": 94.7,
    "last_close": 100.5,
-   "days": 42,
+   "days": 43,
    "ret": 0.0612,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2727",
@@ -1797,10 +1879,11 @@
    "entry_date": "20260824",
    "entry_price": 237.5,
    "last_close": 245.5,
-   "days": 40,
+   "days": 41,
    "ret": 0.0337,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2801",
@@ -1828,11 +1911,12 @@
    },
    "entry_date": "20260904",
    "entry_price": 26.6,
-   "last_close": 29.6,
-   "days": 31,
-   "ret": 0.1128,
+   "last_close": 29.9,
+   "days": 32,
+   "ret": 0.1241,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2812",
@@ -1858,10 +1942,11 @@
    "entry_date": "20260902",
    "entry_price": 19.1,
    "last_close": 18.6,
-   "days": 33,
+   "days": 34,
    "ret": -0.0262,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2834",
@@ -1885,10 +1970,11 @@
    "entry_date": "20260901",
    "entry_price": 16.8,
    "last_close": 17.9,
-   "days": 34,
+   "days": 35,
    "ret": 0.0655,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2845",
@@ -1918,11 +2004,12 @@
    },
    "entry_date": "20260903",
    "entry_price": 13.05,
-   "last_close": 13.25,
-   "days": 32,
-   "ret": 0.0153,
+   "last_close": 13.3,
+   "days": 33,
+   "ret": 0.0192,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2851",
@@ -1945,11 +2032,12 @@
    },
    "entry_date": "20260922",
    "entry_price": 48.4,
-   "last_close": 50.3,
-   "days": 19,
-   "ret": 0.0393,
+   "last_close": 50.5,
+   "days": 20,
+   "ret": 0.0434,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2855",
@@ -1977,11 +2065,12 @@
    },
    "entry_date": "20260904",
    "entry_price": 50.9,
-   "last_close": 55.6,
-   "days": 31,
-   "ret": 0.0923,
+   "last_close": 55.0,
+   "days": 32,
+   "ret": 0.0806,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2880",
@@ -2012,11 +2101,12 @@
    },
    "entry_date": "20260904",
    "entry_price": 43.75,
-   "last_close": 49.8,
-   "days": 31,
-   "ret": 0.1383,
+   "last_close": 50.3,
+   "days": 32,
+   "ret": 0.1497,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2881",
@@ -2045,10 +2135,11 @@
    "entry_date": "20260824",
    "entry_price": 135.0,
    "last_close": 158.5,
-   "days": 40,
+   "days": 41,
    "ret": 0.1741,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2882",
@@ -2071,11 +2162,12 @@
    },
    "entry_date": "20260902",
    "entry_price": 109.5,
-   "last_close": 114.0,
-   "days": 33,
-   "ret": 0.0411,
+   "last_close": 113.5,
+   "days": 34,
+   "ret": 0.0365,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2883",
@@ -2107,11 +2199,12 @@
    },
    "entry_date": "20260901",
    "entry_price": 33.9,
-   "last_close": 38.25,
-   "days": 34,
-   "ret": 0.1283,
+   "last_close": 37.75,
+   "days": 35,
+   "ret": 0.1136,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2884",
@@ -2139,11 +2232,12 @@
    },
    "entry_date": "20260901",
    "entry_price": 39.45,
-   "last_close": 49.2,
-   "days": 34,
-   "ret": 0.2471,
+   "last_close": 49.75,
+   "days": 35,
+   "ret": 0.2611,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2885",
@@ -2176,11 +2270,12 @@
    },
    "entry_date": "20260904",
    "entry_price": 68.9,
-   "last_close": 71.3,
-   "days": 31,
-   "ret": 0.0348,
+   "last_close": 72.4,
+   "days": 32,
+   "ret": 0.0508,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2886",
@@ -2201,11 +2296,12 @@
    },
    "entry_date": "20260914",
    "entry_price": 51.4,
-   "last_close": 53.6,
-   "days": 25,
-   "ret": 0.0428,
+   "last_close": 55.2,
+   "days": 26,
+   "ret": 0.0739,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2887",
@@ -2239,11 +2335,12 @@
    },
    "entry_date": "20260901",
    "entry_price": 38.9,
-   "last_close": 41.95,
-   "days": 34,
-   "ret": 0.0784,
+   "last_close": 42.1,
+   "days": 35,
+   "ret": 0.0823,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "2889",
@@ -2266,11 +2363,12 @@
    },
    "entry_date": "20260827",
    "entry_price": 15.8,
-   "last_close": 16.9,
-   "days": 37,
-   "ret": 0.1143,
+   "last_close": 16.95,
+   "days": 38,
+   "ret": 0.1176,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2890",
@@ -2300,11 +2398,12 @@
    },
    "entry_date": "20260901",
    "entry_price": 40.8,
-   "last_close": 45.4,
-   "days": 34,
-   "ret": 0.1234,
+   "last_close": 46.35,
+   "days": 35,
+   "ret": 0.1469,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2891",
@@ -2332,11 +2431,12 @@
    },
    "entry_date": "20260916",
    "entry_price": 70.1,
-   "last_close": 74.8,
-   "days": 23,
-   "ret": 0.067,
+   "last_close": 74.9,
+   "days": 24,
+   "ret": 0.0685,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2892",
@@ -2364,11 +2464,12 @@
    },
    "entry_date": "20260831",
    "entry_price": 34.3,
-   "last_close": 41.3,
-   "days": 35,
-   "ret": 0.2041,
+   "last_close": 42.35,
+   "days": 36,
+   "ret": 0.2347,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3005",
@@ -2394,11 +2495,12 @@
    },
    "entry_date": "20260922",
    "entry_price": 119.5,
-   "last_close": 124.5,
-   "days": 19,
-   "ret": 0.0418,
+   "last_close": 125.5,
+   "days": 20,
+   "ret": 0.0502,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3010",
@@ -2428,11 +2530,12 @@
    },
    "entry_date": "20261006",
    "entry_price": 131.5,
-   "last_close": 139.0,
-   "days": 11,
-   "ret": 0.057,
+   "last_close": 135.5,
+   "days": 12,
+   "ret": 0.0304,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3017",
@@ -2469,17 +2572,18 @@
    },
    "entry_date": "20260828",
    "entry_price": 3360.0,
-   "last_close": 3235.0,
-   "days": 36,
-   "ret": -0.0372,
+   "last_close": 3145.0,
+   "days": 37,
+   "ret": -0.064,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3023",
    "name": "信邦",
    "signal_date": "20260902",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 330.0,
    "buy_reasons": {
     "突破": [
@@ -2506,11 +2610,23 @@
    },
    "entry_date": "20260903",
    "entry_price": 331.5,
-   "last_close": 308.0,
-   "days": 32,
-   "ret": -0.0709,
+   "last_close": 298.0,
+   "days": 33,
+   "ret": -0.1011,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "頭頭低確認",
+     "N 字下跌（高點下降跌破前低）",
+     "跌破上升趨勢線"
+    ]
+   },
+   "sell_signal_date": "20261022",
+   "support": false
   },
   {
    "stock_id": "3026",
@@ -2540,11 +2656,12 @@
    },
    "entry_date": "20260911",
    "entry_price": 782.0,
-   "last_close": 815.0,
-   "days": 26,
-   "ret": 0.0422,
+   "last_close": 756.0,
+   "days": 27,
+   "ret": -0.0332,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3029",
@@ -2573,11 +2690,12 @@
    },
    "entry_date": "20260909",
    "entry_price": 112.0,
-   "last_close": 119.0,
-   "days": 28,
-   "ret": 0.0625,
+   "last_close": 122.5,
+   "days": 29,
+   "ret": 0.0938,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3034",
@@ -2605,11 +2723,12 @@
    },
    "entry_date": "20260923",
    "entry_price": 561.0,
-   "last_close": 590.0,
-   "days": 18,
-   "ret": 0.0517,
+   "last_close": 583.0,
+   "days": 19,
+   "ret": 0.0392,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3044",
@@ -2642,11 +2761,12 @@
    },
    "entry_date": "20260929",
    "entry_price": 530.0,
-   "last_close": 583.0,
-   "days": 16,
-   "ret": 0.1,
+   "last_close": 556.0,
+   "days": 17,
+   "ret": 0.0491,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3045",
@@ -2671,11 +2791,12 @@
    },
    "entry_date": "20260821",
    "entry_price": 114.5,
-   "last_close": 130.5,
-   "days": 41,
-   "ret": 0.1397,
+   "last_close": 133.0,
+   "days": 42,
+   "ret": 0.1616,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3055",
@@ -2698,11 +2819,12 @@
    },
    "entry_date": "20260903",
    "entry_price": 143.0,
-   "last_close": 153.0,
-   "days": 32,
-   "ret": 0.0699,
+   "last_close": 143.0,
+   "days": 33,
+   "ret": 0.0,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3094",
@@ -2732,11 +2854,12 @@
    },
    "entry_date": "20260831",
    "entry_price": 40.0,
-   "last_close": 56.0,
-   "days": 35,
-   "ret": 0.4,
+   "last_close": 52.1,
+   "days": 36,
+   "ret": 0.3025,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3167",
@@ -2767,11 +2890,12 @@
    },
    "entry_date": "20261002",
    "entry_price": 983.0,
-   "last_close": 1000.0,
-   "days": 13,
-   "ret": 0.0173,
+   "last_close": 924.0,
+   "days": 14,
+   "ret": -0.06,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3189",
@@ -2807,11 +2931,12 @@
    },
    "entry_date": "20260929",
    "entry_price": 960.0,
-   "last_close": 1010.0,
-   "days": 16,
-   "ret": 0.0521,
+   "last_close": 986.0,
+   "days": 17,
+   "ret": 0.0271,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3219",
@@ -2841,11 +2966,12 @@
    },
    "entry_date": "20260922",
    "entry_price": 104.5,
-   "last_close": 110.0,
-   "days": 19,
-   "ret": 0.0526,
+   "last_close": 105.5,
+   "days": 20,
+   "ret": 0.0096,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3231",
@@ -2871,11 +2997,12 @@
    },
    "entry_date": "20260903",
    "entry_price": 188.0,
-   "last_close": 195.0,
-   "days": 32,
-   "ret": 0.0372,
+   "last_close": 190.0,
+   "days": 33,
+   "ret": 0.0106,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3234",
@@ -2898,11 +3025,12 @@
    },
    "entry_date": "20261005",
    "entry_price": 185.0,
-   "last_close": 196.5,
-   "days": 12,
-   "ret": 0.0622,
+   "last_close": 177.5,
+   "days": 13,
+   "ret": -0.0405,
    "in_rank": true,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3264",
@@ -2932,11 +3060,12 @@
    },
    "entry_date": "20260911",
    "entry_price": 235.5,
-   "last_close": 265.0,
-   "days": 26,
-   "ret": 0.1253,
+   "last_close": 246.5,
+   "days": 27,
+   "ret": 0.0467,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3293",
@@ -2960,11 +3089,12 @@
    },
    "entry_date": "20261015",
    "entry_price": 808.0,
-   "last_close": 782.0,
-   "days": 5,
-   "ret": -0.0322,
+   "last_close": 787.0,
+   "days": 6,
+   "ret": -0.026,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3324",
@@ -2998,11 +3128,12 @@
    },
    "entry_date": "20260902",
    "entry_price": 1375.0,
-   "last_close": 1375.0,
-   "days": 33,
-   "ret": 0.0,
+   "last_close": 1360.0,
+   "days": 34,
+   "ret": -0.0109,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3374",
@@ -3029,11 +3160,12 @@
    },
    "entry_date": "20260902",
    "entry_price": 418.0,
-   "last_close": 470.5,
-   "days": 33,
-   "ret": 0.1256,
+   "last_close": 463.5,
+   "days": 34,
+   "ret": 0.1089,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3406",
@@ -3061,11 +3193,12 @@
    },
    "entry_date": "20260827",
    "entry_price": 793.0,
-   "last_close": 1140.0,
-   "days": 37,
-   "ret": 0.4376,
+   "last_close": 1160.0,
+   "days": 38,
+   "ret": 0.4628,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3441",
@@ -3093,11 +3226,12 @@
    },
    "entry_date": "20260911",
    "entry_price": 149.5,
-   "last_close": 241.5,
-   "days": 26,
-   "ret": 0.6154,
+   "last_close": 217.5,
+   "days": 27,
+   "ret": 0.4548,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3443",
@@ -3130,11 +3264,12 @@
    },
    "entry_date": "20260921",
    "entry_price": 7395.0,
-   "last_close": 8000.0,
-   "days": 20,
-   "ret": 0.0818,
+   "last_close": 7585.0,
+   "days": 21,
+   "ret": 0.0257,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3498",
@@ -3167,11 +3302,12 @@
    },
    "entry_date": "20260930",
    "entry_price": 234.5,
-   "last_close": 244.0,
-   "days": 15,
-   "ret": 0.0405,
+   "last_close": 238.5,
+   "days": 16,
+   "ret": 0.0171,
    "in_rank": true,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3518",
@@ -3206,11 +3342,12 @@
    },
    "entry_date": "20260930",
    "entry_price": 40.5,
-   "last_close": 40.1,
-   "days": 15,
-   "ret": -0.0099,
+   "last_close": 37.7,
+   "days": 16,
+   "ret": -0.0691,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3543",
@@ -3240,17 +3377,18 @@
    },
    "entry_date": "20260827",
    "entry_price": 46.55,
-   "last_close": 53.4,
-   "days": 37,
-   "ret": 0.1472,
+   "last_close": 52.0,
+   "days": 38,
+   "ret": 0.1171,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3580",
    "name": "友威科",
    "signal_date": "20261012",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 112.5,
    "buy_reasons": {
     "突破": [
@@ -3274,11 +3412,25 @@
    },
    "entry_date": "20261013",
    "entry_price": 118.0,
-   "last_close": 116.0,
-   "days": 7,
-   "ret": -0.0169,
+   "last_close": 105.0,
+   "days": 8,
+   "ret": -0.1102,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "跌破上升趨勢線"
+    ],
+    "籌碼賣出": [
+     "借券賣出 5 日大增",
+     "高檔融資 5 日增幅 > 自身 P90"
+    ]
+   },
+   "sell_signal_date": "20261022",
+   "support": false
   },
   {
    "stock_id": "3605",
@@ -3313,11 +3465,12 @@
    },
    "entry_date": "20260921",
    "entry_price": 154.0,
-   "last_close": 178.0,
-   "days": 20,
-   "ret": 0.1558,
+   "last_close": 171.5,
+   "days": 21,
+   "ret": 0.1136,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3617",
@@ -3348,11 +3501,12 @@
    },
    "entry_date": "20261013",
    "entry_price": 256.5,
-   "last_close": 254.5,
-   "days": 7,
-   "ret": -0.0078,
+   "last_close": 247.0,
+   "days": 8,
+   "ret": -0.037,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3653",
@@ -3382,11 +3536,12 @@
    },
    "entry_date": "20260820",
    "entry_price": 5605.0,
-   "last_close": 6535.0,
-   "days": 42,
-   "ret": 0.1659,
+   "last_close": 6070.0,
+   "days": 43,
+   "ret": 0.083,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3693",
@@ -3415,11 +3570,12 @@
    },
    "entry_date": "20260918",
    "entry_price": 717.0,
-   "last_close": 718.0,
-   "days": 21,
-   "ret": 0.0014,
+   "last_close": 647.0,
+   "days": 22,
+   "ret": -0.0976,
    "in_rank": true,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3702",
@@ -3443,11 +3599,12 @@
    },
    "entry_date": "20260929",
    "entry_price": 117.5,
-   "last_close": 115.0,
-   "days": 16,
-   "ret": -0.0213,
+   "last_close": 114.5,
+   "days": 17,
+   "ret": -0.0255,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3706",
@@ -3483,11 +3640,12 @@
    },
    "entry_date": "20260902",
    "entry_price": 95.1,
-   "last_close": 81.3,
-   "days": 33,
-   "ret": -0.0276,
+   "last_close": 80.5,
+   "days": 34,
+   "ret": -0.0372,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "3711",
@@ -3514,11 +3672,12 @@
    },
    "entry_date": "20260910",
    "entry_price": 641.0,
-   "last_close": 684.0,
-   "days": 27,
-   "ret": 0.0671,
+   "last_close": 654.0,
+   "days": 28,
+   "ret": 0.0203,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "3717",
@@ -3544,11 +3703,12 @@
    },
    "entry_date": "20260921",
    "entry_price": 26.0,
-   "last_close": 28.0,
-   "days": 20,
-   "ret": 0.0769,
+   "last_close": 27.3,
+   "days": 21,
+   "ret": 0.05,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "4566",
@@ -3576,11 +3736,12 @@
    },
    "entry_date": "20260924",
    "entry_price": 67.0,
-   "last_close": 85.1,
-   "days": 17,
-   "ret": 0.2701,
+   "last_close": 84.4,
+   "days": 18,
+   "ret": 0.2597,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "4770",
@@ -3614,11 +3775,12 @@
    },
    "entry_date": "20260922",
    "entry_price": 260.5,
-   "last_close": 313.5,
-   "days": 19,
-   "ret": 0.2035,
+   "last_close": 292.0,
+   "days": 20,
+   "ret": 0.1209,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "4903",
@@ -3650,11 +3812,12 @@
    },
    "entry_date": "20261013",
    "entry_price": 52.5,
-   "last_close": 51.9,
-   "days": 7,
-   "ret": -0.0056,
+   "last_close": 48.55,
+   "days": 8,
+   "ret": -0.0698,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "4904",
@@ -3679,11 +3842,12 @@
    },
    "entry_date": "20260903",
    "entry_price": 102.5,
-   "last_close": 112.0,
-   "days": 32,
-   "ret": 0.0927,
+   "last_close": 115.0,
+   "days": 33,
+   "ret": 0.122,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "4927",
@@ -3716,11 +3880,12 @@
    },
    "entry_date": "20261013",
    "entry_price": 57.0,
-   "last_close": 56.3,
-   "days": 7,
-   "ret": -0.0123,
+   "last_close": 53.4,
+   "days": 8,
+   "ret": -0.0632,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "4938",
@@ -3748,11 +3913,12 @@
    },
    "entry_date": "20260907",
    "entry_price": 95.6,
-   "last_close": 105.0,
-   "days": 30,
-   "ret": 0.0983,
+   "last_close": 103.5,
+   "days": 31,
+   "ret": 0.0826,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "4939",
@@ -3775,11 +3941,12 @@
    },
    "entry_date": "20261015",
    "entry_price": 77.6,
-   "last_close": 77.9,
-   "days": 5,
-   "ret": 0.0039,
+   "last_close": 72.2,
+   "days": 6,
+   "ret": -0.0696,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "4961",
@@ -3807,11 +3974,12 @@
    },
    "entry_date": "20260903",
    "entry_price": 170.0,
-   "last_close": 188.0,
-   "days": 32,
-   "ret": 0.1059,
+   "last_close": 187.0,
+   "days": 33,
+   "ret": 0.1,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "4977",
@@ -3833,11 +4001,12 @@
    },
    "entry_date": "20261005",
    "entry_price": 179.0,
-   "last_close": 180.5,
-   "days": 12,
-   "ret": 0.0084,
+   "last_close": 165.0,
+   "days": 13,
+   "ret": -0.0782,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "5269",
@@ -3865,11 +4034,12 @@
    },
    "entry_date": "20261013",
    "entry_price": 1520.0,
-   "last_close": 1485.0,
-   "days": 7,
-   "ret": -0.023,
+   "last_close": 1465.0,
+   "days": 8,
+   "ret": -0.0362,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "5340",
@@ -3897,11 +4067,12 @@
    },
    "entry_date": "20261019",
    "entry_price": 91.1,
-   "last_close": 95.7,
-   "days": 3,
-   "ret": 0.0505,
+   "last_close": 90.9,
+   "days": 4,
+   "ret": -0.0022,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "5434",
@@ -3927,17 +4098,18 @@
    },
    "entry_date": "20260921",
    "entry_price": 540.0,
-   "last_close": 573.0,
-   "days": 20,
-   "ret": 0.0611,
+   "last_close": 550.0,
+   "days": 21,
+   "ret": 0.0185,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "5483",
    "name": "中美晶",
    "signal_date": "20260922",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 195.0,
    "buy_reasons": {
     "突破": [
@@ -3962,11 +4134,21 @@
    },
    "entry_date": "20260923",
    "entry_price": 195.0,
-   "last_close": 199.0,
-   "days": 18,
-   "ret": 0.0205,
+   "last_close": 186.0,
+   "days": 19,
+   "ret": -0.0462,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "sell_reasons": {
+    "環境轉壞": [
+     "月營收年增轉負"
+    ],
+    "第四階段": [
+     "收盤跌破下彎的季線"
+    ]
+   },
+   "sell_signal_date": "20261022",
+   "support": false
   },
   {
    "stock_id": "5876",
@@ -3993,11 +4175,12 @@
    },
    "entry_date": "20260902",
    "entry_price": 44.8,
-   "last_close": 53.8,
-   "days": 33,
-   "ret": 0.2009,
+   "last_close": 54.6,
+   "days": 34,
+   "ret": 0.2188,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "5880",
@@ -4029,11 +4212,12 @@
    },
    "entry_date": "20260901",
    "entry_price": 25.35,
-   "last_close": 28.0,
-   "days": 34,
-   "ret": 0.1045,
+   "last_close": 28.2,
+   "days": 35,
+   "ret": 0.1124,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6141",
@@ -4067,11 +4251,12 @@
    },
    "entry_date": "20260827",
    "entry_price": 53.5,
-   "last_close": 53.8,
-   "days": 37,
-   "ret": 0.0056,
+   "last_close": 51.0,
+   "days": 38,
+   "ret": -0.0467,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6168",
@@ -4100,11 +4285,12 @@
    },
    "entry_date": "20260917",
    "entry_price": 32.15,
-   "last_close": 35.6,
-   "days": 22,
-   "ret": 0.1073,
+   "last_close": 34.5,
+   "days": 23,
+   "ret": 0.0731,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6179",
@@ -4134,11 +4320,12 @@
    },
    "entry_date": "20260902",
    "entry_price": 30.2,
-   "last_close": 37.65,
-   "days": 33,
-   "ret": 0.2467,
+   "last_close": 37.85,
+   "days": 34,
+   "ret": 0.2533,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "6187",
@@ -4162,11 +4349,12 @@
    },
    "entry_date": "20260930",
    "entry_price": 1375.0,
-   "last_close": 1330.0,
-   "days": 15,
-   "ret": -0.0327,
+   "last_close": 1260.0,
+   "days": 16,
+   "ret": -0.0836,
    "in_rank": true,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "6199",
@@ -4190,17 +4378,18 @@
    },
    "entry_date": "20260917",
    "entry_price": 102.5,
-   "last_close": 148.0,
-   "days": 22,
-   "ret": 0.4439,
+   "last_close": 149.5,
+   "days": 23,
+   "ret": 0.4585,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6206",
    "name": "飛捷",
    "signal_date": "20260929",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 143.0,
    "buy_reasons": {
     "突破": [
@@ -4220,11 +4409,26 @@
    },
    "entry_date": "20260930",
    "entry_price": 143.0,
-   "last_close": 131.0,
-   "days": 15,
-   "ret": -0.0839,
+   "last_close": 127.5,
+   "days": 16,
+   "ret": -0.1084,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "N 字下跌（高點下降跌破前低）",
+     "均線空頭排列成形"
+    ],
+    "籌碼賣出": [
+     "千張大戶連 2 週減、股東人數增（籌碼分散）",
+     "借券賣出 5 日大增"
+    ]
+   },
+   "sell_signal_date": "20261022",
+   "support": false
   },
   {
    "stock_id": "6213",
@@ -4261,11 +4465,12 @@
    },
    "entry_date": "20260821",
    "entry_price": 534.0,
-   "last_close": 823.0,
-   "days": 41,
-   "ret": 0.5412,
+   "last_close": 777.0,
+   "days": 42,
+   "ret": 0.4551,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6214",
@@ -4292,11 +4497,12 @@
    },
    "entry_date": "20260907",
    "entry_price": 186.0,
-   "last_close": 199.0,
-   "days": 30,
-   "ret": 0.0699,
+   "last_close": 201.0,
+   "days": 31,
+   "ret": 0.0806,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6226",
@@ -4319,11 +4525,12 @@
    },
    "entry_date": "20260820",
    "entry_price": 21.7,
-   "last_close": 40.7,
-   "days": 42,
-   "ret": 0.8756,
+   "last_close": 37.75,
+   "days": 43,
+   "ret": 0.7396,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "6278",
@@ -4358,11 +4565,12 @@
    },
    "entry_date": "20261007",
    "entry_price": 229.5,
-   "last_close": 316.5,
-   "days": 10,
-   "ret": 0.3791,
+   "last_close": 290.5,
+   "days": 11,
+   "ret": 0.2658,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6416",
@@ -4393,11 +4601,12 @@
    },
    "entry_date": "20260821",
    "entry_price": 103.0,
-   "last_close": 122.0,
-   "days": 41,
-   "ret": 0.1845,
+   "last_close": 119.5,
+   "days": 42,
+   "ret": 0.1602,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6426",
@@ -4431,11 +4640,12 @@
    },
    "entry_date": "20260909",
    "entry_price": 305.5,
-   "last_close": 342.0,
-   "days": 28,
-   "ret": 0.1195,
+   "last_close": 313.0,
+   "days": 29,
+   "ret": 0.0245,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6438",
@@ -4469,11 +4679,12 @@
    },
    "entry_date": "20261007",
    "entry_price": 168.0,
-   "last_close": 172.0,
-   "days": 10,
-   "ret": 0.0238,
+   "last_close": 164.0,
+   "days": 11,
+   "ret": -0.0238,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6456",
@@ -4501,11 +4712,12 @@
    },
    "entry_date": "20261005",
    "entry_price": 92.9,
-   "last_close": 98.4,
-   "days": 12,
-   "ret": 0.0592,
+   "last_close": 102.0,
+   "days": 13,
+   "ret": 0.098,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6491",
@@ -4540,11 +4752,12 @@
    },
    "entry_date": "20260901",
    "entry_price": 392.0,
-   "last_close": 431.0,
-   "days": 34,
-   "ret": 0.0995,
+   "last_close": 423.0,
+   "days": 35,
+   "ret": 0.0791,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6505",
@@ -4572,11 +4785,12 @@
    },
    "entry_date": "20260903",
    "entry_price": 78.1,
-   "last_close": 109.5,
-   "days": 32,
-   "ret": 0.402,
+   "last_close": 106.5,
+   "days": 33,
+   "ret": 0.3636,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "6526",
@@ -4613,11 +4827,12 @@
    },
    "entry_date": "20260924",
    "entry_price": 845.0,
-   "last_close": 806.0,
-   "days": 17,
-   "ret": -0.0462,
+   "last_close": 778.0,
+   "days": 18,
+   "ret": -0.0793,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6532",
@@ -4647,11 +4862,12 @@
    },
    "entry_date": "20260930",
    "entry_price": 114.0,
-   "last_close": 121.5,
-   "days": 15,
-   "ret": 0.0658,
+   "last_close": 114.5,
+   "days": 16,
+   "ret": 0.0044,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6533",
@@ -4674,11 +4890,12 @@
    },
    "entry_date": "20260918",
    "entry_price": 255.0,
-   "last_close": 291.0,
-   "days": 21,
-   "ret": 0.1412,
+   "last_close": 282.5,
+   "days": 22,
+   "ret": 0.1078,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6538",
@@ -4710,11 +4927,12 @@
    },
    "entry_date": "20260907",
    "entry_price": 295.5,
-   "last_close": 300.5,
-   "days": 30,
-   "ret": 0.0169,
+   "last_close": 286.0,
+   "days": 31,
+   "ret": -0.0321,
    "in_rank": true,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "6620",
@@ -4742,11 +4960,12 @@
    },
    "entry_date": "20260909",
    "entry_price": 127.5,
-   "last_close": 133.5,
-   "days": 28,
-   "ret": 0.0471,
+   "last_close": 139.0,
+   "days": 29,
+   "ret": 0.0902,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6668",
@@ -4776,11 +4995,12 @@
    },
    "entry_date": "20260921",
    "entry_price": 49.25,
-   "last_close": 58.6,
-   "days": 20,
-   "ret": 0.1898,
+   "last_close": 53.7,
+   "days": 21,
+   "ret": 0.0904,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "6672",
@@ -4801,11 +5021,12 @@
    },
    "entry_date": "20260907",
    "entry_price": 293.0,
-   "last_close": 627.0,
-   "days": 30,
-   "ret": 1.1399,
+   "last_close": 581.0,
+   "days": 31,
+   "ret": 0.9829,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6691",
@@ -4831,11 +5052,12 @@
    },
    "entry_date": "20260921",
    "entry_price": 650.0,
-   "last_close": 673.0,
-   "days": 20,
-   "ret": 0.0354,
+   "last_close": 663.0,
+   "days": 21,
+   "ret": 0.02,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "6782",
@@ -4869,11 +5091,12 @@
    },
    "entry_date": "20260826",
    "entry_price": 225.0,
-   "last_close": 270.0,
-   "days": 38,
-   "ret": 0.2,
+   "last_close": 271.0,
+   "days": 39,
+   "ret": 0.2044,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6834",
@@ -4901,11 +5124,12 @@
    },
    "entry_date": "20260922",
    "entry_price": 120.0,
-   "last_close": 144.0,
-   "days": 19,
-   "ret": 0.2418,
+   "last_close": 130.0,
+   "days": 20,
+   "ret": 0.121,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6933",
@@ -4937,11 +5161,12 @@
    },
    "entry_date": "20260929",
    "entry_price": 385.5,
-   "last_close": 398.0,
-   "days": 16,
-   "ret": 0.0324,
+   "last_close": 378.0,
+   "days": 17,
+   "ret": -0.0195,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "6944",
@@ -4974,11 +5199,12 @@
    },
    "entry_date": "20261013",
    "entry_price": 830.0,
-   "last_close": 771.0,
-   "days": 7,
-   "ret": -0.0711,
+   "last_close": 759.0,
+   "days": 8,
+   "ret": -0.0855,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "6957",
@@ -5002,11 +5228,12 @@
    },
    "entry_date": "20260831",
    "entry_price": 227.0,
-   "last_close": 448.0,
-   "days": 35,
-   "ret": 0.9736,
+   "last_close": 454.0,
+   "days": 36,
+   "ret": 1.0,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "7711",
@@ -5040,17 +5267,18 @@
    },
    "entry_date": "20260826",
    "entry_price": 510.0,
-   "last_close": 580.0,
-   "days": 38,
-   "ret": 0.1373,
+   "last_close": 593.0,
+   "days": 39,
+   "ret": 0.1627,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "7751",
    "name": "竑騰",
    "signal_date": "20261014",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 1690.0,
    "buy_reasons": {
     "突破": [
@@ -5073,11 +5301,23 @@
    },
    "entry_date": "20261015",
    "entry_price": 1575.0,
-   "last_close": 1440.0,
-   "days": 5,
-   "ret": -0.0857,
+   "last_close": 1300.0,
+   "days": 6,
+   "ret": -0.1746,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "頭頭低確認",
+     "N 字下跌（高點下降跌破前低）",
+     "跌破上升趨勢線"
+    ]
+   },
+   "sell_signal_date": "20261022",
+   "support": false
   },
   {
    "stock_id": "7792",
@@ -5107,11 +5347,12 @@
    },
    "entry_date": "20260921",
    "entry_price": 339.5,
-   "last_close": 358.0,
-   "days": 20,
-   "ret": 0.0545,
+   "last_close": 348.0,
+   "days": 21,
+   "ret": 0.025,
    "in_rank": true,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "7799",
@@ -5136,17 +5377,18 @@
    },
    "entry_date": "20260908",
    "entry_price": 396.0,
-   "last_close": 440.0,
-   "days": 29,
-   "ret": 0.1111,
+   "last_close": 430.5,
+   "days": 30,
+   "ret": 0.0871,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": false
   },
   {
    "stock_id": "8039",
    "name": "台虹",
    "signal_date": "20261014",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 303.0,
    "buy_reasons": {
     "突破": [
@@ -5163,17 +5405,32 @@
    },
    "entry_date": "20261015",
    "entry_price": 307.5,
-   "last_close": 293.0,
-   "days": 5,
-   "ret": -0.0472,
+   "last_close": 266.0,
+   "days": 6,
+   "ret": -0.135,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "頭頭低確認",
+     "M 頭跌破頸線",
+     "跌破上升趨勢線"
+    ],
+    "籌碼賣出": [
+     "千張大戶連 2 週減、股東人數增（籌碼分散）"
+    ]
+   },
+   "sell_signal_date": "20261022",
+   "support": false
   },
   {
    "stock_id": "8046",
    "name": "南電",
    "signal_date": "20261001",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 1420.0,
    "buy_reasons": {
     "突破": [
@@ -5200,11 +5457,22 @@
    },
    "entry_date": "20261002",
    "entry_price": 1440.0,
-   "last_close": 1340.0,
-   "days": 13,
-   "ret": -0.0694,
+   "last_close": 1265.0,
+   "days": 14,
+   "ret": -0.1215,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "籌碼賣出": [
+     "外資連 5 日賣超",
+     "借券賣出 5 日大增"
+    ]
+   },
+   "sell_signal_date": "20261022",
+   "support": true
   },
   {
    "stock_id": "8227",
@@ -5233,11 +5501,12 @@
    },
    "entry_date": "20260922",
    "entry_price": 299.5,
-   "last_close": 286.0,
-   "days": 19,
-   "ret": -0.0451,
+   "last_close": 273.0,
+   "days": 20,
+   "ret": -0.0885,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "8996",
@@ -5259,11 +5528,12 @@
    },
    "entry_date": "20260828",
    "entry_price": 1275.0,
-   "last_close": 1660.0,
-   "days": 36,
-   "ret": 0.302,
+   "last_close": 1560.0,
+   "days": 37,
+   "ret": 0.2235,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "9904",
@@ -5291,11 +5561,12 @@
    },
    "entry_date": "20261013",
    "entry_price": 25.5,
-   "last_close": 26.4,
-   "days": 7,
-   "ret": 0.0353,
+   "last_close": 26.35,
+   "days": 8,
+   "ret": 0.0333,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "9933",
@@ -5322,11 +5593,12 @@
    },
    "entry_date": "20260914",
    "entry_price": 41.65,
-   "last_close": 43.7,
-   "days": 25,
-   "ret": 0.0492,
+   "last_close": 44.65,
+   "days": 26,
+   "ret": 0.072,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "9945",
@@ -5361,11 +5633,12 @@
    },
    "entry_date": "20260929",
    "entry_price": 29.65,
-   "last_close": 29.3,
-   "days": 16,
-   "ret": -0.0118,
+   "last_close": 29.6,
+   "days": 17,
+   "ret": -0.0017,
    "in_rank": false,
-   "replayed": true
+   "replayed": true,
+   "support": true
   },
   {
    "stock_id": "2353",
@@ -5398,9 +5671,10 @@
    "replayed": false,
    "entry_date": "20261021",
    "entry_price": 32.75,
-   "last_close": 32.3,
-   "days": 1,
-   "ret": -0.0137
+   "last_close": 32.45,
+   "days": 2,
+   "ret": -0.0092,
+   "support": true
   },
   {
    "stock_id": "4960",
@@ -5434,15 +5708,16 @@
    "replayed": false,
    "entry_date": "20261021",
    "entry_price": 31.0,
-   "last_close": 30.85,
-   "days": 1,
-   "ret": -0.0048
+   "last_close": 31.5,
+   "days": 2,
+   "ret": 0.0161,
+   "support": true
   },
   {
    "stock_id": "2328",
    "name": "廣宇",
    "signal_date": "20261021",
-   "status": "waiting",
+   "status": "holding",
    "signal_close": 54.3,
    "buy_reasons": {
     "突破": [
@@ -5470,13 +5745,19 @@
     ]
    },
    "in_rank": false,
-   "replayed": false
+   "replayed": false,
+   "entry_date": "20261022",
+   "entry_price": 55.0,
+   "last_close": 53.6,
+   "days": 1,
+   "ret": -0.0255,
+   "support": false
   },
   {
    "stock_id": "3673",
    "name": "TPK-KY",
    "signal_date": "20261021",
-   "status": "waiting",
+   "status": "holding",
    "signal_close": 75.8,
    "buy_reasons": {
     "突破": [
@@ -5494,13 +5775,19 @@
     ]
    },
    "in_rank": false,
-   "replayed": false
+   "replayed": false,
+   "entry_date": "20261022",
+   "entry_price": 75.8,
+   "last_close": 73.0,
+   "days": 1,
+   "ret": -0.0369,
+   "support": true
   },
   {
    "stock_id": "5475",
    "name": "德宏",
    "signal_date": "20261021",
-   "status": "waiting",
+   "status": "holding",
    "signal_close": 214.0,
    "buy_reasons": {
     "突破": [
@@ -5525,6 +5812,75 @@
     ]
    },
    "in_rank": true,
+   "replayed": false,
+   "entry_date": "20261022",
+   "entry_price": 215.0,
+   "last_close": 196.0,
+   "days": 1,
+   "ret": -0.0884,
+   "support": false
+  },
+  {
+   "stock_id": "2465",
+   "name": "麗臺",
+   "signal_date": "20261022",
+   "status": "waiting",
+   "signal_close": 96.2,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "布林壓縮後突破上軌",
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "籌碼": [
+     "外資連 3 日買超",
+     "外資+投信連 3 日買超",
+     "法人 5 日買超比 > 自身 P80",
+     "法人 5 日買超比 > 自身 P90"
+    ],
+    "營收": [
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "support": false,
+   "in_rank": false,
+   "replayed": false
+  },
+  {
+   "stock_id": "2468",
+   "name": "華經",
+   "signal_date": "20261022",
+   "status": "waiting",
+   "signal_close": 55.0,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高"
+    ],
+    "資金": [
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "籌碼": [
+     "融資減少且站穩上揚月線"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "support": true,
+   "in_rank": false,
    "replayed": false
   }
  ],
@@ -9543,18 +9899,57 @@
  },
  "intraday_watch": [
   {
+   "stock_id": "6112",
+   "name": "邁達特",
+   "level": 50.5,
+   "close": 49.3,
+   "dist": 0.0243,
+   "in_rank": false,
+   "buy_reasons": {
+    "資金": [
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "籌碼": [
+     "外資連 3 日買超",
+     "外資連 5 日買超",
+     "外資+投信連 3 日買超",
+     "外資+投信連 5 日買超",
+     "法人 5 日買超比 > 自身 P80",
+     "法人 5 日買超比 > 自身 P90"
+    ],
+    "營收": [
+     "月營收連 3 個月年增"
+    ]
+   },
+   "ctx": {
+    "prev_close": 49.3,
+    "ma20": 47.11,
+    "ma60": 45.6975,
+    "ma20_up": false,
+    "atr": 1.7427,
+    "avg_vol20": 1754.645,
+    "hh20": 50.5,
+    "ll20": 44.45
+   },
+   "line": true
+  },
+  {
    "stock_id": "3515",
    "name": "華擎",
    "level": 232.5,
-   "close": 226.5,
-   "dist": 0.0265,
+   "close": 224.0,
+   "dist": 0.0379,
    "in_rank": false,
    "buy_reasons": {
     "資金": [
      "OBV 創 60 日新高且收紅"
     ],
     "籌碼": [
+     "外資連 3 日買超",
      "投信連 3 日買超",
+     "外資+投信連 3 日買超",
      "法人 5 日買超比 > 自身 P90"
     ],
     "營收": [
@@ -9563,114 +9958,14 @@
     ]
    },
    "ctx": {
-    "prev_close": 226.5,
-    "ma20": 219.0,
-    "ma60": 216.1333,
+    "prev_close": 224.0,
+    "ma20": 219.55,
+    "ma60": 216.4417,
     "ma20_up": true,
-    "atr": 5.8126,
-    "avg_vol20": 361.6073,
+    "atr": 5.826,
+    "avg_vol20": 356.0702,
     "hh20": 232.5,
     "ll20": 210.5
-   },
-   "line": true
-  },
-  {
-   "stock_id": "3014",
-   "name": "聯陽",
-   "level": 149.5,
-   "close": 143.0,
-   "dist": 0.0455,
-   "in_rank": false,
-   "buy_reasons": {
-    "資金": [
-     "OBV 創 60 日新高且收紅"
-    ],
-    "籌碼": [
-     "法人 5 日買超比 > 自身 P80",
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收連 3 個月年增"
-    ]
-   },
-   "ctx": {
-    "prev_close": 143.0,
-    "ma20": 143.875,
-    "ma60": 135.0083,
-    "ma20_up": true,
-    "atr": 3.7876,
-    "avg_vol20": 2603.028,
-    "hh20": 149.5,
-    "ll20": 136.0
-   },
-   "line": true
-  },
-  {
-   "stock_id": "3036",
-   "name": "文曄",
-   "level": 223.5,
-   "close": 212.5,
-   "dist": 0.0518,
-   "in_rank": false,
-   "buy_reasons": {
-    "資金": [
-     "OBV 20/60 黃金交叉"
-    ],
-    "籌碼": [
-     "投信連 3 日買超",
-     "千張大戶連 2 週增、股東人數減（籌碼集中）"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "ctx": {
-    "prev_close": 212.5,
-    "ma20": 210.525,
-    "ma60": 204.25,
-    "ma20_up": true,
-    "atr": 6.2097,
-    "avg_vol20": 6565.758,
-    "hh20": 223.5,
-    "ll20": 201.0
-   },
-   "line": true
-  },
-  {
-   "stock_id": "5309",
-   "name": "系統電",
-   "level": 75.6,
-   "close": 71.6,
-   "dist": 0.0559,
-   "in_rank": false,
-   "buy_reasons": {
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收創 12 個月新高"
-    ]
-   },
-   "ctx": {
-    "prev_close": 71.6,
-    "ma20": 64.67,
-    "ma60": 56.1925,
-    "ma20_up": true,
-    "atr": 3.3887,
-    "avg_vol20": 12435.8396,
-    "hh20": 75.6,
-    "ll20": 51.2
    },
    "line": true
   }
