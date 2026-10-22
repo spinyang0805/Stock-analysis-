@@ -88,7 +88,9 @@ export default function StrategyPanel({ strategy, longRows, name, code, loadingE
                 </div>
               )}
               <div className="dim" style={{ marginTop: 10, display: "grid", gap: 2 }}>
+                {s.value.conflict && <span style={{ color: "var(--warn)" }}>股利法和本益比法差距 2 倍以上，估值參考價值低</span>}
                 {s.value.methods.map((m) => <span key={m.name}>{m.name}：{m.basis}</span>)}
+                {s.value.alt && <span>若用近四季 EPS：便宜 {fmt(s.value.alt.cheap)}／合理 {fmt(s.value.alt.fair)}／昂貴 {fmt(s.value.alt.expensive)}（成長股參考，不納入估價）</span>}
               </div>
             </>
           )}

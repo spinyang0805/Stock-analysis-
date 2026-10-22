@@ -305,7 +305,9 @@ function ValuationCard({ strategy, price }) {
         ))}
       </div>
       <div style={{ marginTop: 22 }} className="dim">
+        {v.conflict && <div style={{ color: "var(--warn)" }}>股利法和本益比法差距 2 倍以上，估值參考價值低</div>}
         {v.methods.map((m) => <div key={m.name} style={m.excluded ? { opacity: 0.7 } : undefined}>{m.name}：{m.basis}</div>)}
+        {v.alt && <div>若用近四季 EPS：便宜 {fmt(v.alt.cheap)}／合理 {fmt(v.alt.fair)}／昂貴 {fmt(v.alt.expensive)}（成長股參考，不納入估價）</div>}
       </div>
     </Card>
   );

@@ -27,15 +27,59 @@ const percentile = (arr, p) => {
   return s[lo] + (s[hi] - s[lo]) * (idx - lo);
 };
 
-// 季 EPS → 近四季累計（以季底日期 + 45 天公告延遲為生效日）
+// 季 EPS → 平均年 EPS（近 20 季、至少 8 季的平均 × 4；以季底日期 + 45 天公告延遲為生效日）
+// 用多年平均而不是近四季：單一年的好壞（廣宇獲利驟降、德宏獲利很薄）不代表公司常態
+export function normEps(quarters) {
+  const q = [...(quarters || [])].filter((x) => finite(x.eps)).sort((a, b) => a.date.localeCompare(b.date));
+  const out = [];
+  for (let i = 7; i < q.length; i++) {
+    const win = q.slice(Math.max(0, i - 19), i + 1);
+    const eff = new Date(Date.parse(q[i].date) + 45 * 86400000).toISOString().slice(0, 10);
+    out.push({ date: eff, eps: (win.reduce((s, x) => s + x.eps, 0) / win.length) * 4, n: win.length });
+  }
+  return out;
+}
+
+// 季 EPS → 近四季累計（生效日同上）
 export function ttmEps(quarters) {
   const q = [...(quarters || [])].filter((x) => finite(x.eps)).sort((a, b) => a.date.localeCompare(b.date));
   const out = [];
   for (let i = 3; i < q.length; i++) {
     const eff = new Date(Date.parse(q[i].date) + 45 * 86400000).toISOString().slice(0, 10);
-    out.push({ date: eff, ttm: q[i].eps + q[i - 1].eps + q[i - 2].eps + q[i - 3].eps });
+    out.push({ date: eff, eps: q[i].eps + q[i - 1].eps + q[i - 2].eps + q[i - 3].eps });
   }
   return out;
+}
+
+const PE_CAP = 100; // 本益比超過 100 倍代表當時獲利接近 0，算出來的倍數沒有意義
+const bandsText = (m) => `便宜 ${round(m.cheap)}／合理 ${round(m.fair)}／昂貴 ${round(m.expensive)}`;
+
+// 本益比區間：近 5 年每週「收盤 ÷ 當時 EPS」的 10／50／90 百分位 × 目前 EPS；EPS ≤ 0 不適用
+function peBands({ series, epsNow, label, longBars, price, thisYear }) {
+  if (!finite(epsNow) || epsNow <= 0) return null;
+  const pes = [];
+  if (series.length && longBars?.length) {
+    const fromDate = `${thisYear - 5}${new Date().toISOString().slice(4, 10)}`;
+    let j = 0;
+    longBars.forEach((b, i) => {
+      if (b.time < fromDate || i % 5) return;
+      while (j + 1 < series.length && series[j + 1].date <= b.time) j++;
+      if (series[j].date <= b.time && series[j].eps > 0 && b.close / series[j].eps <= PE_CAP) pes.push(b.close / series[j].eps);
+    });
+  }
+  if (pes.length < 50) {
+    return {
+      name: "本益比法",
+      basis: `歷史本益比資料不足，用通用 12／15／20 倍 × ${label} ${epsNow.toFixed(2)}`,
+      cheap: epsNow * 12, fair: epsNow * 15, expensive: epsNow * 20,
+    };
+  }
+  const lo = percentile(pes, 10), mid = percentile(pes, 50), hi = percentile(pes, 90);
+  return {
+    name: "本益比法",
+    basis: `近 5 年本益比區間 ${lo.toFixed(1)}／${mid.toFixed(1)}／${hi.toFixed(1)} 倍（10／50／90 百分位，超過 ${PE_CAP} 倍的週不算）× ${label} ${epsNow.toFixed(2)}`,
+    cheap: epsNow * lo, fair: epsNow * mid, expensive: epsNow * hi, peNow: price / epsNow,
+  };
 }
 
 /* ── 存股：估值區間 ─────────────────────────────────────────────── */
@@ -54,48 +98,45 @@ export function valuationBands({ price, fundamentals, financials, dividends, lon
     });
   }
 
-  // 2) 本益比法：近 5 年每週「收盤 ÷ 近四季 EPS」的第 10／50／90 百分位 × 目前近四季 EPS
-  const ttm = ttmEps(epsQuarters);
+  // 2) 本益比法：近 5 年每週「收盤 ÷ 當時平均年 EPS」的第 10／50／90 百分位 × 目前平均年 EPS
+  //    沒有季 EPS 時退回近四季 EPS（基本面資料）
+  const norm = normEps(epsQuarters);
   const pe = Number(fundamentals?.pe_ratio);
-  const epsNow = ttm.length ? ttm[ttm.length - 1].ttm : pe > 0 && price > 0 ? price / pe : Number(fundamentals?.eps) || NaN;
-  if (finite(epsNow) && epsNow > 0) {
-    const pes = [];
-    if (ttm.length >= 4 && longBars?.length) {
-      const fromDate = `${thisYear - 5}${new Date().toISOString().slice(4, 10)}`;
-      let j = 0;
-      longBars.forEach((b, i) => {
-        if (b.time < fromDate || i % 5) return;
-        while (j + 1 < ttm.length && ttm[j + 1].date <= b.time) j++;
-        if (ttm[j].date <= b.time && ttm[j].ttm > 0) pes.push(b.close / ttm[j].ttm);
-      });
-    }
-    if (pes.length >= 50) {
-      const lo = percentile(pes, 10), mid = percentile(pes, 50), hi = percentile(pes, 90);
-      methods.push({
-        name: "本益比法",
-        basis: `近 5 年本益比區間 ${lo.toFixed(1)}／${mid.toFixed(1)}／${hi.toFixed(1)} 倍（10／50／90 百分位）× 近四季 EPS ${epsNow.toFixed(2)}`,
-        cheap: epsNow * lo, fair: epsNow * mid, expensive: epsNow * hi, peNow: price / epsNow,
-      });
-    } else {
-      methods.push({
-        name: "本益比法",
-        basis: `歷史本益比資料不足，用通用 12／15／20 倍 × EPS ${epsNow.toFixed(2)}`,
-        cheap: epsNow * 12, fair: epsNow * 15, expensive: epsNow * 20,
-      });
-    }
-  }
+  const cur = norm.length ? norm[norm.length - 1] : null;
+  const epsNow = cur ? cur.eps : pe > 0 && price > 0 ? price / pe : Number(fundamentals?.eps) || NaN;
+  const peM = peBands({ series: norm, epsNow, label: cur ? `近 ${cur.n} 季平均年 EPS` : "近四季 EPS", longBars, price, thisYear });
+  if (peM) methods.push(peM);
+  // 對照：成長股用多年平均會偏低估，另列「用近四季 EPS」的區間給使用者自己比（不納入估價）
+  const ttm = ttmEps(epsQuarters);
+  const alt = cur && ttm.length ? peBands({ series: ttm, epsNow: ttm[ttm.length - 1].eps, label: "近四季 EPS", longBars, price, thisYear }) : null;
 
   if (!methods.length) return null;
-  // 配息率低（成長股）時股利法會嚴重低估 → 只列參考、不納入平均
   const div = methods.find((m) => m.name === "股利法");
-  const peM = methods.find((m) => m.name === "本益比法");
-  if (div && peM && finite(epsNow) && epsNow > 0 && div.avgDiv / epsNow < 0.4) {
-    div.excluded = true;
-    div.basis += `（配息率 ${((div.avgDiv / epsNow) * 100).toFixed(0)}% 偏低，僅供參考、不納入估價）`;
+  let conflict = false;
+  if (div && peM) {
+    const payout = div.avgDiv / epsNow;
+    if (payout < 0.4) {
+      // 配息率低（成長股）時股利法會嚴重低估
+      div.excluded = true;
+      div.basis += `（配息率 ${(payout * 100).toFixed(0)}% 偏低，僅供參考、不納入估價）`;
+    } else if (payout > 1) {
+      // 發的股利比賺的多，靠保留盈餘撐，難以持續
+      div.excluded = true;
+      div.basis += `（股利高於平均獲利、配息率 ${(payout * 100).toFixed(0)}%，難以持續，僅供參考、不納入估價）`;
+    } else if (div.fair / peM.fair > 2 || peM.fair / div.fair > 2) {
+      // 兩法差 2 倍以上，平均出來兩邊都不像 → 以獲利為準，股利法分開列
+      conflict = true;
+      div.excluded = true;
+      div.basis += "（與本益比法差距 2 倍以上，不平均，僅供參考）";
+    }
   }
+  for (const m of methods) if (methods.length > 1) m.basis += `：${bandsText(m)}`;
   const used = methods.filter((m) => !m.excluded);
   const avg = (k) => used.reduce((s, m) => s + m[k], 0) / used.length;
-  return { cheap: round(avg("cheap")), fair: round(avg("fair")), expensive: round(avg("expensive")), methods };
+  return {
+    cheap: round(avg("cheap")), fair: round(avg("fair")), expensive: round(avg("expensive")), methods, conflict,
+    alt: alt && { cheap: round(alt.cheap), fair: round(alt.fair), expensive: round(alt.expensive), basis: alt.basis },
+  };
 }
 
 /* ── 波段：條件檢查 ─────────────────────────────────────────────── */
