@@ -168,7 +168,7 @@ test("年度現金股利：季配息加總", () => {
   assert.deepEqual(a, [{ year: 2024, cash: 3 }, { year: 2025, cash: 8.5 }]);
 });
 
-import { ttmEps, valuationBands } from "../src/lib/strategy.js";
+import { normEps, ttmEps, valuationBands } from "../src/lib/strategy.js";
 test("TTM EPS 與本益比百分位估價", () => {
   const q = [];
   for (let y = 2019; y <= 2026; y++) for (const m of ["03-31", "06-30", "09-30", "12-31"]) q.push({ date: `${y}-${m}`, eps: 2 });
@@ -181,6 +181,42 @@ test("TTM EPS 與本益比百分位估價", () => {
   const pe = v.methods.find((m) => m.name === "本益比法");
   assert.ok(pe.cheap < pe.fair && pe.fair < pe.expensive);
   assert.ok(pe.basis.includes("百分位"));
+});
+
+test("估值：用多年平均 EPS、另列近四季對照，獲利驟降不會把合理價拉到個位數", () => {
+  // 每季 1 元，最近 4 季掉到 0.1 元
+  const q = [];
+  for (let y = 2018; y <= 2026; y++) for (const m of ["03-31", "06-30", "09-30", "12-31"]) {
+    const d = `${y}-${m}`;
+    if (d <= "2026-06-30") q.push({ date: d, eps: d >= "2025-09-30" ? 0.1 : 1 });
+  }
+  const n = normEps(q);
+  assert.equal(n.at(-1).n, 20);
+  assert.ok(Math.abs(n.at(-1).eps - 3.28) < 1e-9); // (16×1 + 4×0.1) / 20 × 4
+  const bars = [];
+  const d0 = Date.UTC(2020, 0, 1);
+  for (let i = 0; i < 2400; i++) bars.push({ time: new Date(d0 + i * 86400000).toISOString().slice(0, 10), close: 60 });
+  const v = valuationBands({ price: 60, fundamentals: {}, financials: {}, dividends: [], longBars: bars, epsQuarters: q });
+  assert.ok(v.fair > 40, `fair ${v.fair}`);
+  assert.ok(v.alt && v.alt.fair < 10, `alt ${v.alt?.fair}`);
+  assert.ok(v.methods[0].basis.includes("超過 100 倍"));
+});
+
+test("估值：股利高於獲利不納入；兩法差 2 倍以上不平均", () => {
+  const q = [];
+  for (let y = 2019; y <= 2026; y++) for (const m of ["03-31", "06-30", "09-30", "12-31"]) q.push({ date: `${y}-${m}`, eps: 0.5 }); // 年 EPS 2
+  const bars = [];
+  const d0 = Date.UTC(2020, 0, 1);
+  for (let i = 0; i < 2400; i++) bars.push({ time: new Date(d0 + i * 86400000).toISOString().slice(0, 10), close: 30 });
+  const y = new Date().getFullYear();
+  const divs = (cash) => [1, 2, 3].map((k) => ({ exDate: `${y - k}-07-01`, cash }));
+  const over = valuationBands({ price: 30, fundamentals: {}, financials: {}, dividends: divs(3), longBars: bars, epsQuarters: q });
+  assert.ok(over.methods.find((m) => m.name === "股利法").excluded);
+  assert.ok(!over.conflict);
+  // 股利 1.8（配息率 90%）× 20 = 36，本益比法 2 × 15 = 30 → 不衝突，平均
+  const ok = valuationBands({ price: 30, fundamentals: {}, financials: {}, dividends: divs(1.8), longBars: bars, epsQuarters: q });
+  assert.ok(!ok.methods.find((m) => m.name === "股利法").excluded);
+  assert.equal(ok.fair, 33);
 });
 
 test("parseSide 不把英文字裡的 s/b 誤判", () => {

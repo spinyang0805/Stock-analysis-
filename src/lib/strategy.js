@@ -46,7 +46,7 @@ export function ttmEps(quarters) {
   const out = [];
   for (let i = 3; i < q.length; i++) {
     const eff = new Date(Date.parse(q[i].date) + 45 * 86400000).toISOString().slice(0, 10);
-    out.push({ date: eff, eps: q[i].eps + q[i - 1].eps + q[i - 2].eps + q[i - 3].eps });
+    out.push({ date: eff, ttm: q[i].eps + q[i - 1].eps + q[i - 2].eps + q[i - 3].eps });
   }
   return out;
 }
@@ -107,7 +107,7 @@ export function valuationBands({ price, fundamentals, financials, dividends, lon
   const peM = peBands({ series: norm, epsNow, label: cur ? `近 ${cur.n} 季平均年 EPS` : "近四季 EPS", longBars, price, thisYear });
   if (peM) methods.push(peM);
   // 對照：成長股用多年平均會偏低估，另列「用近四季 EPS」的區間給使用者自己比（不納入估價）
-  const ttm = ttmEps(epsQuarters);
+  const ttm = ttmEps(epsQuarters).map((x) => ({ date: x.date, eps: x.ttm }));
   const alt = cur && ttm.length ? peBands({ series: ttm, epsNow: ttm[ttm.length - 1].eps, label: "近四季 EPS", longBars, price, thisYear }) : null;
 
   if (!methods.length) return null;
