@@ -2,12 +2,9 @@
  "updated": "20261022",
  "next_trade_date": "20261023",
  "live_since": "20261019",
- "generated_at": "2026-10-22 15:58",
+ "generated_at": "2026-10-23 15:48",
  "rule": "combo_strictB",
- "new_today": [
-  "2465",
-  "2468"
- ],
+ "new_today": [],
  "positions": [
   {
    "stock_id": "1101",
