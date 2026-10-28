@@ -21,7 +21,7 @@
     "BH": "0050 buy and hold (reference)"
    }
   },
-  "generated_at": "2026-10-27 16:31"
+  "generated_at": "2026-10-28 17:10"
  },
  "corporate_actions": [],
  "lines": {
@@ -42,9 +42,13 @@
     [
      "2026-10-27",
      0.98897
+    ],
+    [
+     "2026-10-28",
+     0.99838
     ]
    ],
-   "weight": 0.4949,
+   "weight": 0.4997,
    "decision_log": [
     {
      "decided": "2026-10-20",
@@ -55,7 +59,7 @@
    "pending_weight": null,
    "max_drawdown": -0.011,
    "cagr": null,
-   "total_return": -0.011
+   "total_return": -0.0016
   },
   "C1": {
    "nav": [
@@ -74,9 +78,13 @@
     [
      "2026-10-27",
      0.98897
+    ],
+    [
+     "2026-10-28",
+     0.99838
     ]
    ],
-   "weight": 0.4949,
+   "weight": 0.4997,
    "decision_log": [
     {
      "decided": "2026-10-20",
@@ -87,7 +95,7 @@
    "pending_weight": null,
    "max_drawdown": -0.011,
    "cagr": null,
-   "total_return": -0.011
+   "total_return": -0.0016
   },
   "C8": {
    "nav": [
@@ -106,6 +114,10 @@
     [
      "2026-10-27",
      0.97796
+    ],
+    [
+     "2026-10-28",
+     0.99677
     ]
    ],
    "weight": 1.0,
@@ -119,7 +131,7 @@
    "pending_weight": null,
    "max_drawdown": -0.022,
    "cagr": null,
-   "total_return": -0.022
+   "total_return": -0.0032
   },
   "VT15": {
    "nav": [
@@ -138,9 +150,13 @@
     [
      "2026-10-27",
      0.9891
+    ],
+    [
+     "2026-10-28",
+     0.99859
     ]
    ],
-   "weight": 0.4988,
+   "weight": 0.5036,
    "decision_log": [
     {
      "decided": "2026-10-20",
@@ -156,7 +172,7 @@
    "pending_weight": null,
    "max_drawdown": -0.0109,
    "cagr": null,
-   "total_return": -0.0109
+   "total_return": -0.0014
   },
   "BH": {
    "nav": [
@@ -175,6 +191,10 @@
     [
      "2026-10-27",
      0.97796
+    ],
+    [
+     "2026-10-28",
+     0.99677
     ]
    ],
    "weight": 1.0,
@@ -188,10 +208,10 @@
    "pending_weight": null,
    "max_drawdown": -0.022,
    "cagr": null,
-   "total_return": -0.022
+   "total_return": -0.0032
   }
  },
- "updated": "20261027",
- "sessions": 3,
+ "updated": "20261028",
+ "sessions": 4,
  "next_c10_decision": "2026-12-31"
 }
