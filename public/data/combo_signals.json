@@ -1,10 +1,12 @@
 {
- "updated": "20261103",
- "next_trade_date": "20261104",
+ "updated": "20261104",
+ "next_trade_date": "20261105",
  "live_since": "20261019",
- "generated_at": "2026-11-03 18:29",
+ "generated_at": "2026-11-04 18:39",
  "rule": "combo_strictB",
- "new_today": [],
+ "new_today": [
+  "2033"
+ ],
  "positions": [
   {
    "stock_id": "1101",
@@ -32,9 +34,9 @@
    },
    "entry_date": "20260821",
    "entry_price": 24.75,
-   "last_close": 27.7,
-   "days": 48,
-   "ret": 0.1192,
+   "last_close": 27.25,
+   "days": 49,
+   "ret": 0.101,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -67,9 +69,9 @@
    },
    "entry_date": "20260827",
    "entry_price": 35.2,
-   "last_close": 37.75,
-   "days": 44,
-   "ret": 0.0724,
+   "last_close": 36.9,
+   "days": 45,
+   "ret": 0.0483,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -97,9 +99,9 @@
    },
    "entry_date": "20261014",
    "entry_price": 77.1,
-   "last_close": 81.1,
-   "days": 13,
-   "ret": 0.0519,
+   "last_close": 80.9,
+   "days": 14,
+   "ret": 0.0493,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -127,9 +129,9 @@
    },
    "entry_date": "20260828",
    "entry_price": 63.2,
-   "last_close": 68.7,
-   "days": 43,
-   "ret": 0.087,
+   "last_close": 69.1,
+   "days": 44,
+   "ret": 0.0934,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -164,9 +166,9 @@
    },
    "entry_date": "20260828",
    "entry_price": 230.5,
-   "last_close": 271.0,
-   "days": 43,
-   "ret": 0.1757,
+   "last_close": 276.5,
+   "days": 44,
+   "ret": 0.1996,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -199,9 +201,9 @@
    },
    "entry_date": "20261014",
    "entry_price": 83.4,
-   "last_close": 77.3,
-   "days": 13,
-   "ret": -0.0731,
+   "last_close": 76.0,
+   "days": 14,
+   "ret": -0.0887,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -233,9 +235,9 @@
    },
    "entry_date": "20260828",
    "entry_price": 63.5,
-   "last_close": 68.4,
-   "days": 43,
-   "ret": 0.0772,
+   "last_close": 69.2,
+   "days": 44,
+   "ret": 0.0898,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -265,9 +267,9 @@
    },
    "entry_date": "20261012",
    "entry_price": 71.2,
-   "last_close": 66.2,
-   "days": 15,
-   "ret": -0.0702,
+   "last_close": 65.0,
+   "days": 16,
+   "ret": -0.0871,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -307,9 +309,9 @@
    },
    "entry_date": "20260914",
    "entry_price": 775.0,
-   "last_close": 778.0,
-   "days": 32,
-   "ret": 0.0039,
+   "last_close": 788.0,
+   "days": 33,
+   "ret": 0.0168,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -338,9 +340,9 @@
    },
    "entry_date": "20260923",
    "entry_price": 64.2,
-   "last_close": 90.0,
-   "days": 25,
-   "ret": 0.4019,
+   "last_close": 89.1,
+   "days": 26,
+   "ret": 0.3879,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -349,7 +351,7 @@
    "stock_id": "1605",
    "name": "華新",
    "signal_date": "20261006",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 38.75,
    "buy_reasons": {
     "突破": [
@@ -371,40 +373,9 @@
    },
    "entry_date": "20261007",
    "entry_price": 38.75,
-   "last_close": 35.0,
-   "days": 17,
-   "ret": -0.0968,
-   "in_rank": false,
-   "replayed": true,
-   "support": false
-  },
-  {
-   "stock_id": "1608",
-   "name": "華榮",
-   "signal_date": "20261007",
-   "status": "sell_signal",
-   "signal_close": 37.05,
-   "buy_reasons": {
-    "突破": [
-     "均線糾結後帶量突破",
-     "布林壓縮後突破上軌"
-    ],
-    "資金": [
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "法人 5 日買超比 > 自身 P80"
-    ],
-    "營收": [
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20261008",
-   "entry_price": 36.8,
-   "last_close": 32.05,
-   "days": 16,
-   "ret": -0.1291,
+   "last_close": 34.45,
+   "days": 18,
+   "ret": -0.111,
    "in_rank": false,
    "replayed": true,
    "support": false,
@@ -413,17 +384,15 @@
      "收盤比買價跌 10%"
     ],
     "結構破壞": [
-     "頭頭低確認",
-     "N 字下跌（高點下降跌破前低）",
-     "跌破上升趨勢線",
-     "均線空頭排列成形"
+     "M 頭跌破頸線",
+     "跌破上升趨勢線"
     ],
     "籌碼賣出": [
-     "外資連 5 日賣超",
+     "千張大戶連 2 週減、股東人數增（籌碼分散）",
      "借券賣出 5 日大增"
     ]
    },
-   "sell_signal_date": "20261103"
+   "sell_signal_date": "20261104"
   },
   {
    "stock_id": "1709",
@@ -456,9 +425,9 @@
    },
    "entry_date": "20260825",
    "entry_price": 34.4,
-   "last_close": 44.0,
-   "days": 46,
-   "ret": 0.3177,
+   "last_close": 48.4,
+   "days": 47,
+   "ret": 0.4494,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -488,12 +457,12 @@
    },
    "entry_date": "20260826",
    "entry_price": 15.85,
-   "last_close": 16.2,
-   "days": 45,
-   "ret": 0.0221,
+   "last_close": 16.75,
+   "days": 46,
+   "ret": 0.0568,
    "in_rank": false,
    "replayed": true,
-   "support": false
+   "support": true
   },
   {
    "stock_id": "1815",
@@ -517,9 +486,9 @@
    },
    "entry_date": "20261006",
    "entry_price": 129.0,
-   "last_close": 131.0,
-   "days": 18,
-   "ret": 0.0155,
+   "last_close": 135.0,
+   "days": 19,
+   "ret": 0.0465,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -547,9 +516,9 @@
    },
    "entry_date": "20261001",
    "entry_price": 19.2,
-   "last_close": 19.35,
-   "days": 21,
-   "ret": 0.0078,
+   "last_close": 19.15,
+   "days": 22,
+   "ret": -0.0026,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -576,9 +545,9 @@
    },
    "entry_date": "20260918",
    "entry_price": 83.0,
-   "last_close": 89.6,
-   "days": 28,
-   "ret": 0.0795,
+   "last_close": 89.7,
+   "days": 29,
+   "ret": 0.0807,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -606,9 +575,9 @@
    },
    "entry_date": "20261015",
    "entry_price": 49.85,
-   "last_close": 48.95,
-   "days": 12,
-   "ret": -0.0181,
+   "last_close": 48.7,
+   "days": 13,
+   "ret": -0.0231,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -643,9 +612,9 @@
    },
    "entry_date": "20260824",
    "entry_price": 22.55,
-   "last_close": 25.9,
-   "days": 47,
-   "ret": 0.1486,
+   "last_close": 26.8,
+   "days": 48,
+   "ret": 0.1885,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -675,9 +644,9 @@
    },
    "entry_date": "20260824",
    "entry_price": 29.3,
-   "last_close": 28.4,
-   "days": 47,
-   "ret": -0.0117,
+   "last_close": 27.65,
+   "days": 48,
+   "ret": -0.0378,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -710,9 +679,9 @@
    },
    "entry_date": "20260907",
    "entry_price": 548.0,
-   "last_close": 544.0,
-   "days": 37,
-   "ret": -0.0073,
+   "last_close": 534.0,
+   "days": 38,
+   "ret": -0.0255,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -742,9 +711,9 @@
    },
    "entry_date": "20260902",
    "entry_price": 78.5,
-   "last_close": 128.5,
-   "days": 40,
-   "ret": 0.6369,
+   "last_close": 141.0,
+   "days": 41,
+   "ret": 0.7962,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -769,9 +738,9 @@
    },
    "entry_date": "20260915",
    "entry_price": 70.9,
-   "last_close": 106.5,
-   "days": 31,
-   "ret": 0.5021,
+   "last_close": 107.5,
+   "days": 32,
+   "ret": 0.5162,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -804,9 +773,9 @@
    },
    "entry_date": "20260908",
    "entry_price": 33.95,
-   "last_close": 46.8,
-   "days": 36,
-   "ret": 0.3785,
+   "last_close": 48.8,
+   "days": 37,
+   "ret": 0.4374,
    "in_rank": true,
    "replayed": true,
    "support": true
@@ -837,9 +806,9 @@
    },
    "entry_date": "20260909",
    "entry_price": 2480.0,
-   "last_close": 2295.0,
-   "days": 35,
-   "ret": -0.0719,
+   "last_close": 2260.0,
+   "days": 36,
+   "ret": -0.086,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -868,59 +837,12 @@
    },
    "entry_date": "20260924",
    "entry_price": 93.7,
-   "last_close": 91.4,
-   "days": 24,
-   "ret": -0.0245,
+   "last_close": 90.3,
+   "days": 25,
+   "ret": -0.0363,
    "in_rank": false,
    "replayed": true,
    "support": false
-  },
-  {
-   "stock_id": "2354",
-   "name": "鴻準",
-   "signal_date": "20260901",
-   "status": "sell_signal",
-   "signal_close": 65.9,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "N 字上攻（低點墊高突破前高）"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資連 5 日買超",
-     "外資+投信連 3 日買超",
-     "外資+投信連 5 日買超"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260902",
-   "entry_price": 65.4,
-   "last_close": 57.6,
-   "days": 40,
-   "ret": -0.1193,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "均線空頭排列成形"
-    ]
-   },
-   "sell_signal_date": "20261103"
   },
   {
    "stock_id": "2371",
@@ -953,58 +875,12 @@
    },
    "entry_date": "20261001",
    "entry_price": 31.0,
-   "last_close": 28.95,
-   "days": 21,
-   "ret": -0.0661,
+   "last_close": 28.65,
+   "days": 22,
+   "ret": -0.0758,
    "in_rank": false,
    "replayed": true,
-   "support": true
-  },
-  {
-   "stock_id": "2376",
-   "name": "技嘉",
-   "signal_date": "20260921",
-   "status": "sell_signal",
-   "signal_close": 368.0,
-   "buy_reasons": {
-    "突破": [
-     "突破下降趨勢線",
-     "布林壓縮後突破上軌",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "投信連 3 日買超",
-     "投信連 5 日買超",
-     "外資+投信連 3 日買超",
-     "融資減少且站穩上揚月線"
-    ],
-    "營收": [
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260922",
-   "entry_price": 373.0,
-   "last_close": 327.0,
-   "days": 26,
-   "ret": -0.1233,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "籌碼賣出": [
-     "千張大戶連 2 週減、股東人數增（籌碼分散）"
-    ]
-   },
-   "sell_signal_date": "20261103"
+   "support": false
   },
   {
    "stock_id": "2377",
@@ -1031,9 +907,9 @@
    },
    "entry_date": "20261015",
    "entry_price": 156.0,
-   "last_close": 153.0,
-   "days": 12,
-   "ret": -0.0192,
+   "last_close": 150.5,
+   "days": 13,
+   "ret": -0.0353,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -1067,9 +943,9 @@
    },
    "entry_date": "20260924",
    "entry_price": 745.0,
-   "last_close": 756.0,
-   "days": 24,
-   "ret": 0.0148,
+   "last_close": 748.0,
+   "days": 25,
+   "ret": 0.004,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -1098,58 +974,11 @@
    "entry_date": "20260827",
    "entry_price": 66.5,
    "last_close": 64.5,
-   "days": 44,
+   "days": 45,
    "ret": -0.0301,
    "in_rank": false,
    "replayed": true,
    "support": false
-  },
-  {
-   "stock_id": "2395",
-   "name": "研華",
-   "signal_date": "20260901",
-   "status": "sell_signal",
-   "signal_close": 711.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅"
-    ],
-    "籌碼": [
-     "投信連 3 日買超",
-     "外資+投信連 3 日買超",
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260902",
-   "entry_price": 705.0,
-   "last_close": 620.0,
-   "days": 40,
-   "ret": -0.1206,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "資金流出": [
-     "OBV 20/60 死亡交叉"
-    ]
-   },
-   "sell_signal_date": "20261103"
   },
   {
    "stock_id": "2409",
@@ -1174,9 +1003,9 @@
    },
    "entry_date": "20260908",
    "entry_price": 28.8,
-   "last_close": 28.8,
-   "days": 36,
-   "ret": 0.0,
+   "last_close": 29.1,
+   "days": 37,
+   "ret": 0.0104,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -1201,110 +1030,12 @@
    },
    "entry_date": "20260903",
    "entry_price": 137.5,
-   "last_close": 159.0,
-   "days": 39,
-   "ret": 0.1564,
+   "last_close": 161.5,
+   "days": 40,
+   "ret": 0.1745,
    "in_rank": false,
    "replayed": true,
    "support": true
-  },
-  {
-   "stock_id": "2426",
-   "name": "鼎元",
-   "signal_date": "20260828",
-   "status": "sell_signal",
-   "signal_close": 96.1,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 55 日高"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資+投信連 3 日買超"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速",
-     "月營收連 3 個月年增"
-    ]
-   },
-   "entry_date": "20260831",
-   "entry_price": 95.1,
-   "last_close": 78.3,
-   "days": 42,
-   "ret": -0.1767,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "資金流出": [
-     "OBV 20/60 死亡交叉"
-    ]
-   },
-   "sell_signal_date": "20261103"
-  },
-  {
-   "stock_id": "2455",
-   "name": "全新",
-   "signal_date": "20260831",
-   "status": "sell_signal",
-   "signal_close": 477.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高"
-    ],
-    "資金": [
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅",
-     "OBV 20/60 黃金交叉"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資連 5 日買超",
-     "投信連 3 日買超",
-     "外資+投信連 3 日買超",
-     "外資+投信連 5 日買超",
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260901",
-   "entry_price": 490.0,
-   "last_close": 405.0,
-   "days": 41,
-   "ret": -0.1735,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "籌碼賣出": [
-     "千張大戶連 2 週減、股東人數增（籌碼分散）",
-     "借券賣出 5 日大增"
-    ]
-   },
-   "sell_signal_date": "20261103"
   },
   {
    "stock_id": "2466",
@@ -1329,61 +1060,12 @@
    },
    "entry_date": "20260824",
    "entry_price": 104.5,
-   "last_close": 342.0,
-   "days": 47,
-   "ret": 2.2727,
+   "last_close": 330.5,
+   "days": 48,
+   "ret": 2.1627,
    "in_rank": false,
    "replayed": true,
    "support": true
-  },
-  {
-   "stock_id": "2484",
-   "name": "希華",
-   "signal_date": "20260929",
-   "status": "sell_signal",
-   "signal_close": 76.9,
-   "buy_reasons": {
-    "突破": [
-     "突破下降趨勢線"
-    ],
-    "資金": [
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資連 5 日買超",
-     "外資+投信連 3 日買超",
-     "外資+投信連 5 日買超",
-     "千張大戶連 2 週增、股東人數減（籌碼集中）"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260930",
-   "entry_price": 77.5,
-   "last_close": 63.4,
-   "days": 22,
-   "ret": -0.1819,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "頭頭低確認",
-     "M 頭跌破頸線"
-    ],
-    "籌碼賣出": [
-     "千張大戶連 2 週減、股東人數增（籌碼分散）"
-    ]
-   },
-   "sell_signal_date": "20261103"
   },
   {
    "stock_id": "2603",
@@ -1416,9 +1098,9 @@
    },
    "entry_date": "20261013",
    "entry_price": 253.5,
-   "last_close": 266.5,
-   "days": 14,
-   "ret": 0.0513,
+   "last_close": 268.0,
+   "days": 15,
+   "ret": 0.0572,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -1451,59 +1133,12 @@
    },
    "entry_date": "20260904",
    "entry_price": 36.0,
-   "last_close": 33.6,
-   "days": 38,
-   "ret": -0.0667,
+   "last_close": 33.1,
+   "days": 39,
+   "ret": -0.0806,
    "in_rank": false,
    "replayed": true,
    "support": false
-  },
-  {
-   "stock_id": "2606",
-   "name": "裕民",
-   "signal_date": "20260903",
-   "status": "sell_signal",
-   "signal_close": 78.2,
-   "buy_reasons": {
-    "突破": [
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅"
-    ],
-    "籌碼": [
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收創 12 個月新高"
-    ]
-   },
-   "entry_date": "20260904",
-   "entry_price": 79.0,
-   "last_close": 70.2,
-   "days": 38,
-   "ret": -0.1114,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "頭頭低確認",
-     "底底低確認",
-     "轉為空頭結構（頭頭低＋底底低）",
-     "N 字下跌（高點下降跌破前低）",
-     "M 頭跌破頸線",
-     "跌破上升趨勢線"
-    ]
-   },
-   "sell_signal_date": "20261103"
   },
   {
    "stock_id": "2609",
@@ -1536,9 +1171,9 @@
    },
    "entry_date": "20261013",
    "entry_price": 63.0,
-   "last_close": 62.1,
-   "days": 14,
-   "ret": -0.0143,
+   "last_close": 62.3,
+   "days": 15,
+   "ret": -0.0111,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -1582,7 +1217,7 @@
    "entry_date": "20260821",
    "entry_price": 113.0,
    "last_close": 115.5,
-   "days": 48,
+   "days": 49,
    "ret": 0.0221,
    "in_rank": false,
    "replayed": true,
@@ -1616,9 +1251,9 @@
    },
    "entry_date": "20260827",
    "entry_price": 43.5,
-   "last_close": 43.7,
-   "days": 44,
-   "ret": 0.0046,
+   "last_close": 43.75,
+   "days": 45,
+   "ret": 0.0057,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -1652,9 +1287,9 @@
    },
    "entry_date": "20260820",
    "entry_price": 94.7,
-   "last_close": 97.7,
-   "days": 49,
-   "ret": 0.0317,
+   "last_close": 98.9,
+   "days": 50,
+   "ret": 0.0444,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -1683,9 +1318,9 @@
    },
    "entry_date": "20260824",
    "entry_price": 237.5,
-   "last_close": 244.0,
-   "days": 47,
-   "ret": 0.0274,
+   "last_close": 243.5,
+   "days": 48,
+   "ret": 0.0253,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -1716,12 +1351,12 @@
    },
    "entry_date": "20260904",
    "entry_price": 26.6,
-   "last_close": 29.7,
-   "days": 38,
-   "ret": 0.1165,
+   "last_close": 29.35,
+   "days": 39,
+   "ret": 0.1034,
    "in_rank": false,
    "replayed": true,
-   "support": true
+   "support": false
   },
   {
    "stock_id": "2834",
@@ -1744,9 +1379,9 @@
    },
    "entry_date": "20260901",
    "entry_price": 16.8,
-   "last_close": 17.7,
-   "days": 41,
-   "ret": 0.0536,
+   "last_close": 17.65,
+   "days": 42,
+   "ret": 0.0506,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -1780,7 +1415,7 @@
    "entry_date": "20260903",
    "entry_price": 13.05,
    "last_close": 12.95,
-   "days": 39,
+   "days": 40,
    "ret": -0.0077,
    "in_rank": false,
    "replayed": true,
@@ -1807,12 +1442,12 @@
    },
    "entry_date": "20260922",
    "entry_price": 48.4,
-   "last_close": 48.95,
-   "days": 26,
-   "ret": 0.0114,
+   "last_close": 48.35,
+   "days": 27,
+   "ret": -0.001,
    "in_rank": false,
    "replayed": true,
-   "support": true
+   "support": false
   },
   {
    "stock_id": "2855",
@@ -1840,9 +1475,9 @@
    },
    "entry_date": "20260904",
    "entry_price": 50.9,
-   "last_close": 50.8,
-   "days": 38,
-   "ret": -0.002,
+   "last_close": 51.0,
+   "days": 39,
+   "ret": 0.002,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -1877,7 +1512,7 @@
    "entry_date": "20260904",
    "entry_price": 43.75,
    "last_close": 49.05,
-   "days": 38,
+   "days": 39,
    "ret": 0.1211,
    "in_rank": false,
    "replayed": true,
@@ -1909,9 +1544,9 @@
    },
    "entry_date": "20260824",
    "entry_price": 135.0,
-   "last_close": 154.0,
-   "days": 47,
-   "ret": 0.1407,
+   "last_close": 154.5,
+   "days": 48,
+   "ret": 0.1444,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -1937,9 +1572,9 @@
    },
    "entry_date": "20260902",
    "entry_price": 109.5,
-   "last_close": 113.0,
-   "days": 40,
-   "ret": 0.032,
+   "last_close": 111.0,
+   "days": 41,
+   "ret": 0.0137,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -1974,9 +1609,9 @@
    },
    "entry_date": "20260901",
    "entry_price": 33.9,
-   "last_close": 34.95,
-   "days": 41,
-   "ret": 0.031,
+   "last_close": 34.8,
+   "days": 42,
+   "ret": 0.0265,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -2007,9 +1642,9 @@
    },
    "entry_date": "20260901",
    "entry_price": 39.45,
-   "last_close": 47.4,
-   "days": 41,
-   "ret": 0.2015,
+   "last_close": 47.6,
+   "days": 42,
+   "ret": 0.2066,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -2045,9 +1680,9 @@
    },
    "entry_date": "20260904",
    "entry_price": 68.9,
-   "last_close": 69.2,
-   "days": 38,
-   "ret": 0.0044,
+   "last_close": 69.0,
+   "days": 39,
+   "ret": 0.0015,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -2071,9 +1706,9 @@
    },
    "entry_date": "20260914",
    "entry_price": 51.4,
-   "last_close": 53.2,
-   "days": 32,
-   "ret": 0.035,
+   "last_close": 53.5,
+   "days": 33,
+   "ret": 0.0409,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -2110,12 +1745,12 @@
    },
    "entry_date": "20260901",
    "entry_price": 38.9,
-   "last_close": 41.25,
-   "days": 41,
-   "ret": 0.0604,
+   "last_close": 40.25,
+   "days": 42,
+   "ret": 0.0347,
    "in_rank": false,
    "replayed": true,
-   "support": true
+   "support": false
   },
   {
    "stock_id": "2889",
@@ -2138,12 +1773,12 @@
    },
    "entry_date": "20260827",
    "entry_price": 15.8,
-   "last_close": 16.6,
-   "days": 44,
-   "ret": 0.0946,
+   "last_close": 16.55,
+   "days": 45,
+   "ret": 0.0913,
    "in_rank": false,
    "replayed": true,
-   "support": true
+   "support": false
   },
   {
    "stock_id": "2890",
@@ -2173,9 +1808,9 @@
    },
    "entry_date": "20260901",
    "entry_price": 40.8,
-   "last_close": 44.4,
-   "days": 41,
-   "ret": 0.0986,
+   "last_close": 43.15,
+   "days": 42,
+   "ret": 0.0677,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -2206,9 +1841,9 @@
    },
    "entry_date": "20260916",
    "entry_price": 70.1,
-   "last_close": 74.2,
-   "days": 30,
-   "ret": 0.0585,
+   "last_close": 73.2,
+   "days": 31,
+   "ret": 0.0442,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -2239,9 +1874,9 @@
    },
    "entry_date": "20260831",
    "entry_price": 34.3,
-   "last_close": 42.6,
-   "days": 42,
-   "ret": 0.242,
+   "last_close": 42.45,
+   "days": 43,
+   "ret": 0.2376,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -2271,7 +1906,7 @@
    "entry_date": "20260922",
    "entry_price": 119.5,
    "last_close": 122.0,
-   "days": 26,
+   "days": 27,
    "ret": 0.0209,
    "in_rank": false,
    "replayed": true,
@@ -2306,62 +1941,11 @@
    "entry_date": "20261006",
    "entry_price": 131.5,
    "last_close": 127.0,
-   "days": 18,
+   "days": 19,
    "ret": -0.0342,
    "in_rank": false,
    "replayed": true,
    "support": false
-  },
-  {
-   "stock_id": "3017",
-   "name": "奇鋐",
-   "signal_date": "20260827",
-   "status": "sell_signal",
-   "signal_close": 3340.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "N 字上攻（低點墊高突破前高）",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資連 5 日買超",
-     "投信連 3 日買超",
-     "投信連 5 日買超",
-     "外資+投信連 3 日買超",
-     "千張大戶連 2 週增、股東人數減（籌碼集中）",
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260828",
-   "entry_price": 3360.0,
-   "last_close": 2935.0,
-   "days": 43,
-   "ret": -0.1265,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "籌碼賣出": [
-     "外資連 5 日賣超"
-    ]
-   },
-   "sell_signal_date": "20261103"
   },
   {
    "stock_id": "3029",
@@ -2390,9 +1974,9 @@
    },
    "entry_date": "20260909",
    "entry_price": 112.0,
-   "last_close": 120.0,
-   "days": 35,
-   "ret": 0.0714,
+   "last_close": 116.5,
+   "days": 36,
+   "ret": 0.0402,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -2423,12 +2007,12 @@
    },
    "entry_date": "20260923",
    "entry_price": 561.0,
-   "last_close": 555.0,
-   "days": 25,
-   "ret": -0.0107,
+   "last_close": 533.0,
+   "days": 26,
+   "ret": -0.0499,
    "in_rank": false,
    "replayed": true,
-   "support": true
+   "support": false
   },
   {
    "stock_id": "3044",
@@ -2461,9 +2045,9 @@
    },
    "entry_date": "20260929",
    "entry_price": 530.0,
-   "last_close": 488.5,
-   "days": 23,
-   "ret": -0.0783,
+   "last_close": 484.0,
+   "days": 24,
+   "ret": -0.0868,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -2491,9 +2075,9 @@
    },
    "entry_date": "20260821",
    "entry_price": 114.5,
-   "last_close": 133.0,
-   "days": 48,
-   "ret": 0.1616,
+   "last_close": 135.0,
+   "days": 49,
+   "ret": 0.179,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -2519,9 +2103,9 @@
    },
    "entry_date": "20260903",
    "entry_price": 143.0,
-   "last_close": 135.0,
-   "days": 39,
-   "ret": -0.0559,
+   "last_close": 130.5,
+   "days": 40,
+   "ret": -0.0874,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -2554,161 +2138,12 @@
    },
    "entry_date": "20260831",
    "entry_price": 40.0,
-   "last_close": 46.25,
-   "days": 42,
-   "ret": 0.1562,
+   "last_close": 47.15,
+   "days": 43,
+   "ret": 0.1787,
    "in_rank": false,
    "replayed": true,
    "support": false
-  },
-  {
-   "stock_id": "3167",
-   "name": "大量",
-   "signal_date": "20261001",
-   "status": "sell_signal",
-   "signal_close": 975.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "N 字上攻（低點墊高突破前高）",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "投信連 3 日買超"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20261002",
-   "entry_price": 983.0,
-   "last_close": 821.0,
-   "days": 20,
-   "ret": -0.1648,
-   "in_rank": true,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "頭頭低確認",
-     "N 字下跌（高點下降跌破前低）",
-     "跌破上升趨勢線"
-    ],
-    "籌碼賣出": [
-     "千張大戶連 2 週減、股東人數增（籌碼分散）"
-    ]
-   },
-   "sell_signal_date": "20261103"
-  },
-  {
-   "stock_id": "3189",
-   "name": "景碩",
-   "signal_date": "20260924",
-   "status": "sell_signal",
-   "signal_close": 962.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "W 底突破頸線",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "投信連 3 日買超",
-     "外資+投信連 3 日買超",
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260929",
-   "entry_price": 960.0,
-   "last_close": 819.0,
-   "days": 23,
-   "ret": -0.1469,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "籌碼賣出": [
-     "外資連 5 日賣超",
-     "千張大戶連 2 週減、股東人數增（籌碼分散）",
-     "借券賣出 5 日大增"
-    ]
-   },
-   "sell_signal_date": "20261103"
-  },
-  {
-   "stock_id": "3219",
-   "name": "倚強科",
-   "signal_date": "20260921",
-   "status": "sell_signal",
-   "signal_close": 98.7,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "N 字上攻（低點墊高突破前高）",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高"
-    ],
-    "營收": [
-     "月營收創 12 個月新高"
-    ]
-   },
-   "entry_date": "20260922",
-   "entry_price": 104.5,
-   "last_close": 93.6,
-   "days": 26,
-   "ret": -0.1043,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "跌破上升趨勢線"
-    ],
-    "資金流出": [
-     "OBV 20/60 死亡交叉"
-    ]
-   },
-   "sell_signal_date": "20261103"
   },
   {
    "stock_id": "3231",
@@ -2734,59 +2169,12 @@
    },
    "entry_date": "20260903",
    "entry_price": 188.0,
-   "last_close": 176.5,
-   "days": 39,
-   "ret": -0.0612,
+   "last_close": 176.0,
+   "days": 40,
+   "ret": -0.0638,
    "in_rank": false,
    "replayed": true,
    "support": false
-  },
-  {
-   "stock_id": "3264",
-   "name": "欣銓",
-   "signal_date": "20260910",
-   "status": "sell_signal",
-   "signal_close": 240.0,
-   "buy_reasons": {
-    "突破": [
-     "N 字上攻（低點墊高突破前高）",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260911",
-   "entry_price": 235.5,
-   "last_close": 195.0,
-   "days": 33,
-   "ret": -0.172,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "M 頭跌破頸線"
-    ],
-    "籌碼賣出": [
-     "千張大戶連 2 週減、股東人數增（籌碼分散）"
-    ]
-   },
-   "sell_signal_date": "20261103"
   },
   {
    "stock_id": "3293",
@@ -2810,9 +2198,9 @@
    },
    "entry_date": "20261015",
    "entry_price": 808.0,
-   "last_close": 777.0,
-   "days": 12,
-   "ret": -0.0384,
+   "last_close": 778.0,
+   "days": 13,
+   "ret": -0.0371,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -2849,12 +2237,12 @@
    },
    "entry_date": "20260902",
    "entry_price": 1375.0,
-   "last_close": 1320.0,
-   "days": 40,
-   "ret": -0.04,
+   "last_close": 1300.0,
+   "days": 41,
+   "ret": -0.0545,
    "in_rank": false,
    "replayed": true,
-   "support": true
+   "support": false
   },
   {
    "stock_id": "3374",
@@ -2881,9 +2269,9 @@
    },
    "entry_date": "20260902",
    "entry_price": 418.0,
-   "last_close": 430.0,
-   "days": 40,
-   "ret": 0.0287,
+   "last_close": 447.0,
+   "days": 41,
+   "ret": 0.0694,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -2914,9 +2302,9 @@
    },
    "entry_date": "20260827",
    "entry_price": 793.0,
-   "last_close": 936.0,
-   "days": 44,
-   "ret": 0.1803,
+   "last_close": 939.0,
+   "days": 45,
+   "ret": 0.1841,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -2947,9 +2335,9 @@
    },
    "entry_date": "20260911",
    "entry_price": 149.5,
-   "last_close": 162.0,
-   "days": 33,
-   "ret": 0.0836,
+   "last_close": 163.0,
+   "days": 34,
+   "ret": 0.0903,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -2985,9 +2373,9 @@
    },
    "entry_date": "20260921",
    "entry_price": 7395.0,
-   "last_close": 6795.0,
-   "days": 27,
-   "ret": -0.0811,
+   "last_close": 7115.0,
+   "days": 28,
+   "ret": -0.0379,
    "in_rank": true,
    "replayed": true,
    "support": false
@@ -3023,9 +2411,9 @@
    },
    "entry_date": "20260930",
    "entry_price": 234.5,
-   "last_close": 214.0,
-   "days": 22,
-   "ret": -0.0874,
+   "last_close": 228.5,
+   "days": 23,
+   "ret": -0.0256,
    "in_rank": true,
    "replayed": true,
    "support": false
@@ -3058,9 +2446,9 @@
    },
    "entry_date": "20260827",
    "entry_price": 46.55,
-   "last_close": 47.45,
-   "days": 44,
-   "ret": 0.0193,
+   "last_close": 48.6,
+   "days": 45,
+   "ret": 0.044,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -3098,9 +2486,9 @@
    },
    "entry_date": "20260921",
    "entry_price": 154.0,
-   "last_close": 152.5,
-   "days": 27,
-   "ret": -0.0097,
+   "last_close": 160.0,
+   "days": 28,
+   "ret": 0.039,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -3134,9 +2522,9 @@
    },
    "entry_date": "20261013",
    "entry_price": 256.5,
-   "last_close": 235.5,
-   "days": 14,
-   "ret": -0.0819,
+   "last_close": 232.0,
+   "days": 15,
+   "ret": -0.0955,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -3169,64 +2557,12 @@
    },
    "entry_date": "20260820",
    "entry_price": 5605.0,
-   "last_close": 6035.0,
-   "days": 49,
-   "ret": 0.0767,
+   "last_close": 6450.0,
+   "days": 50,
+   "ret": 0.1508,
    "in_rank": false,
    "replayed": true,
    "support": false
-  },
-  {
-   "stock_id": "3706",
-   "name": "神達",
-   "signal_date": "20260901",
-   "status": "sell_signal",
-   "signal_close": 95.7,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "W 底突破頸線",
-     "均線糾結後帶量突破",
-     "布林壓縮後突破上軌"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "投信連 3 日買超",
-     "外資+投信連 3 日買超",
-     "外資+投信連 5 日買超",
-     "融資減少且站穩上揚月線"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260902",
-   "entry_price": 95.1,
-   "last_close": 74.0,
-   "days": 40,
-   "ret": -0.1149,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "M 頭跌破頸線",
-     "跌破上升趨勢線",
-     "均線空頭排列成形"
-    ]
-   },
-   "sell_signal_date": "20261103"
   },
   {
    "stock_id": "3711",
@@ -3253,9 +2589,9 @@
    },
    "entry_date": "20260910",
    "entry_price": 641.0,
-   "last_close": 616.0,
-   "days": 34,
-   "ret": -0.039,
+   "last_close": 627.0,
+   "days": 35,
+   "ret": -0.0218,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -3284,9 +2620,9 @@
    },
    "entry_date": "20260921",
    "entry_price": 26.0,
-   "last_close": 23.75,
-   "days": 27,
-   "ret": -0.0865,
+   "last_close": 24.1,
+   "days": 28,
+   "ret": -0.0731,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -3317,9 +2653,9 @@
    },
    "entry_date": "20260924",
    "entry_price": 67.0,
-   "last_close": 79.2,
-   "days": 24,
-   "ret": 0.1821,
+   "last_close": 80.4,
+   "days": 25,
+   "ret": 0.2,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -3356,9 +2692,9 @@
    },
    "entry_date": "20260922",
    "entry_price": 260.5,
-   "last_close": 276.0,
-   "days": 26,
-   "ret": 0.0595,
+   "last_close": 292.0,
+   "days": 27,
+   "ret": 0.1209,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -3393,9 +2729,9 @@
    },
    "entry_date": "20261013",
    "entry_price": 52.5,
-   "last_close": 52.4,
-   "days": 14,
-   "ret": -0.0019,
+   "last_close": 53.1,
+   "days": 15,
+   "ret": 0.0174,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -3423,9 +2759,9 @@
    },
    "entry_date": "20260903",
    "entry_price": 102.5,
-   "last_close": 112.5,
-   "days": 39,
-   "ret": 0.0976,
+   "last_close": 114.0,
+   "days": 40,
+   "ret": 0.1122,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -3457,7 +2793,7 @@
    "entry_date": "20260907",
    "entry_price": 95.6,
    "last_close": 101.5,
-   "days": 37,
+   "days": 38,
    "ret": 0.0617,
    "in_rank": false,
    "replayed": true,
@@ -3489,9 +2825,9 @@
    },
    "entry_date": "20260903",
    "entry_price": 170.0,
-   "last_close": 172.5,
-   "days": 39,
-   "ret": 0.0147,
+   "last_close": 174.5,
+   "days": 40,
+   "ret": 0.0265,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -3516,51 +2852,12 @@
    },
    "entry_date": "20261005",
    "entry_price": 179.0,
-   "last_close": 167.0,
-   "days": 19,
-   "ret": -0.067,
+   "last_close": 183.5,
+   "days": 20,
+   "ret": 0.0251,
    "in_rank": false,
    "replayed": true,
    "support": true
-  },
-  {
-   "stock_id": "5269",
-   "name": "祥碩",
-   "signal_date": "20261012",
-   "status": "sell_signal",
-   "signal_close": 1540.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "W 底突破頸線",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "投信連 3 日買超",
-     "投信連 5 日買超"
-    ]
-   },
-   "entry_date": "20261013",
-   "entry_price": 1520.0,
-   "last_close": 1320.0,
-   "days": 14,
-   "ret": -0.1316,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ]
-   },
-   "sell_signal_date": "20261103"
   },
   {
    "stock_id": "5434",
@@ -3586,9 +2883,9 @@
    },
    "entry_date": "20260921",
    "entry_price": 540.0,
-   "last_close": 532.0,
-   "days": 27,
-   "ret": -0.0148,
+   "last_close": 517.0,
+   "days": 28,
+   "ret": -0.0426,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -3618,9 +2915,9 @@
    },
    "entry_date": "20260902",
    "entry_price": 44.8,
-   "last_close": 52.6,
-   "days": 40,
-   "ret": 0.1741,
+   "last_close": 51.8,
+   "days": 41,
+   "ret": 0.1562,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -3655,9 +2952,9 @@
    },
    "entry_date": "20260901",
    "entry_price": 25.35,
-   "last_close": 28.45,
-   "days": 41,
-   "ret": 0.1223,
+   "last_close": 28.5,
+   "days": 42,
+   "ret": 0.1243,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -3689,9 +2986,9 @@
    },
    "entry_date": "20260917",
    "entry_price": 32.15,
-   "last_close": 31.95,
-   "days": 29,
-   "ret": -0.0062,
+   "last_close": 32.15,
+   "days": 30,
+   "ret": 0.0,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -3724,9 +3021,9 @@
    },
    "entry_date": "20260902",
    "entry_price": 30.2,
-   "last_close": 37.6,
-   "days": 40,
-   "ret": 0.245,
+   "last_close": 37.2,
+   "days": 41,
+   "ret": 0.2318,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -3753,9 +3050,9 @@
    },
    "entry_date": "20260917",
    "entry_price": 102.5,
-   "last_close": 164.5,
-   "days": 29,
-   "ret": 0.6049,
+   "last_close": 165.5,
+   "days": 30,
+   "ret": 0.6146,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -3795,9 +3092,9 @@
    },
    "entry_date": "20260821",
    "entry_price": 534.0,
-   "last_close": 600.0,
-   "days": 48,
-   "ret": 0.1236,
+   "last_close": 612.0,
+   "days": 49,
+   "ret": 0.1461,
    "in_rank": true,
    "replayed": true,
    "support": true
@@ -3827,12 +3124,12 @@
    },
    "entry_date": "20260907",
    "entry_price": 186.0,
-   "last_close": 202.0,
-   "days": 37,
-   "ret": 0.086,
+   "last_close": 182.0,
+   "days": 38,
+   "ret": -0.0215,
    "in_rank": false,
    "replayed": true,
-   "support": true
+   "support": false
   },
   {
    "stock_id": "6226",
@@ -3855,9 +3152,9 @@
    },
    "entry_date": "20260820",
    "entry_price": 21.7,
-   "last_close": 34.4,
-   "days": 49,
-   "ret": 0.5853,
+   "last_close": 34.55,
+   "days": 50,
+   "ret": 0.5922,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -3895,9 +3192,9 @@
    },
    "entry_date": "20261007",
    "entry_price": 229.5,
-   "last_close": 229.0,
-   "days": 17,
-   "ret": -0.0022,
+   "last_close": 219.0,
+   "days": 18,
+   "ret": -0.0458,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -3931,105 +3228,12 @@
    },
    "entry_date": "20260821",
    "entry_price": 103.0,
-   "last_close": 109.0,
-   "days": 48,
-   "ret": 0.0583,
+   "last_close": 108.0,
+   "days": 49,
+   "ret": 0.0485,
    "in_rank": false,
    "replayed": true,
    "support": false
-  },
-  {
-   "stock_id": "6426",
-   "name": "統新",
-   "signal_date": "20260908",
-   "status": "sell_signal",
-   "signal_close": 307.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "投信首買（前 10 日未買）",
-     "外資+投信連 3 日買超",
-     "法人 5 日買超比 > 自身 P80",
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高"
-    ],
-    "營收": [
-     "月營收創 12 個月新高"
-    ]
-   },
-   "entry_date": "20260909",
-   "entry_price": 305.5,
-   "last_close": 265.5,
-   "days": 35,
-   "ret": -0.1309,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ]
-   },
-   "sell_signal_date": "20261103"
-  },
-  {
-   "stock_id": "6438",
-   "name": "迅得",
-   "signal_date": "20261006",
-   "status": "sell_signal",
-   "signal_close": 167.5,
-   "buy_reasons": {
-    "突破": [
-     "N 字上攻（低點墊高突破前高）"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資連 5 日買超",
-     "投信首買（前 10 日未買）",
-     "外資+投信連 3 日買超",
-     "外資+投信連 5 日買超",
-     "法人 5 日買超比 > 自身 P80",
-     "法人 5 日買超比 > 自身 P90"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ]
-   },
-   "entry_date": "20261007",
-   "entry_price": 168.0,
-   "last_close": 143.0,
-   "days": 17,
-   "ret": -0.1488,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "跌破上升趨勢線"
-    ]
-   },
-   "sell_signal_date": "20261103"
   },
   {
    "stock_id": "6456",
@@ -4057,9 +3261,9 @@
    },
    "entry_date": "20261005",
    "entry_price": 92.9,
-   "last_close": 87.7,
-   "days": 19,
-   "ret": -0.056,
+   "last_close": 96.4,
+   "days": 20,
+   "ret": 0.0377,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -4097,9 +3301,9 @@
    },
    "entry_date": "20260901",
    "entry_price": 392.0,
-   "last_close": 405.0,
-   "days": 41,
-   "ret": 0.0332,
+   "last_close": 398.5,
+   "days": 42,
+   "ret": 0.0166,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -4130,9 +3334,9 @@
    },
    "entry_date": "20260903",
    "entry_price": 78.1,
-   "last_close": 94.9,
-   "days": 39,
-   "ret": 0.2151,
+   "last_close": 97.6,
+   "days": 40,
+   "ret": 0.2497,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -4165,9 +3369,9 @@
    },
    "entry_date": "20260930",
    "entry_price": 114.0,
-   "last_close": 109.0,
-   "days": 22,
-   "ret": -0.0439,
+   "last_close": 107.0,
+   "days": 23,
+   "ret": -0.0614,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -4193,65 +3397,18 @@
    },
    "entry_date": "20260918",
    "entry_price": 255.0,
-   "last_close": 245.5,
-   "days": 28,
-   "ret": -0.0373,
+   "last_close": 244.0,
+   "days": 29,
+   "ret": -0.0431,
    "in_rank": false,
    "replayed": true,
    "support": false
   },
   {
-   "stock_id": "6538",
-   "name": "倉和",
-   "signal_date": "20260904",
-   "status": "sell_signal",
-   "signal_close": 300.0,
-   "buy_reasons": {
-    "突破": [
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260907",
-   "entry_price": 295.5,
-   "last_close": 250.0,
-   "days": 37,
-   "ret": -0.154,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "頭頭低確認",
-     "N 字下跌（高點下降跌破前低）"
-    ]
-   },
-   "sell_signal_date": "20261103"
-  },
-  {
    "stock_id": "6620",
    "name": "漢達",
    "signal_date": "20260908",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 124.0,
    "buy_reasons": {
     "突破": [
@@ -4273,12 +3430,26 @@
    },
    "entry_date": "20260909",
    "entry_price": 127.5,
-   "last_close": 123.5,
-   "days": 35,
-   "ret": -0.0314,
+   "last_close": 111.5,
+   "days": 36,
+   "ret": -0.1255,
    "in_rank": false,
    "replayed": true,
-   "support": false
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "頭頭低確認",
+     "N 字下跌（高點下降跌破前低）",
+     "跌破上升趨勢線"
+    ],
+    "資金流出": [
+     "OBV 20/60 死亡交叉"
+    ]
+   },
+   "sell_signal_date": "20261104"
   },
   {
    "stock_id": "6668",
@@ -4308,9 +3479,9 @@
    },
    "entry_date": "20260921",
    "entry_price": 49.25,
-   "last_close": 49.1,
-   "days": 27,
-   "ret": -0.003,
+   "last_close": 50.4,
+   "days": 28,
+   "ret": 0.0234,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -4334,9 +3505,9 @@
    },
    "entry_date": "20260907",
    "entry_price": 293.0,
-   "last_close": 502.0,
-   "days": 37,
-   "ret": 0.7133,
+   "last_close": 529.0,
+   "days": 38,
+   "ret": 0.8055,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -4365,9 +3536,9 @@
    },
    "entry_date": "20260921",
    "entry_price": 650.0,
-   "last_close": 609.0,
-   "days": 27,
-   "ret": -0.0631,
+   "last_close": 608.0,
+   "days": 28,
+   "ret": -0.0646,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -4404,107 +3575,12 @@
    },
    "entry_date": "20260826",
    "entry_price": 225.0,
-   "last_close": 256.0,
-   "days": 45,
-   "ret": 0.1378,
+   "last_close": 258.0,
+   "days": 46,
+   "ret": 0.1467,
    "in_rank": false,
    "replayed": true,
    "support": true
-  },
-  {
-   "stock_id": "6834",
-   "name": "天二科技",
-   "signal_date": "20260921",
-   "status": "sell_signal",
-   "signal_close": 115.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資+投信連 3 日買超"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260922",
-   "entry_price": 120.0,
-   "last_close": 103.0,
-   "days": 26,
-   "ret": -0.1118,
-   "in_rank": true,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "籌碼賣出": [
-     "千張大戶連 2 週減、股東人數增（籌碼分散）",
-     "借券賣出 5 日大增"
-    ]
-   },
-   "sell_signal_date": "20261103"
-  },
-  {
-   "stock_id": "6933",
-   "name": "AMAX-KY",
-   "signal_date": "20260924",
-   "status": "sell_signal",
-   "signal_close": 385.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "N 字上攻（低點墊高突破前高）",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "外資連 5 日買超",
-     "外資+投信連 5 日買超",
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ]
-   },
-   "entry_date": "20260929",
-   "entry_price": 385.5,
-   "last_close": 335.0,
-   "days": 23,
-   "ret": -0.131,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "跌破上升趨勢線"
-    ],
-    "資金流出": [
-     "OBV 20/60 死亡交叉"
-    ],
-    "籌碼賣出": [
-     "千張大戶連 2 週減、股東人數增（籌碼分散）"
-    ]
-   },
-   "sell_signal_date": "20261103"
   },
   {
    "stock_id": "6957",
@@ -4528,9 +3604,9 @@
    },
    "entry_date": "20260831",
    "entry_price": 227.0,
-   "last_close": 447.0,
-   "days": 42,
-   "ret": 0.9692,
+   "last_close": 437.5,
+   "days": 43,
+   "ret": 0.9273,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -4567,53 +3643,12 @@
    },
    "entry_date": "20260826",
    "entry_price": 510.0,
-   "last_close": 545.0,
-   "days": 45,
-   "ret": 0.0686,
+   "last_close": 599.0,
+   "days": 46,
+   "ret": 0.1745,
    "in_rank": false,
    "replayed": true,
    "support": false
-  },
-  {
-   "stock_id": "7792",
-   "name": "安葆",
-   "signal_date": "20260918",
-   "status": "sell_signal",
-   "signal_close": 339.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收年增 >20% 且加速",
-     "月營收連 3 個月年增"
-    ]
-   },
-   "entry_date": "20260921",
-   "entry_price": 339.5,
-   "last_close": 300.5,
-   "days": 27,
-   "ret": -0.1149,
-   "in_rank": false,
-   "replayed": true,
-   "support": false,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ]
-   },
-   "sell_signal_date": "20261103"
   },
   {
    "stock_id": "7799",
@@ -4638,9 +3673,9 @@
    },
    "entry_date": "20260908",
    "entry_price": 396.0,
-   "last_close": 409.5,
-   "days": 36,
-   "ret": 0.0341,
+   "last_close": 410.5,
+   "days": 37,
+   "ret": 0.0366,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -4665,12 +3700,12 @@
    },
    "entry_date": "20260828",
    "entry_price": 1275.0,
-   "last_close": 1360.0,
-   "days": 43,
-   "ret": 0.0667,
+   "last_close": 1430.0,
+   "days": 44,
+   "ret": 0.1216,
    "in_rank": false,
    "replayed": true,
-   "support": false
+   "support": true
   },
   {
    "stock_id": "9904",
@@ -4698,9 +3733,9 @@
    },
    "entry_date": "20261013",
    "entry_price": 25.5,
-   "last_close": 25.9,
-   "days": 14,
-   "ret": 0.0157,
+   "last_close": 25.45,
+   "days": 15,
+   "ret": -0.002,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -4730,9 +3765,9 @@
    },
    "entry_date": "20260914",
    "entry_price": 41.65,
-   "last_close": 46.3,
-   "days": 32,
-   "ret": 0.1116,
+   "last_close": 47.95,
+   "days": 33,
+   "ret": 0.1513,
    "in_rank": false,
    "replayed": true,
    "support": true
@@ -4770,9 +3805,9 @@
    },
    "entry_date": "20260929",
    "entry_price": 29.65,
-   "last_close": 28.2,
-   "days": 23,
-   "ret": -0.0489,
+   "last_close": 27.85,
+   "days": 24,
+   "ret": -0.0607,
    "in_rank": false,
    "replayed": true,
    "support": false
@@ -4781,7 +3816,7 @@
    "stock_id": "2353",
    "name": "宏碁",
    "signal_date": "20261020",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 32.4,
    "buy_reasons": {
     "突破": [
@@ -4808,10 +3843,19 @@
    "replayed": false,
    "entry_date": "20261021",
    "entry_price": 32.75,
-   "last_close": 29.7,
-   "days": 8,
-   "ret": -0.0931,
-   "support": false
+   "last_close": 29.45,
+   "days": 9,
+   "ret": -0.1008,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "跌破上升趨勢線"
+    ]
+   },
+   "sell_signal_date": "20261104"
   },
   {
    "stock_id": "4960",
@@ -4845,9 +3889,9 @@
    "replayed": false,
    "entry_date": "20261021",
    "entry_price": 31.0,
-   "last_close": 29.95,
-   "days": 8,
-   "ret": -0.0339,
+   "last_close": 32.9,
+   "days": 9,
+   "ret": 0.0613,
    "support": true
   },
   {
@@ -4885,9 +3929,9 @@
    "replayed": false,
    "entry_date": "20261022",
    "entry_price": 55.0,
-   "last_close": 49.55,
-   "days": 7,
-   "ret": -0.0991,
+   "last_close": 52.5,
+   "days": 8,
+   "ret": -0.0455,
    "support": true
   },
   {
@@ -4923,9 +3967,9 @@
    "replayed": false,
    "entry_date": "20261027",
    "entry_price": 55.5,
-   "last_close": 55.3,
-   "days": 6,
-   "ret": -0.0036
+   "last_close": 60.8,
+   "days": 7,
+   "ret": 0.0955
   },
   {
    "stock_id": "2633",
@@ -4953,14 +3997,14 @@
      "融資減少且站穩上揚月線"
     ]
    },
-   "support": true,
+   "support": false,
    "in_rank": false,
    "replayed": false,
    "entry_date": "20261028",
    "entry_price": 26.45,
-   "last_close": 26.05,
-   "days": 5,
-   "ret": -0.0151
+   "last_close": 25.95,
+   "days": 6,
+   "ret": -0.0189
   },
   {
    "stock_id": "4526",
@@ -5003,9 +4047,9 @@
    "replayed": false,
    "entry_date": "20261028",
    "entry_price": 46.35,
-   "last_close": 54.9,
-   "days": 5,
-   "ret": 0.1845
+   "last_close": 60.3,
+   "days": 6,
+   "ret": 0.301
   },
   {
    "stock_id": "9910",
@@ -5032,72 +4076,20 @@
      "融資減少且站穩上揚月線"
     ]
    },
-   "support": true,
+   "support": false,
    "in_rank": false,
    "replayed": false,
    "entry_date": "20261028",
    "entry_price": 70.5,
-   "last_close": 70.2,
-   "days": 5,
-   "ret": -0.0043
-  },
-  {
-   "stock_id": "2324",
-   "name": "仁寶",
-   "signal_date": "20261028",
-   "status": "sell_signal",
-   "signal_close": 37.95,
-   "buy_reasons": {
-    "突破": [
-     "均線糾結後帶量突破",
-     "布林壓縮後突破上軌"
-    ],
-    "資金": [
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資連 5 日買超",
-     "投信連 3 日買超",
-     "投信連 5 日買超",
-     "外資+投信連 3 日買超",
-     "外資+投信連 5 日買超",
-     "融資減少且站穩上揚月線"
-    ],
-    "營收": [
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "support": false,
-   "in_rank": false,
-   "replayed": false,
-   "entry_date": "20261029",
-   "entry_price": 37.8,
-   "last_close": 33.55,
-   "days": 4,
-   "ret": -0.1124,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "頭頭低確認",
-     "底底低確認",
-     "轉為空頭結構（頭頭低＋底底低）",
-     "N 字下跌（高點下降跌破前低）"
-    ],
-    "籌碼賣出": [
-     "千張大戶連 2 週減、股東人數增（籌碼分散）"
-    ]
-   },
-   "sell_signal_date": "20261103"
+   "last_close": 67.8,
+   "days": 6,
+   "ret": -0.0383
   },
   {
    "stock_id": "2357",
    "name": "華碩",
    "signal_date": "20261028",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 988.0,
    "buy_reasons": {
     "突破": [
@@ -5116,15 +4108,26 @@
    "replayed": false,
    "entry_date": "20261029",
    "entry_price": 983.0,
-   "last_close": 889.0,
-   "days": 4,
-   "ret": -0.0956
+   "last_close": 877.0,
+   "days": 5,
+   "ret": -0.1078,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "頭頭低確認",
+     "M 頭跌破頸線",
+     "跌破上升趨勢線"
+    ]
+   },
+   "sell_signal_date": "20261104"
   },
   {
    "stock_id": "2451",
    "name": "創見",
    "signal_date": "20261028",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 293.5,
    "buy_reasons": {
     "突破": [
@@ -5153,56 +4156,20 @@
    "replayed": false,
    "entry_date": "20261029",
    "entry_price": 294.0,
-   "last_close": 273.0,
-   "days": 4,
-   "ret": -0.0714
-  },
-  {
-   "stock_id": "3006",
-   "name": "晶豪科",
-   "signal_date": "20261028",
-   "status": "sell_signal",
-   "signal_close": 275.5,
-   "buy_reasons": {
-    "突破": [
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "投信連 3 日買超",
-     "投信連 5 日買超"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "support": false,
-   "in_rank": true,
-   "replayed": false,
-   "entry_date": "20261029",
-   "entry_price": 278.0,
-   "last_close": 242.5,
-   "days": 4,
-   "ret": -0.1277,
+   "last_close": 263.0,
+   "days": 5,
+   "ret": -0.1054,
    "sell_reasons": {
     "停損": [
      "收盤比買價跌 10%"
     ],
     "結構破壞": [
-     "頭頭低確認",
      "底底低確認",
      "轉為空頭結構（頭頭低＋底底低）",
-     "均線空頭排列成形"
-    ],
-    "籌碼賣出": [
-     "千張大戶連 2 週減、股東人數增（籌碼分散）"
+     "M 頭跌破頸線"
     ]
    },
-   "sell_signal_date": "20261103"
+   "sell_signal_date": "20261104"
   },
   {
    "stock_id": "4967",
@@ -5238,9 +4205,9 @@
    "replayed": false,
    "entry_date": "20261029",
    "entry_price": 287.5,
-   "last_close": 260.5,
-   "days": 4,
-   "ret": -0.0939
+   "last_close": 266.0,
+   "days": 5,
+   "ret": -0.0748
   },
   {
    "stock_id": "6005",
@@ -5269,69 +4236,15 @@
    "replayed": false,
    "entry_date": "20261029",
    "entry_price": 31.3,
-   "last_close": 29.4,
-   "days": 4,
-   "ret": -0.0607
-  },
-  {
-   "stock_id": "3035",
-   "name": "智原",
-   "signal_date": "20261029",
-   "status": "sell_signal",
-   "signal_close": 231.5,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "N 字上攻（低點墊高突破前高）",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "投信連 3 日買超",
-     "投信連 5 日買超"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速",
-     "月營收連 3 個月年增"
-    ]
-   },
-   "support": false,
-   "in_rank": false,
-   "replayed": false,
-   "entry_date": "20261030",
-   "entry_price": 218.5,
-   "last_close": 191.0,
-   "days": 3,
-   "ret": -0.1259,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "跌破上升趨勢線"
-    ],
-    "籌碼賣出": [
-     "借券賣出 5 日大增"
-    ]
-   },
-   "sell_signal_date": "20261103"
+   "last_close": 29.15,
+   "days": 5,
+   "ret": -0.0687
   },
   {
    "stock_id": "3105",
    "name": "穩懋",
    "signal_date": "20261029",
-   "status": "holding",
+   "status": "sell_signal",
    "signal_close": 594.0,
    "buy_reasons": {
     "突破": [
@@ -5356,53 +4269,15 @@
    "replayed": false,
    "entry_date": "20261030",
    "entry_price": 567.0,
-   "last_close": 530.0,
-   "days": 3,
-   "ret": -0.0653
-  },
-  {
-   "stock_id": "4542",
-   "name": "科嶠",
-   "signal_date": "20261029",
-   "status": "sell_signal",
-   "signal_close": 368.5,
-   "buy_reasons": {
-    "突破": [
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）",
-     "大盤 20 日跌逾 5% 時逆勢上漲（抗跌）"
-    ],
-    "營收": [
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "support": false,
-   "in_rank": false,
-   "replayed": false,
-   "entry_date": "20261030",
-   "entry_price": 343.0,
-   "last_close": 287.5,
-   "days": 3,
-   "ret": -0.1618,
+   "last_close": 501.0,
+   "days": 4,
+   "ret": -0.1164,
    "sell_reasons": {
     "停損": [
      "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "M 頭跌破頸線",
-     "跌破上升趨勢線"
     ]
    },
-   "sell_signal_date": "20261103"
+   "sell_signal_date": "20261104"
   },
   {
    "stock_id": "6234",
@@ -5440,12 +4315,1310 @@
    "replayed": false,
    "entry_date": "20261103",
    "entry_price": 51.6,
-   "last_close": 47.9,
-   "days": 1,
-   "ret": -0.0717
+   "last_close": 49.95,
+   "days": 2,
+   "ret": -0.032
+  },
+  {
+   "stock_id": "2033",
+   "name": "佳大",
+   "signal_date": "20261104",
+   "status": "waiting",
+   "signal_close": 77.1,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>1.5 且收紅"
+    ],
+    "籌碼": [
+     "投信連 3 日買超",
+     "投信連 5 日買超",
+     "投信首買（前 10 日未買）",
+     "融資減少且站穩上揚月線"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）",
+     "大盤 20 日跌逾 5% 時逆勢上漲（抗跌）"
+    ]
+   },
+   "support": true,
+   "in_rank": false,
+   "replayed": false
   }
  ],
  "closed": [
+  {
+   "stock_id": "4542",
+   "name": "科嶠",
+   "signal_date": "20261029",
+   "status": "closed",
+   "signal_close": 368.5,
+   "buy_reasons": {
+    "突破": [
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "量比>1.5 且收紅"
+    ],
+    "籌碼": [
+     "融資減少且站穩上揚月線"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）",
+     "大盤 20 日跌逾 5% 時逆勢上漲（抗跌）"
+    ],
+    "營收": [
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "support": false,
+   "in_rank": false,
+   "replayed": false,
+   "entry_date": "20261030",
+   "entry_price": 343.0,
+   "last_close": 278.5,
+   "days": 3,
+   "ret": -0.1658,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "M 頭跌破頸線",
+     "跌破上升趨勢線"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 287.5,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "3035",
+   "name": "智原",
+   "signal_date": "20261029",
+   "status": "closed",
+   "signal_close": 231.5,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高",
+     "N 字上攻（低點墊高突破前高）",
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "籌碼": [
+     "投信連 3 日買超",
+     "投信連 5 日買超"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速",
+     "月營收連 3 個月年增"
+    ]
+   },
+   "support": false,
+   "in_rank": false,
+   "replayed": false,
+   "entry_date": "20261030",
+   "entry_price": 218.5,
+   "last_close": 190.5,
+   "days": 3,
+   "ret": -0.1118,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "跌破上升趨勢線"
+    ],
+    "籌碼賣出": [
+     "借券賣出 5 日大增"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 195.0,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "3006",
+   "name": "晶豪科",
+   "signal_date": "20261028",
+   "status": "closed",
+   "signal_close": 275.5,
+   "buy_reasons": {
+    "突破": [
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅"
+    ],
+    "籌碼": [
+     "投信連 3 日買超",
+     "投信連 5 日買超"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "support": false,
+   "in_rank": true,
+   "replayed": false,
+   "entry_date": "20261029",
+   "entry_price": 278.0,
+   "last_close": 231.5,
+   "days": 4,
+   "ret": -0.1318,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "頭頭低確認",
+     "底底低確認",
+     "轉為空頭結構（頭頭低＋底底低）",
+     "均線空頭排列成形"
+    ],
+    "籌碼賣出": [
+     "千張大戶連 2 週減、股東人數增（籌碼分散）"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 242.5,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "2324",
+   "name": "仁寶",
+   "signal_date": "20261028",
+   "status": "closed",
+   "signal_close": 37.95,
+   "buy_reasons": {
+    "突破": [
+     "均線糾結後帶量突破",
+     "布林壓縮後突破上軌"
+    ],
+    "資金": [
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅"
+    ],
+    "籌碼": [
+     "外資連 3 日買超",
+     "外資連 5 日買超",
+     "投信連 3 日買超",
+     "投信連 5 日買超",
+     "外資+投信連 3 日買超",
+     "外資+投信連 5 日買超",
+     "融資減少且站穩上揚月線"
+    ],
+    "營收": [
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "support": false,
+   "in_rank": false,
+   "replayed": false,
+   "entry_date": "20261029",
+   "entry_price": 37.8,
+   "last_close": 33.25,
+   "days": 4,
+   "ret": -0.11,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "頭頭低確認",
+     "底底低確認",
+     "轉為空頭結構（頭頭低＋底底低）",
+     "N 字下跌（高點下降跌破前低）"
+    ],
+    "籌碼賣出": [
+     "千張大戶連 2 週減、股東人數增（籌碼分散）"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 33.8,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "7792",
+   "name": "安葆",
+   "signal_date": "20260918",
+   "status": "closed",
+   "signal_close": 339.0,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）"
+    ],
+    "營收": [
+     "月營收年增 >20% 且加速",
+     "月營收連 3 個月年增"
+    ]
+   },
+   "entry_date": "20260921",
+   "entry_price": 339.5,
+   "last_close": 301.5,
+   "days": 27,
+   "ret": -0.1073,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 304.5,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "6933",
+   "name": "AMAX-KY",
+   "signal_date": "20260924",
+   "status": "closed",
+   "signal_close": 385.0,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高",
+     "N 字上攻（低點墊高突破前高）",
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅"
+    ],
+    "籌碼": [
+     "外資連 5 日買超",
+     "外資+投信連 5 日買超",
+     "融資減少且站穩上揚月線"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）"
+    ]
+   },
+   "entry_date": "20260929",
+   "entry_price": 385.5,
+   "last_close": 368.5,
+   "days": 23,
+   "ret": -0.1183,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "跌破上升趨勢線"
+    ],
+    "資金流出": [
+     "OBV 20/60 死亡交叉"
+    ],
+    "籌碼賣出": [
+     "千張大戶連 2 週減、股東人數增（籌碼分散）"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 341.5,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "6834",
+   "name": "天二科技",
+   "signal_date": "20260921",
+   "status": "closed",
+   "signal_close": 115.0,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅"
+    ],
+    "籌碼": [
+     "外資連 3 日買超",
+     "外資+投信連 3 日買超"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "entry_date": "20260922",
+   "entry_price": 120.0,
+   "last_close": 103.0,
+   "days": 26,
+   "ret": -0.0988,
+   "in_rank": true,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "籌碼賣出": [
+     "千張大戶連 2 週減、股東人數增（籌碼分散）",
+     "借券賣出 5 日大增"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 105.0,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "6538",
+   "name": "倉和",
+   "signal_date": "20260904",
+   "status": "closed",
+   "signal_close": 300.0,
+   "buy_reasons": {
+    "突破": [
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "籌碼": [
+     "融資減少且站穩上揚月線"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "entry_date": "20260907",
+   "entry_price": 295.5,
+   "last_close": 275.0,
+   "days": 37,
+   "ret": -0.1411,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "頭頭低確認",
+     "N 字下跌（高點下降跌破前低）"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 255.0,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "6438",
+   "name": "迅得",
+   "signal_date": "20261006",
+   "status": "closed",
+   "signal_close": 167.5,
+   "buy_reasons": {
+    "突破": [
+     "N 字上攻（低點墊高突破前高）"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "籌碼": [
+     "外資連 3 日買超",
+     "外資連 5 日買超",
+     "投信首買（前 10 日未買）",
+     "外資+投信連 3 日買超",
+     "外資+投信連 5 日買超",
+     "法人 5 日買超比 > 自身 P80",
+     "法人 5 日買超比 > 自身 P90"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）"
+    ]
+   },
+   "entry_date": "20261007",
+   "entry_price": 168.0,
+   "last_close": 142.5,
+   "days": 17,
+   "ret": -0.141,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "跌破上升趨勢線"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 145.0,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "6426",
+   "name": "統新",
+   "signal_date": "20260908",
+   "status": "closed",
+   "signal_close": 307.0,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高",
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅"
+    ],
+    "籌碼": [
+     "投信首買（前 10 日未買）",
+     "外資+投信連 3 日買超",
+     "法人 5 日買超比 > 自身 P80",
+     "融資減少且站穩上揚月線"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高"
+    ],
+    "營收": [
+     "月營收創 12 個月新高"
+    ]
+   },
+   "entry_date": "20260909",
+   "entry_price": 305.5,
+   "last_close": 263.5,
+   "days": 35,
+   "ret": -0.1367,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 265.0,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "5269",
+   "name": "祥碩",
+   "signal_date": "20261012",
+   "status": "closed",
+   "signal_close": 1540.0,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高",
+     "W 底突破頸線",
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "籌碼": [
+     "投信連 3 日買超",
+     "投信連 5 日買超"
+    ]
+   },
+   "entry_date": "20261013",
+   "entry_price": 1520.0,
+   "last_close": 1325.0,
+   "days": 14,
+   "ret": -0.1357,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 1320.0,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "3706",
+   "name": "神達",
+   "signal_date": "20260901",
+   "status": "closed",
+   "signal_close": 95.7,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高",
+     "W 底突破頸線",
+     "均線糾結後帶量突破",
+     "布林壓縮後突破上軌"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "籌碼": [
+     "外資連 3 日買超",
+     "投信連 3 日買超",
+     "外資+投信連 3 日買超",
+     "外資+投信連 5 日買超",
+     "融資減少且站穩上揚月線"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "entry_date": "20260902",
+   "entry_price": 95.1,
+   "last_close": 72.7,
+   "days": 40,
+   "ret": -0.1072,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "M 頭跌破頸線",
+     "跌破上升趨勢線",
+     "均線空頭排列成形"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 75.0,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "3264",
+   "name": "欣銓",
+   "signal_date": "20260910",
+   "status": "closed",
+   "signal_close": 240.0,
+   "buy_reasons": {
+    "突破": [
+     "N 字上攻（低點墊高突破前高）",
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "entry_date": "20260911",
+   "entry_price": 235.5,
+   "last_close": 197.0,
+   "days": 33,
+   "ret": -0.1695,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "M 頭跌破頸線"
+    ],
+    "籌碼賣出": [
+     "千張大戶連 2 週減、股東人數增（籌碼分散）"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 196.5,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "3219",
+   "name": "倚強科",
+   "signal_date": "20260921",
+   "status": "closed",
+   "signal_close": 98.7,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高",
+     "N 字上攻（低點墊高突破前高）",
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高"
+    ],
+    "營收": [
+     "月營收創 12 個月新高"
+    ]
+   },
+   "entry_date": "20260922",
+   "entry_price": 104.5,
+   "last_close": 93.4,
+   "days": 26,
+   "ret": -0.0904,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "跌破上升趨勢線"
+    ],
+    "資金流出": [
+     "OBV 20/60 死亡交叉"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 95.5,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "3189",
+   "name": "景碩",
+   "signal_date": "20260924",
+   "status": "closed",
+   "signal_close": 962.0,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高",
+     "W 底突破頸線",
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "籌碼": [
+     "外資連 3 日買超",
+     "投信連 3 日買超",
+     "外資+投信連 3 日買超",
+     "融資減少且站穩上揚月線"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "entry_date": "20260929",
+   "entry_price": 960.0,
+   "last_close": 822.0,
+   "days": 23,
+   "ret": -0.1395,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "籌碼賣出": [
+     "外資連 5 日賣超",
+     "千張大戶連 2 週減、股東人數增（籌碼分散）",
+     "借券賣出 5 日大增"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 830.0,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "3167",
+   "name": "大量",
+   "signal_date": "20261001",
+   "status": "closed",
+   "signal_close": 975.0,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高",
+     "N 字上攻（低點墊高突破前高）",
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "量比>1.5 且收紅"
+    ],
+    "籌碼": [
+     "投信連 3 日買超"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "entry_date": "20261002",
+   "entry_price": 983.0,
+   "last_close": 863.0,
+   "days": 20,
+   "ret": -0.1596,
+   "in_rank": true,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "頭頭低確認",
+     "N 字下跌（高點下降跌破前低）",
+     "跌破上升趨勢線"
+    ],
+    "籌碼賣出": [
+     "千張大戶連 2 週減、股東人數增（籌碼分散）"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 830.0,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "3017",
+   "name": "奇鋐",
+   "signal_date": "20260827",
+   "status": "closed",
+   "signal_close": 3340.0,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高",
+     "N 字上攻（低點墊高突破前高）",
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅"
+    ],
+    "籌碼": [
+     "外資連 3 日買超",
+     "外資連 5 日買超",
+     "投信連 3 日買超",
+     "投信連 5 日買超",
+     "外資+投信連 3 日買超",
+     "千張大戶連 2 週增、股東人數減（籌碼集中）",
+     "融資減少且站穩上揚月線"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "entry_date": "20260828",
+   "entry_price": 3360.0,
+   "last_close": 2820.0,
+   "days": 43,
+   "ret": -0.1306,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "籌碼賣出": [
+     "外資連 5 日賣超"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 2935.0,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "2606",
+   "name": "裕民",
+   "signal_date": "20260903",
+   "status": "closed",
+   "signal_close": 78.2,
+   "buy_reasons": {
+    "突破": [
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅"
+    ],
+    "籌碼": [
+     "融資減少且站穩上揚月線"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）"
+    ],
+    "營收": [
+     "月營收創 12 個月新高"
+    ]
+   },
+   "entry_date": "20260904",
+   "entry_price": 79.0,
+   "last_close": 70.2,
+   "days": 38,
+   "ret": -0.1118,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "頭頭低確認",
+     "底底低確認",
+     "轉為空頭結構（頭頭低＋底底低）",
+     "N 字下跌（高點下降跌破前低）",
+     "M 頭跌破頸線",
+     "跌破上升趨勢線"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 70.5,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "2484",
+   "name": "希華",
+   "signal_date": "20260929",
+   "status": "closed",
+   "signal_close": 76.9,
+   "buy_reasons": {
+    "突破": [
+     "突破下降趨勢線"
+    ],
+    "資金": [
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "籌碼": [
+     "外資連 3 日買超",
+     "外資連 5 日買超",
+     "外資+投信連 3 日買超",
+     "外資+投信連 5 日買超",
+     "千張大戶連 2 週增、股東人數減（籌碼集中）"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "entry_date": "20260930",
+   "entry_price": 77.5,
+   "last_close": 62.8,
+   "days": 22,
+   "ret": -0.1768,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "頭頭低確認",
+     "M 頭跌破頸線"
+    ],
+    "籌碼賣出": [
+     "千張大戶連 2 週減、股東人數增（籌碼分散）"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 64.1,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "2455",
+   "name": "全新",
+   "signal_date": "20260831",
+   "status": "closed",
+   "signal_close": 477.0,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高"
+    ],
+    "資金": [
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅",
+     "OBV 20/60 黃金交叉"
+    ],
+    "籌碼": [
+     "外資連 3 日買超",
+     "外資連 5 日買超",
+     "投信連 3 日買超",
+     "外資+投信連 3 日買超",
+     "外資+投信連 5 日買超",
+     "融資減少且站穩上揚月線"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "entry_date": "20260901",
+   "entry_price": 490.0,
+   "last_close": 384.0,
+   "days": 41,
+   "ret": -0.1875,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "籌碼賣出": [
+     "千張大戶連 2 週減、股東人數增（籌碼分散）",
+     "借券賣出 5 日大增"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 400.0,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "2426",
+   "name": "鼎元",
+   "signal_date": "20260828",
+   "status": "closed",
+   "signal_close": 96.1,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 55 日高"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅"
+    ],
+    "籌碼": [
+     "外資連 3 日買超",
+     "外資+投信連 3 日買超"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速",
+     "月營收連 3 個月年增"
+    ]
+   },
+   "entry_date": "20260831",
+   "entry_price": 95.1,
+   "last_close": 80.6,
+   "days": 42,
+   "ret": -0.1586,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "資金流出": [
+     "OBV 20/60 死亡交叉"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 80.4,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "2395",
+   "name": "研華",
+   "signal_date": "20260901",
+   "status": "closed",
+   "signal_close": 711.0,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高",
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅"
+    ],
+    "籌碼": [
+     "投信連 3 日買超",
+     "外資+投信連 3 日買超",
+     "融資減少且站穩上揚月線"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "entry_date": "20260902",
+   "entry_price": 705.0,
+   "last_close": 629.0,
+   "days": 40,
+   "ret": -0.112,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "資金流出": [
+     "OBV 20/60 死亡交叉"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 629.0,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "2376",
+   "name": "技嘉",
+   "signal_date": "20260921",
+   "status": "closed",
+   "signal_close": 368.0,
+   "buy_reasons": {
+    "突破": [
+     "突破下降趨勢線",
+     "布林壓縮後突破上軌",
+     "向上跳空缺口且收紅"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "籌碼": [
+     "投信連 3 日買超",
+     "投信連 5 日買超",
+     "外資+投信連 3 日買超",
+     "融資減少且站穩上揚月線"
+    ],
+    "營收": [
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "entry_date": "20260922",
+   "entry_price": 373.0,
+   "last_close": 324.5,
+   "days": 26,
+   "ret": -0.1168,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "籌碼賣出": [
+     "千張大戶連 2 週減、股東人數增（籌碼分散）"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 331.0,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "2354",
+   "name": "鴻準",
+   "signal_date": "20260901",
+   "status": "closed",
+   "signal_close": 65.9,
+   "buy_reasons": {
+    "突破": [
+     "收盤突破前 20 日高",
+     "收盤突破前 55 日高",
+     "N 字上攻（低點墊高突破前高）"
+    ],
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "籌碼": [
+     "外資連 3 日買超",
+     "外資連 5 日買超",
+     "外資+投信連 3 日買超",
+     "外資+投信連 5 日買超"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "entry_date": "20260902",
+   "entry_price": 65.4,
+   "last_close": 56.9,
+   "days": 40,
+   "ret": -0.1143,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "均線空頭排列成形"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 58.2,
+   "closed_on": "20261104"
+  },
+  {
+   "stock_id": "1608",
+   "name": "華榮",
+   "signal_date": "20261007",
+   "status": "closed",
+   "signal_close": 37.05,
+   "buy_reasons": {
+    "突破": [
+     "均線糾結後帶量突破",
+     "布林壓縮後突破上軌"
+    ],
+    "資金": [
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅"
+    ],
+    "籌碼": [
+     "法人 5 日買超比 > 自身 P80"
+    ],
+    "營收": [
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "entry_date": "20261008",
+   "entry_price": 36.8,
+   "last_close": 31.7,
+   "days": 16,
+   "ret": -0.1251,
+   "in_rank": false,
+   "replayed": true,
+   "support": false,
+   "sell_reasons": {
+    "停損": [
+     "收盤比買價跌 10%"
+    ],
+    "結構破壞": [
+     "頭頭低確認",
+     "N 字下跌（高點下降跌破前低）",
+     "跌破上升趨勢線",
+     "均線空頭排列成形"
+    ],
+    "籌碼賣出": [
+     "外資連 5 日賣超",
+     "借券賣出 5 日大增"
+    ]
+   },
+   "sell_signal_date": "20261103",
+   "exit_date": "20261104",
+   "exit_price": 32.35,
+   "closed_on": "20261104"
+  },
   {
    "stock_id": "6727",
    "name": "亞泰金屬",
@@ -9882,1188 +10055,6 @@
    "in_rank": true,
    "closed_on": "20261019",
    "replayed": true
-  },
-  {
-   "stock_id": "3229",
-   "name": "晟鈦",
-   "signal_date": "20260911",
-   "status": "closed",
-   "signal_close": 67.5,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "N 字上攻（低點墊高突破前高）"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資+投信連 3 日買超",
-     "法人 5 日買超比 > 自身 P80"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高"
-    ],
-    "營收": [
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260914",
-   "entry_price": 68.6,
-   "last_close": 49.3,
-   "days": 2,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ]
-   },
-   "sell_signal_date": "20260915",
-   "exit_date": "20260916",
-   "exit_price": 59.4,
-   "ret": -0.1382,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "3229",
-   "name": "晟鈦",
-   "signal_date": "20260821",
-   "status": "closed",
-   "signal_close": 61.8,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260824",
-   "entry_price": 61.3,
-   "last_close": 49.3,
-   "days": 4,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "籌碼賣出": [
-     "外資連 5 日賣超"
-    ]
-   },
-   "sell_signal_date": "20260827",
-   "exit_date": "20260828",
-   "exit_price": 55.5,
-   "ret": -0.0989,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "3189",
-   "name": "景碩",
-   "signal_date": "20260827",
-   "status": "closed",
-   "signal_close": 914.0,
-   "buy_reasons": {
-    "突破": [
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "投信連 3 日買超",
-     "外資+投信連 3 日買超",
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260828",
-   "entry_price": 929.0,
-   "last_close": 1000.0,
-   "days": 2,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "籌碼賣出": [
-     "借券賣出 5 日大增"
-    ]
-   },
-   "sell_signal_date": "20260831",
-   "exit_date": "20260901",
-   "exit_price": 838.0,
-   "ret": -0.1022,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "3081",
-   "name": "聯亞",
-   "signal_date": "20261002",
-   "status": "closed",
-   "signal_close": 2925.0,
-   "buy_reasons": {
-    "突破": [
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20261005",
-   "entry_price": 3000.0,
-   "last_close": 2570.0,
-   "days": 8,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "頭頭低確認",
-     "跌破上升趨勢線"
-    ]
-   },
-   "sell_signal_date": "20261015",
-   "exit_date": "20261016",
-   "exit_price": 2685.0,
-   "ret": -0.1092,
-   "in_rank": true,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "3081",
-   "name": "聯亞",
-   "signal_date": "20260901",
-   "status": "closed",
-   "signal_close": 3425.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高"
-    ],
-    "資金": [
-     "量比>2.0 且收紅",
-     "OBV 20/60 黃金交叉"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260902",
-   "entry_price": 3425.0,
-   "last_close": 2570.0,
-   "days": 4,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "籌碼賣出": [
-     "高檔融資 5 日增幅 > 自身 P90"
-    ],
-    "環境轉壞": [
-     "大盤轉為空頭"
-    ]
-   },
-   "sell_signal_date": "20260907",
-   "exit_date": "20260908",
-   "exit_price": 3115.0,
-   "ret": -0.0948,
-   "in_rank": true,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "3037",
-   "name": "欣興",
-   "signal_date": "20261005",
-   "status": "closed",
-   "signal_close": 1325.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "N 字上攻（低點墊高突破前高）",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資連 5 日買超",
-     "投信連 3 日買超",
-     "投信連 5 日買超",
-     "外資+投信連 3 日買超",
-     "外資+投信連 5 日買超",
-     "千張大戶連 2 週增、股東人數減（籌碼集中）"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20261006",
-   "entry_price": 1335.0,
-   "last_close": 1090.0,
-   "days": 5,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "資金流出": [
-     "創 20 日高但量縮（量價背離）"
-    ]
-   },
-   "sell_signal_date": "20261013",
-   "exit_date": "20261014",
-   "exit_price": 1180.0,
-   "ret": -0.1203,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "3026",
-   "name": "禾伸堂",
-   "signal_date": "20260828",
-   "status": "closed",
-   "signal_close": 742.0,
-   "buy_reasons": {
-    "突破": [
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資連 5 日買超",
-     "外資+投信連 3 日買超",
-     "外資+投信連 5 日買超",
-     "融資減少且站穩上揚月線"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260831",
-   "entry_price": 742.0,
-   "last_close": 806.0,
-   "days": 4,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "頭頭低確認",
-     "轉為空頭結構（頭頭低＋底底低）"
-    ]
-   },
-   "sell_signal_date": "20260903",
-   "exit_date": "20260904",
-   "exit_price": 692.0,
-   "ret": -0.0718,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "3008",
-   "name": "大立光",
-   "signal_date": "20260828",
-   "status": "closed",
-   "signal_close": 7065.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "投信連 3 日買超",
-     "投信連 5 日買超",
-     "千張大戶連 2 週增、股東人數減（籌碼集中）",
-     "400 張大戶週增幅創半年高"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ]
-   },
-   "entry_date": "20260831",
-   "entry_price": 7065.0,
-   "last_close": 6400.0,
-   "days": 11,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "籌碼賣出": [
-     "千張大戶連 2 週減、股東人數增（籌碼分散）"
-    ]
-   },
-   "sell_signal_date": "20260914",
-   "exit_date": "20260915",
-   "exit_price": 6015.0,
-   "ret": -0.1526,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "3006",
-   "name": "晶豪科",
-   "signal_date": "20260831",
-   "status": "closed",
-   "signal_close": 292.5,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "N 字上攻（低點墊高突破前高）"
-    ],
-    "資金": [
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260901",
-   "entry_price": 298.5,
-   "last_close": 244.5,
-   "days": 11,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "籌碼賣出": [
-     "借券賣出 5 日大增"
-    ]
-   },
-   "sell_signal_date": "20260915",
-   "exit_date": "20260916",
-   "exit_price": 266.0,
-   "ret": -0.1131,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2542",
-   "name": "興富發",
-   "signal_date": "20260918",
-   "status": "closed",
-   "signal_close": 47.8,
-   "buy_reasons": {
-    "突破": [
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "營收": [
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260921",
-   "entry_price": 47.6,
-   "last_close": 39.65,
-   "days": 1,
-   "sell_reasons": {
-    "結構破壞": [
-     "頭頭低確認",
-     "底底低確認",
-     "轉為空頭結構（頭頭低＋底底低）",
-     "M 頭跌破頸線",
-     "跌破上升趨勢線"
-    ],
-    "籌碼賣出": [
-     "外資連 5 日賣超"
-    ],
-    "環境轉壞": [
-     "月營收年增轉負"
-    ]
-   },
-   "sell_signal_date": "20260921",
-   "exit_date": "20260922",
-   "exit_price": 46.8,
-   "ret": -0.0214,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2481",
-   "name": "強茂",
-   "signal_date": "20260901",
-   "status": "closed",
-   "signal_close": 157.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高"
-    ],
-    "資金": [
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "投信連 3 日買超",
-     "投信連 5 日買超",
-     "外資+投信連 3 日買超",
-     "外資+投信連 5 日買超",
-     "融資減少且站穩上揚月線"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260902",
-   "entry_price": 153.5,
-   "last_close": 158.5,
-   "days": 10,
-   "sell_reasons": {
-    "籌碼賣出": [
-     "借券賣出 5 日大增"
-    ],
-    "第四階段": [
-     "收盤跌破下彎的季線"
-    ]
-   },
-   "sell_signal_date": "20260915",
-   "exit_date": "20260916",
-   "exit_price": 154.5,
-   "ret": 0.0018,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2474",
-   "name": "可成",
-   "signal_date": "20260901",
-   "status": "closed",
-   "signal_close": 213.5,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高"
-    ],
-    "資金": [
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "融資減少且站穩上揚月線"
-    ]
-   },
-   "entry_date": "20260902",
-   "entry_price": 213.5,
-   "last_close": 196.0,
-   "days": 24,
-   "sell_reasons": {
-    "結構破壞": [
-     "頭頭低確認",
-     "M 頭跌破頸線",
-     "跌破上升趨勢線"
-    ],
-    "籌碼賣出": [
-     "外資連 5 日賣超"
-    ],
-    "環境轉壞": [
-     "相對大盤強度創 60 日新低"
-    ]
-   },
-   "sell_signal_date": "20261007",
-   "exit_date": "20261008",
-   "exit_price": 198.0,
-   "ret": -0.077,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2465",
-   "name": "麗臺",
-   "signal_date": "20260902",
-   "status": "closed",
-   "signal_close": 105.0,
-   "buy_reasons": {
-    "突破": [
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "量比>1.5 且收紅",
-     "量縮後放量收紅",
-     "OBV 20/60 黃金交叉"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資+投信連 3 日買超"
-    ],
-    "營收": [
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260903",
-   "entry_price": 106.5,
-   "last_close": 86.0,
-   "days": 6,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "跌破上升趨勢線"
-    ],
-    "籌碼賣出": [
-     "外資連 5 日賣超"
-    ]
-   },
-   "sell_signal_date": "20260910",
-   "exit_date": "20260911",
-   "exit_price": 88.9,
-   "ret": -0.1692,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2464",
-   "name": "盟立",
-   "signal_date": "20260903",
-   "status": "closed",
-   "signal_close": 222.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "N 字上攻（低點墊高突破前高）",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "投信連 3 日買超",
-     "外資+投信連 3 日買超",
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260904",
-   "entry_price": 223.5,
-   "last_close": 176.0,
-   "days": 3,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "籌碼賣出": [
-     "借券賣出 5 日大增"
-    ]
-   },
-   "sell_signal_date": "20260908",
-   "exit_date": "20260909",
-   "exit_price": 194.5,
-   "ret": -0.1338,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2454",
-   "name": "聯發科",
-   "signal_date": "20260907",
-   "status": "closed",
-   "signal_close": 4760.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "N 字上攻（低點墊高突破前高）"
-    ],
-    "資金": [
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "投信連 3 日買超",
-     "投信首買（前 10 日未買）",
-     "外資+投信連 3 日買超"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高"
-    ],
-    "營收": [
-     "月營收連 3 個月年增"
-    ]
-   },
-   "entry_date": "20260908",
-   "entry_price": 4800.0,
-   "last_close": 4250.0,
-   "days": 25,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "跌破上升趨勢線"
-    ],
-    "籌碼賣出": [
-     "外資連 5 日賣超"
-    ]
-   },
-   "sell_signal_date": "20261015",
-   "exit_date": "20261016",
-   "exit_price": 4275.0,
-   "ret": -0.1136,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2421",
-   "name": "建準",
-   "signal_date": "20260831",
-   "status": "closed",
-   "signal_close": 179.5,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高",
-     "N 字上攻（低點墊高突破前高）",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資+投信連 3 日買超",
-     "法人 5 日買超比 > 自身 P80"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260901",
-   "entry_price": 182.0,
-   "last_close": 166.0,
-   "days": 10,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ]
-   },
-   "sell_signal_date": "20260914",
-   "exit_date": "20260915",
-   "exit_price": 163.5,
-   "ret": -0.1059,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2408",
-   "name": "南亞科",
-   "signal_date": "20260831",
-   "status": "closed",
-   "signal_close": 543.0,
-   "buy_reasons": {
-    "突破": [
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "投信連 3 日買超",
-     "投信連 5 日買超",
-     "千張大戶連 2 週增、股東人數減（籌碼集中）",
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260901",
-   "entry_price": 551.0,
-   "last_close": 447.5,
-   "days": 3,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ]
-   },
-   "sell_signal_date": "20260903",
-   "exit_date": "20260904",
-   "exit_price": 490.5,
-   "ret": -0.114,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2392",
-   "name": "正崴",
-   "signal_date": "20260825",
-   "status": "closed",
-   "signal_close": 45.1,
-   "buy_reasons": {
-    "突破": [
-     "N 字上攻（低點墊高突破前高）"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資+投信連 3 日買超",
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高",
-     "股價未創高、相對強度先創高（領先）"
-    ]
-   },
-   "entry_date": "20260826",
-   "entry_price": 44.8,
-   "last_close": 40.0,
-   "days": 30,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "頭頭低確認",
-     "N 字下跌（高點下降跌破前低）",
-     "跌破上升趨勢線"
-    ]
-   },
-   "sell_signal_date": "20261008",
-   "exit_date": "20261012",
-   "exit_price": 40.05,
-   "ret": -0.1102,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2382",
-   "name": "廣達",
-   "signal_date": "20260901",
-   "status": "closed",
-   "signal_close": 342.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "投信連 3 日買超",
-     "外資+投信連 3 日買超",
-     "千張大戶連 2 週增、股東人數減（籌碼集中）",
-     "融資減少且站穩上揚月線"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260902",
-   "entry_price": 338.0,
-   "last_close": 322.0,
-   "days": 5,
-   "sell_reasons": {
-    "資金流出": [
-     "創 20 日高但量縮（量價背離）"
-    ],
-    "第四階段": [
-     "收盤跌破下彎的季線"
-    ]
-   },
-   "sell_signal_date": "20260908",
-   "exit_date": "20260909",
-   "exit_price": 336.5,
-   "ret": -0.0091,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2360",
-   "name": "致茂",
-   "signal_date": "20261007",
-   "status": "closed",
-   "signal_close": 2400.0,
-   "buy_reasons": {
-    "突破": [
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "OBV 創 60 日新高且收紅",
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資連 5 日買超",
-     "投信首買（前 10 日未買）",
-     "外資+投信連 3 日買超"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20261008",
-   "entry_price": 2365.0,
-   "last_close": 2000.0,
-   "days": 5,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "結構破壞": [
-     "底底低確認"
-    ],
-    "籌碼賣出": [
-     "外資連 5 日賣超",
-     "千張大戶連 2 週減、股東人數增（籌碼分散）",
-     "借券賣出 5 日大增"
-    ]
-   },
-   "sell_signal_date": "20261015",
-   "exit_date": "20261016",
-   "exit_price": 1985.0,
-   "ret": -0.1646,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2351",
-   "name": "順德",
-   "signal_date": "20260914",
-   "status": "closed",
-   "signal_close": 257.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "收盤突破前 55 日高"
-    ],
-    "資金": [
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "投信連 3 日買超",
-     "融資減少且站穩上揚月線"
-    ],
-    "相對強度": [
-     "相對大盤強度創 60 日新高"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260915",
-   "entry_price": 252.5,
-   "last_close": 206.5,
-   "days": 7,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "資金流出": [
-     "OBV 20/60 死亡交叉"
-    ]
-   },
-   "sell_signal_date": "20260923",
-   "exit_date": "20260924",
-   "exit_price": 224.0,
-   "ret": -0.117,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2344",
-   "name": "華邦電",
-   "signal_date": "20260820",
-   "status": "closed",
-   "signal_close": 176.5,
-   "buy_reasons": {
-    "突破": [
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "融資減少且站穩上揚月線"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260821",
-   "entry_price": 176.0,
-   "last_close": 161.5,
-   "days": 20,
-   "sell_reasons": {
-    "籌碼賣出": [
-     "外資連 5 日賣超",
-     "借券賣出 5 日大增"
-    ],
-    "第四階段": [
-     "收盤跌破下彎的季線"
-    ]
-   },
-   "sell_signal_date": "20260917",
-   "exit_date": "20260918",
-   "exit_price": 177.0,
-   "ret": 0.0009,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2317",
-   "name": "鴻海",
-   "signal_date": "20261005",
-   "status": "closed",
-   "signal_close": 254.0,
-   "buy_reasons": {
-    "突破": [
-     "均線糾結後帶量突破",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "量比>1.5 且收紅",
-     "OBV 20/60 黃金交叉"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資+投信連 3 日買超"
-    ],
-    "營收": [
-     "月營收創 12 個月新高",
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20261006",
-   "entry_price": 263.0,
-   "last_close": 244.0,
-   "days": 6,
-   "sell_reasons": {
-    "結構破壞": [
-     "頭頭低確認",
-     "均線空頭排列成形"
-    ],
-    "籌碼賣出": [
-     "外資連 5 日賣超",
-     "千張大戶連 2 週減、股東人數增（籌碼分散）",
-     "借券賣出 5 日大增"
-    ],
-    "環境轉壞": [
-     "相對大盤強度創 60 日新低"
-    ]
-   },
-   "sell_signal_date": "20261014",
-   "exit_date": "20261015",
-   "exit_price": 240.0,
-   "ret": -0.0917,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "2303",
-   "name": "聯電",
-   "signal_date": "20260907",
-   "status": "closed",
-   "signal_close": 143.0,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "突破下降趨勢線",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "量比>2.0 且收紅",
-     "量比>1.5 且收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "投信連 3 日買超",
-     "外資+投信連 3 日買超"
-    ],
-    "營收": [
-     "月營收創 12 個月新高"
-    ]
-   },
-   "entry_date": "20260908",
-   "entry_price": 142.0,
-   "last_close": 133.0,
-   "days": 25,
-   "sell_reasons": {
-    "籌碼賣出": [
-     "外資連 5 日賣超",
-     "千張大戶連 2 週減、股東人數增（籌碼分散）",
-     "借券賣出 5 日大增"
-    ],
-    "第四階段": [
-     "收盤跌破下彎的季線"
-    ]
-   },
-   "sell_signal_date": "20261015",
-   "exit_date": "20261016",
-   "exit_price": 134.0,
-   "ret": -0.0608,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
-  },
-  {
-   "stock_id": "1714",
-   "name": "和桐",
-   "signal_date": "20260901",
-   "status": "closed",
-   "signal_close": 18.55,
-   "buy_reasons": {
-    "突破": [
-     "收盤突破前 20 日高",
-     "向上跳空缺口且收紅"
-    ],
-    "資金": [
-     "量比>1.5 且收紅",
-     "量縮後放量收紅"
-    ],
-    "籌碼": [
-     "外資連 3 日買超",
-     "外資連 5 日買超",
-     "外資+投信連 3 日買超",
-     "外資+投信連 5 日買超"
-    ],
-    "營收": [
-     "月營收年增 >20% 且加速"
-    ]
-   },
-   "entry_date": "20260902",
-   "entry_price": 18.55,
-   "last_close": 19.25,
-   "days": 2,
-   "sell_reasons": {
-    "停損": [
-     "收盤比買價跌 10%"
-    ],
-    "籌碼賣出": [
-     "借券賣出 5 日大增",
-     "高檔融資 5 日增幅 > 自身 P90"
-    ]
-   },
-   "sell_signal_date": "20260903",
-   "exit_date": "20260904",
-   "exit_price": 16.75,
-   "ret": -0.1013,
-   "in_rank": false,
-   "closed_on": "20261019",
-   "replayed": true
   }
  ],
  "rank_lights": {
@@ -11089,45 +10080,160 @@
   "3135": "yellow"
  },
  "summary": {
-  "n": 119,
-  "win": 0.034,
-  "mean": -0.1008
+  "n": 140,
+  "win": 0.029,
+  "mean": -0.1071
  },
  "intraday_watch": [
   {
-   "stock_id": "2033",
-   "name": "佳大",
-   "level": 73.3,
-   "close": 70.1,
-   "dist": 0.0456,
+   "stock_id": "1528",
+   "name": "恩德",
+   "level": 27.9,
+   "close": 27.65,
+   "dist": 0.009,
    "in_rank": false,
    "buy_reasons": {
     "資金": [
-     "OBV 創 60 日新高且收紅"
+     "OBV 創 60 日新高且收紅",
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅"
     ],
     "籌碼": [
-     "外資連 5 日買超",
-     "投信連 3 日買超",
-     "投信連 5 日買超",
-     "投信首買（前 10 日未買）",
-     "外資+投信連 5 日買超",
      "融資減少且站穩上揚月線"
     ],
     "相對強度": [
      "相對大盤強度創 60 日新高",
      "股價未創高、相對強度先創高（領先）",
      "大盤 20 日跌逾 5% 時逆勢上漲（抗跌）"
+    ],
+    "營收": [
+     "月營收創 12 個月新高",
+     "月營收年增 >20% 且加速",
+     "月營收連 3 個月年增"
     ]
    },
    "ctx": {
-    "prev_close": 70.1,
-    "ma20": 59.665,
-    "ma60": 37.5725,
+    "prev_close": 27.65,
+    "ma20": 24.8725,
+    "ma60": 22.3858,
     "ma20_up": true,
-    "atr": 4.5375,
-    "avg_vol20": 3374.4887,
-    "hh20": 73.3,
-    "ll20": 45.0
+    "atr": 1.6835,
+    "avg_vol20": 10818.0856,
+    "hh20": 27.9,
+    "ll20": 22.6
+   },
+   "line": true
+  },
+  {
+   "stock_id": "3515",
+   "name": "華擎",
+   "level": 232.5,
+   "close": 226.0,
+   "dist": 0.0288,
+   "in_rank": false,
+   "buy_reasons": {
+    "資金": [
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "籌碼": [
+     "外資連 3 日買超",
+     "外資連 5 日買超",
+     "外資+投信連 3 日買超",
+     "外資+投信連 5 日買超",
+     "法人 5 日買超比 > 自身 P90",
+     "融資減少且站穩上揚月線"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）",
+     "大盤 20 日跌逾 5% 時逆勢上漲（抗跌）"
+    ],
+    "營收": [
+     "月營收年增 >20% 且加速",
+     "月營收連 3 個月年增"
+    ]
+   },
+   "ctx": {
+    "prev_close": 226.0,
+    "ma20": 221.5,
+    "ma60": 218.9833,
+    "ma20_up": true,
+    "atr": 7.797,
+    "avg_vol20": 468.8605,
+    "hh20": 232.5,
+    "ll20": 204.5
+   },
+   "line": true
+  },
+  {
+   "stock_id": "3147",
+   "name": "大綜",
+   "level": 327.5,
+   "close": 316.5,
+   "dist": 0.0348,
+   "in_rank": false,
+   "buy_reasons": {
+    "資金": [
+     "OBV 創 60 日新高且收紅",
+     "量比>1.5 且收紅",
+     "量縮後放量收紅"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）",
+     "大盤 20 日跌逾 5% 時逆勢上漲（抗跌）"
+    ],
+    "營收": [
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "ctx": {
+    "prev_close": 316.5,
+    "ma20": 300.475,
+    "ma60": 251.6553,
+    "ma20_up": true,
+    "atr": 17.26,
+    "avg_vol20": 1678.0539,
+    "hh20": 327.5,
+    "ll20": 257.0
+   },
+   "line": true
+  },
+  {
+   "stock_id": "6148",
+   "name": "驊宏資",
+   "level": 46.45,
+   "close": 44.2,
+   "dist": 0.0509,
+   "in_rank": false,
+   "buy_reasons": {
+    "資金": [
+     "量比>2.0 且收紅",
+     "量比>1.5 且收紅"
+    ],
+    "籌碼": [
+     "融資減少且站穩上揚月線"
+    ],
+    "相對強度": [
+     "相對大盤強度創 60 日新高",
+     "股價未創高、相對強度先創高（領先）",
+     "大盤 20 日跌逾 5% 時逆勢上漲（抗跌）"
+    ],
+    "營收": [
+     "月營收年增 >20% 且加速"
+    ]
+   },
+   "ctx": {
+    "prev_close": 44.2,
+    "ma20": 39.6725,
+    "ma60": 34.1283,
+    "ma20_up": true,
+    "atr": 3.2847,
+    "avg_vol20": 8701.1076,
+    "hh20": 46.45,
+    "ll20": 36.3
    },
    "line": true
   }
