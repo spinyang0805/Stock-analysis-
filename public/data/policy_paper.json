@@ -21,7 +21,7 @@
     "BH": "0050 buy and hold (reference)"
    }
   },
-  "generated_at": "2026-11-12 18:52"
+  "generated_at": "2026-11-16 20:59"
  },
  "corporate_actions": [],
  "lines": {
@@ -90,9 +90,17 @@
     [
      "2026-11-12",
      0.96303
+    ],
+    [
+     "2026-11-13",
+     0.97015
+    ],
+    [
+     "2026-11-16",
+     0.94237
     ]
    ],
-   "weight": 0.4813,
+   "weight": 0.4699,
    "decision_log": [
     {
      "decided": "2026-10-20",
@@ -103,7 +111,7 @@
    "pending_weight": null,
    "max_drawdown": -0.0758,
    "cagr": null,
-   "total_return": -0.037
+   "total_return": -0.0576
   },
   "C1": {
    "nav": [
@@ -170,9 +178,17 @@
     [
      "2026-11-12",
      0.96271
+    ],
+    [
+     "2026-11-13",
+     0.97002
+    ],
+    [
+     "2026-11-16",
+     0.94151
     ]
    ],
-   "weight": 0.494,
+   "weight": 0.4826,
    "decision_log": [
     {
      "decided": "2026-10-20",
@@ -188,7 +204,7 @@
    "pending_weight": null,
    "max_drawdown": -0.0771,
    "cagr": null,
-   "total_return": -0.0373
+   "total_return": -0.0585
   },
   "C8": {
    "nav": [
@@ -255,9 +271,17 @@
     [
      "2026-11-12",
      0.8641
+    ],
+    [
+     "2026-11-13",
+     0.86978
+    ],
+    [
+     "2026-11-16",
+     0.84761
     ]
    ],
-   "weight": 0.428,
+   "weight": 0.4169,
    "decision_log": [
     {
      "decided": "2026-10-20",
@@ -273,7 +297,7 @@
    "pending_weight": null,
    "max_drawdown": -0.1669,
    "cagr": null,
-   "total_return": -0.1359
+   "total_return": -0.1524
   },
   "VT15": {
    "nav": [
@@ -340,9 +364,17 @@
     [
      "2026-11-12",
      0.95169
+    ],
+    [
+     "2026-11-13",
+     0.96151
+    ],
+    [
+     "2026-11-16",
+     0.92834
     ]
    ],
-   "weight": 0.672,
+   "weight": 0.5381,
    "decision_log": [
     {
      "decided": "2026-10-20",
@@ -363,12 +395,17 @@
      "decided": "2026-11-06",
      "filled": "2026-11-09",
      "target_weight": 0.66
+    },
+    {
+     "decided": "2026-11-13",
+     "filled": "2026-11-16",
+     "target_weight": 0.55
     }
    ],
    "pending_weight": null,
    "max_drawdown": -0.1042,
    "cagr": null,
-   "total_return": -0.0483
+   "total_return": -0.0717
   },
   "BH": {
    "nav": [
@@ -435,6 +472,14 @@
     [
      "2026-11-12",
      0.92613
+    ],
+    [
+     "2026-11-13",
+     0.94035
+    ],
+    [
+     "2026-11-16",
+     0.88485
     ]
    ],
    "weight": 1.0,
@@ -448,10 +493,10 @@
    "pending_weight": null,
    "max_drawdown": -0.1514,
    "cagr": null,
-   "total_return": -0.0739
+   "total_return": -0.1152
   }
  },
- "updated": "20261112",
- "sessions": 15,
+ "updated": "20261116",
+ "sessions": 17,
  "next_c10_decision": "2026-12-31"
 }
