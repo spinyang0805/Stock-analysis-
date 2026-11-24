@@ -21,7 +21,7 @@
     "BH": "0050 buy and hold (reference)"
    }
   },
-  "generated_at": "2026-11-23 22:36"
+  "generated_at": "2026-11-24 21:08"
  },
  "corporate_actions": [],
  "lines": {
@@ -118,9 +118,13 @@
     [
      "2026-11-23",
      0.89898
+    ],
+    [
+     "2026-11-24",
+     0.93893
     ]
    ],
-   "weight": 0.4443,
+   "weight": 0.468,
    "decision_log": [
     {
      "decided": "2026-10-20",
@@ -131,7 +135,7 @@
    "pending_weight": null,
    "max_drawdown": -0.1127,
    "cagr": null,
-   "total_return": -0.101
+   "total_return": -0.0611
   },
   "C1": {
    "nav": [
@@ -226,9 +230,13 @@
     [
      "2026-11-23",
      0.89699
+    ],
+    [
+     "2026-11-24",
+     0.93798
     ]
    ],
-   "weight": 0.4569,
+   "weight": 0.4807,
    "decision_log": [
     {
      "decided": "2026-10-20",
@@ -244,7 +252,7 @@
    "pending_weight": null,
    "max_drawdown": -0.115,
    "cagr": null,
-   "total_return": -0.103
+   "total_return": -0.062
   },
   "C8": {
    "nav": [
@@ -339,9 +347,13 @@
     [
      "2026-11-23",
      0.81299
+    ],
+    [
+     "2026-11-24",
+     0.84486
     ]
    ],
-   "weight": 0.392,
+   "weight": 0.415,
    "decision_log": [
     {
      "decided": "2026-10-20",
@@ -357,7 +369,7 @@
    "pending_weight": null,
    "max_drawdown": -0.1963,
    "cagr": null,
-   "total_return": -0.187
+   "total_return": -0.1551
   },
   "VT15": {
    "nav": [
@@ -452,9 +464,13 @@
     [
      "2026-11-23",
      0.8778
+    ],
+    [
+     "2026-11-24",
+     0.91796
     ]
    ],
-   "weight": 0.4575,
+   "weight": 0.4813,
    "decision_log": [
     {
      "decided": "2026-10-20",
@@ -490,7 +506,7 @@
    "pending_weight": null,
    "max_drawdown": -0.1338,
    "cagr": null,
-   "total_return": -0.1222
+   "total_return": -0.082
   },
   "BH": {
    "nav": [
@@ -585,6 +601,10 @@
     [
      "2026-11-23",
      0.79815
+    ],
+    [
+     "2026-11-24",
+     0.87797
     ]
    ],
    "weight": 1.0,
@@ -598,10 +618,10 @@
    "pending_weight": null,
    "max_drawdown": -0.2252,
    "cagr": null,
-   "total_return": -0.2018
+   "total_return": -0.122
   }
  },
- "updated": "20261123",
- "sessions": 22,
+ "updated": "20261124",
+ "sessions": 23,
  "next_c10_decision": "2026-12-31"
 }
